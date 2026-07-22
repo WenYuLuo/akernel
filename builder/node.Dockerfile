@@ -126,16 +126,18 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
 
 ENV YR_INSTALLATION_DIR=/home/yuanrong
 
-# Download and unpack the openyuanrong runtime tarball from the OBS release
-# bucket. The tarball's top-level openyuanrong/ directory is stripped so its
-# contents land directly under HOME. The Python SDK is intentionally not
-# installed in this image.
-RUN mkdir -p "${YR_INSTALLATION_DIR}" && \
-    curl -fSL --retry 10 --retry-delay 2 --retry-all-errors \
-      -o /tmp/openyuanrong.tar.gz \
-      "https://openyuanrong.obs.cn-southwest-2.myhuaweicloud.com/release/${OPEN_YR_VERSION}/linux/amd64/openyuanrong-${OPEN_YR_VERSION}.tar.gz" && \
-    tar -xzf /tmp/openyuanrong.tar.gz -C "${YR_INSTALLATION_DIR}" --strip-components=1 && \
-    rm -f /tmp/openyuanrong.tar.gz && \
+# Download and unpack the openyuanrong runtime tarball from the GitHub
+# release mirror. The .sha256 sidecar verifies the download before unpacking.
+RUN mkdir -p "${YR_INSTALLATION_DIR}" /tmp/yr-release && \
+    cd /tmp/yr-release && \
+    yr_tarball="openyuanrong-${OPEN_YR_VERSION}-linux-amd64.tar.gz" && \
+    curl -fSL --retry 10 --retry-delay 2 --retry-all-errors -O \
+      "https://github.com/openYuanrong-mirror/yuanrong/releases/download/${OPEN_YR_VERSION}/${yr_tarball}" && \
+    curl -fSL --retry 10 --retry-delay 2 --retry-all-errors -O \
+      "https://github.com/openYuanrong-mirror/yuanrong/releases/download/${OPEN_YR_VERSION}/${yr_tarball}.sha256" && \
+    sha256sum -c "${yr_tarball}.sha256" && \
+    tar -xzf "${yr_tarball}" -C "${YR_INSTALLATION_DIR}" --strip-components=1 && \
+    cd / && rm -rf /tmp/yr-release && \
     ln -sf "${YR_INSTALLATION_DIR}/functionsystem/bin/yr" /usr/bin/yr
 
 COPY --from=runtime-image /yr-runtime-rootfs.img ${YR_INSTALLATION_DIR}/yr-runtime-rootfs.img

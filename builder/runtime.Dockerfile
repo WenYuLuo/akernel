@@ -98,11 +98,6 @@ RUN set -eux; \
 
 RUN set -eux; \
     py="3.10"; version="${PYTHON_310_VERSION}"; \
-    cp_tag="cp$(printf '%s' "${py}" | tr -d '.')"; \
-    wheel="/tmp/openyuanrong_sdk-${OPEN_YR_VERSION}-${cp_tag}-${cp_tag}-manylinux_2_31_x86_64.whl"; \
-    curl -fSL --retry 5 --retry-delay 2 \
-        -o "${wheel}" \
-        "https://openyuanrong.obs.cn-southwest-2.myhuaweicloud.com/release/${OPEN_YR_VERSION}/linux/amd64/openyuanrong_sdk-${OPEN_YR_VERSION}-${cp_tag}-${cp_tag}-manylinux_2_31_x86_64.whl"; \
     attempt=1; \
     while true; do \
         uv pip install \
@@ -112,7 +107,7 @@ RUN set -eux; \
             "fastapi==${FASTAPI_VERSION}" \
             "pydantic==${PYDANTIC_VERSION}" \
             "uvicorn==${UVICORN_VERSION}" \
-            "${wheel}" && break; \
+            "openyuanrong_sdk==${OPEN_YR_VERSION}" && break; \
         if [ "${attempt}" -ge 3 ]; then exit 1; fi; \
         sleep $((attempt * 5)); \
         attempt=$((attempt + 1)); \
@@ -120,16 +115,10 @@ RUN set -eux; \
     ln -sfn \
         "uv-python/cpython-${version}-linux-x86_64-gnu/bin/python${py}" \
         "/opt/python${py}"; \
-    rm -f "${wheel}"; \
     rm -rf "${UV_CACHE_DIR:-/tmp/uv-cache}"
 
 RUN set -eux; \
     py="3.11"; version="${PYTHON_311_VERSION}"; \
-    cp_tag="cp$(printf '%s' "${py}" | tr -d '.')"; \
-    wheel="/tmp/openyuanrong_sdk-${OPEN_YR_VERSION}-${cp_tag}-${cp_tag}-manylinux_2_31_x86_64.whl"; \
-    curl -fSL --retry 5 --retry-delay 2 \
-        -o "${wheel}" \
-        "https://openyuanrong.obs.cn-southwest-2.myhuaweicloud.com/release/${OPEN_YR_VERSION}/linux/amd64/openyuanrong_sdk-${OPEN_YR_VERSION}-${cp_tag}-${cp_tag}-manylinux_2_31_x86_64.whl"; \
     attempt=1; \
     while true; do \
         uv pip install \
@@ -139,7 +128,7 @@ RUN set -eux; \
             "fastapi==${FASTAPI_VERSION}" \
             "pydantic==${PYDANTIC_VERSION}" \
             "uvicorn==${UVICORN_VERSION}" \
-            "${wheel}" && break; \
+            "openyuanrong_sdk==${OPEN_YR_VERSION}" && break; \
         if [ "${attempt}" -ge 3 ]; then exit 1; fi; \
         sleep $((attempt * 5)); \
         attempt=$((attempt + 1)); \
@@ -147,16 +136,10 @@ RUN set -eux; \
     ln -sfn \
         "uv-python/cpython-${version}-linux-x86_64-gnu/bin/python${py}" \
         "/opt/python${py}"; \
-    rm -f "${wheel}"; \
     rm -rf "${UV_CACHE_DIR:-/tmp/uv-cache}"
 
 RUN set -eux; \
     py="3.12"; version="${PYTHON_312_VERSION}"; \
-    cp_tag="cp$(printf '%s' "${py}" | tr -d '.')"; \
-    wheel="/tmp/openyuanrong_sdk-${OPEN_YR_VERSION}-${cp_tag}-${cp_tag}-manylinux_2_31_x86_64.whl"; \
-    curl -fSL --retry 5 --retry-delay 2 \
-        -o "${wheel}" \
-        "https://openyuanrong.obs.cn-southwest-2.myhuaweicloud.com/release/${OPEN_YR_VERSION}/linux/amd64/openyuanrong_sdk-${OPEN_YR_VERSION}-${cp_tag}-${cp_tag}-manylinux_2_31_x86_64.whl"; \
     attempt=1; \
     while true; do \
         uv pip install \
@@ -166,7 +149,7 @@ RUN set -eux; \
             "fastapi==${FASTAPI_VERSION}" \
             "pydantic==${PYDANTIC_VERSION}" \
             "uvicorn==${UVICORN_VERSION}" \
-            "${wheel}" && break; \
+            "openyuanrong_sdk==${OPEN_YR_VERSION}" && break; \
         if [ "${attempt}" -ge 3 ]; then exit 1; fi; \
         sleep $((attempt * 5)); \
         attempt=$((attempt + 1)); \
@@ -174,16 +157,10 @@ RUN set -eux; \
     ln -sfn \
         "uv-python/cpython-${version}-linux-x86_64-gnu/bin/python${py}" \
         "/opt/python${py}"; \
-    rm -f "${wheel}"; \
     rm -rf "${UV_CACHE_DIR:-/tmp/uv-cache}"
 
 RUN set -eux; \
     py="3.13"; version="${PYTHON_313_VERSION}"; \
-    cp_tag="cp$(printf '%s' "${py}" | tr -d '.')"; \
-    wheel="/tmp/openyuanrong_sdk-${OPEN_YR_VERSION}-${cp_tag}-${cp_tag}-manylinux_2_31_x86_64.whl"; \
-    curl -fSL --retry 5 --retry-delay 2 \
-        -o "${wheel}" \
-        "https://openyuanrong.obs.cn-southwest-2.myhuaweicloud.com/release/${OPEN_YR_VERSION}/linux/amd64/openyuanrong_sdk-${OPEN_YR_VERSION}-${cp_tag}-${cp_tag}-manylinux_2_31_x86_64.whl"; \
     attempt=1; \
     while true; do \
         uv pip install \
@@ -193,7 +170,7 @@ RUN set -eux; \
             "fastapi==${FASTAPI_VERSION}" \
             "pydantic==${PYDANTIC_VERSION}" \
             "uvicorn==${UVICORN_VERSION}" \
-            "${wheel}" && break; \
+            "openyuanrong_sdk==${OPEN_YR_VERSION}" && break; \
         if [ "${attempt}" -ge 3 ]; then exit 1; fi; \
         sleep $((attempt * 5)); \
         attempt=$((attempt + 1)); \
@@ -201,7 +178,6 @@ RUN set -eux; \
     ln -sfn \
         "uv-python/cpython-${version}-linux-x86_64-gnu/bin/python${py}" \
         "/opt/python${py}"; \
-    rm -f "${wheel}"; \
     rm -rf "${UV_CACHE_DIR:-/tmp/uv-cache}"
 
 COPY ./builder/scripts/entryfile.sh /home/entryfile.sh
