@@ -18,6 +18,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from yr.cli.exec import CopyRequest, ExecConnection
+
 from akernel_sdk.filesystem import Filesystem
 from akernel_sdk.types import EntryInfo
 
@@ -97,14 +99,18 @@ class FilesystemTest(unittest.TestCase):
                 asyncio.run(copy_inside_event_loop())
 
         copy_to_remote.assert_awaited_once_with(
-            host="gateway",
-            port="443",
-            instance="sandbox-id",
-            local_path=str(source),
-            remote_path="/tmp/source.txt",
-            use_ssl=True,
-            verify_server=False,
-            token="token",
+            ExecConnection(
+                host="gateway",
+                port="443",
+                use_ssl=True,
+                verify_server=False,
+                token="token",
+            ),
+            CopyRequest(
+                instance="sandbox-id",
+                local_path=str(source),
+                remote_path="/tmp/source.txt",
+            ),
         )
 
 

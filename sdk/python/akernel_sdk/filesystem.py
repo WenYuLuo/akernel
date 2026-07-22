@@ -171,6 +171,8 @@ class Filesystem:
 
     def _cp(self, src: str, dst: str, upload: bool) -> None:
         from yr.cli.exec import (
+            CopyRequest,
+            ExecConnection,
             choose_cp_mode,
             copy_from_remote,
             copy_from_remote_streaming,
@@ -186,35 +188,25 @@ class Filesystem:
             raise FileNotFoundError(f"Local source path not found: {local_path}")
 
         streaming = choose_cp_mode(local_path, remote_path, upload=upload)
+        conn = ExecConnection(
+            host=host,
+            port=port,
+            use_ssl=use_ssl,
+            verify_server=False,
+            token=token,
+        )
+        request = CopyRequest(
+            instance=instance_id,
+            local_path=local_path,
+            remote_path=remote_path,
+        )
 
         if upload:
             fn = copy_to_remote_streaming if streaming else copy_to_remote
-            _run_coroutine(
-                fn(
-                    host=host,
-                    port=port,
-                    instance=instance_id,
-                    local_path=local_path,
-                    remote_path=remote_path,
-                    use_ssl=use_ssl,
-                    verify_server=False,
-                    token=token,
-                )
-            )
         else:
             fn = copy_from_remote_streaming if streaming else copy_from_remote
-            _run_coroutine(
-                fn(
-                    host=host,
-                    port=port,
-                    instance=instance_id,
-                    remote_path=remote_path,
-                    local_path=local_path,
-                    use_ssl=use_ssl,
-                    verify_server=False,
-                    token=token,
-                )
-            )
+
+        _run_coroutine(fn(conn, request))
 
     def copy_from_local(self, local_path: str, remote_path: str) -> None:
         """Copy a local file or directory **into** the sandbox.
