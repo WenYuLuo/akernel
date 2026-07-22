@@ -24,6 +24,8 @@ tunnels. The project overview and deployment quick start are in
   filesystem, PTY support, instance plumbing, and CLI helpers.
 - `sdk/python/examples/` - maintained AKernel SDK examples.
 - `sdk/python/tests/` - maintained AKernel SDK tests.
+- `src/yuanrong/` - pinned openYuanRong mirror checkout, including its
+  recursive component submodules.
 - `builder/` - Dockerfiles, service configs, runtime rootfs build, and image
   entrypoint scripts for the public all-in-one image.
 - `deploy/` - Helm charts, standalone scripts, Terraform modules, and

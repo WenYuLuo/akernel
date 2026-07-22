@@ -6,3 +6,6 @@
 	path = src/distill-fs
 	url = https://github.com/akernel-dev/distill-fs.git
 	branch = main
+[submodule "src/yuanrong"]
+	path = src/yuanrong
+	url = https://github.com/openYuanrong-mirror/yuanrong.git
