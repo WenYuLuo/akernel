@@ -105,8 +105,8 @@ The build creates only the selected image reference; it does not add a second
 `akernel-all-in-one` alias. `make push` pushes that selected reference directly.
 
 The build helper performs two Docker builds. `builder/runtime.Dockerfile`
-assembles the Python 3.10 through 3.14 runtimes and creates
-`yr-runtime-rootfs.img`.
+assembles the Python 3.10 through 3.14 runtimes, installs the pinned
+openYuanRong RRT binary, and creates `yr-runtime-rootfs.img`.
 `builder/node.Dockerfile` then compiles the node components and produces the
 AKernel all-in-one image using that runtime image.
 

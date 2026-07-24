@@ -206,6 +206,17 @@ RUN set -eux; \
         "/opt/python${py}"; \
     rm -rf "${UV_CACHE_DIR:-/tmp/uv-cache}"
 
+ARG RRT_RUNTIME_BASE_URL=https://openyuanrong.obs.cn-southwest-2.myhuaweicloud.com/release
+ARG RRT_RUNTIME_SHA256=2458c958ffd82ee781817e3fa78b089f741de2367c5d23b9aa2ef00b566585d0
+
+RUN set -eux; \
+    rrt_runtime_url="${RRT_RUNTIME_BASE_URL}/${OPEN_YR_VERSION}/linux/amd64/rrt-runtime-amd64"; \
+    curl -fSL --retry 5 --retry-delay 2 --retry-all-errors \
+        -o /tmp/rrt-runtime "${rrt_runtime_url}"; \
+    echo "${RRT_RUNTIME_SHA256}  /tmp/rrt-runtime" | sha256sum -c -; \
+    install -m 0755 /tmp/rrt-runtime /usr/local/bin/rrt-runtime; \
+    rm -f /tmp/rrt-runtime
+
 COPY ./builder/scripts/entryfile.sh /home/entryfile.sh
 RUN set -eux; \
     chmod 0755 /home/entryfile.sh; \
