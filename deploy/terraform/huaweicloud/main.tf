@@ -267,7 +267,7 @@ data "huaweicloud_compute_flavors" "this" {
 
 locals {
   selected_cluster_flavor_id = var.cluster_flavor_id != "" ? var.cluster_flavor_id : try(data.huaweicloud_cce_flavor_specifications.this[0].cluster_flavor_specs[0].name, "cce.s2.small")
-  selected_node_flavor_id    = var.node_flavor_id != "" ? var.node_flavor_id : data.huaweicloud_compute_flavors.this[0].flavors[0].id
+  selected_node_flavor_id    = var.node_flavor_id != "" ? var.node_flavor_id : try(data.huaweicloud_compute_flavors.this[0].flavors[0].id, "")
 }
 
 resource "huaweicloud_vpc" "this" {
