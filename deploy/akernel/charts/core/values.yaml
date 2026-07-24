@@ -46,6 +46,9 @@ etcd:
   # The bundled chart currently manages one durable etcd member. Use an
   # external HA etcd deployment when control-plane availability requires it.
   replicas: 1
+  # Keep this configurable so existing StatefulSets can retain their immutable
+  # serviceName during chart upgrades.
+  serviceName: "akernel-etcd"
   dataDir: /etcd
   persistence:
     enabled: true
