@@ -21,8 +21,11 @@ case "$RUNTIME_ENV" in
     python3.13)
         PY_VERSION=3.13
         ;;
+    python3.14)
+        PY_VERSION=3.14
+        ;;
     *)
-        echo "unsupported YR_LANGUAGE=${RUNTIME_ENV}; supported runtimes: python3.10, python3.11, python3.12, python3.13" >&2
+        echo "unsupported YR_LANGUAGE=${RUNTIME_ENV}; supported runtimes: python3.10, python3.11, python3.12, python3.13, python3.14" >&2
         exit 127
         ;;
 esac

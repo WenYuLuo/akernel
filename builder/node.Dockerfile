@@ -6,7 +6,7 @@ ARG AKERNEL_NODE_BASE_IMAGE=ubuntu:24.04
 ARG AKERNEL_RUNTIME_IMAGE=akernel-runtime:local
 ARG SANDBOXD_BUILD_IMAGE=golang:1.25.5-bookworm
 ARG DISTILL_FS_BUILD_IMAGE=rust:1.85.0-bookworm
-ARG OPEN_YR_VERSION=0.9.2
+ARG OPEN_YR_VERSION=0.9.3
 ARG GVISOR_RELEASE=release-20260706.0
 ARG GVISOR_RELEASE_BASE_URL=https://storage.googleapis.com/gvisor/releases
 ARG KATA_BUILD_IMAGE=ubuntu:24.04
@@ -17,6 +17,8 @@ ARG OTELCOL_CONTRIB_VERSION=0.120.0
 ARG OTELCOL_CONTRIB_URL=https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${OTELCOL_CONTRIB_VERSION}/otelcol-contrib_${OTELCOL_CONTRIB_VERSION}_linux_amd64.tar.gz
 ARG AKERNEL_VERSION=unknown
 ARG AKERNEL_REVISION=unknown
+ARG OPEN_YR_CORE_WHEEL_URL=https://github.com/openYuanrong-mirror/yuanrong/releases/download/0.9.3/openyuanrong_core-0.9.3-py3-none-manylinux_2_31_x86_64.whl
+ARG OPEN_YR_CORE_WHEEL_SHA256=dd472bfa60d3d934056801ae011db7b1993cb19c5681da2395e7f1e2d84e58c3
 
 FROM ${KATA_BUILD_IMAGE} AS kata-runtime
 ARG KATA_RELEASE
@@ -90,6 +92,8 @@ ARG OPEN_YR_VERSION
 ARG GVISOR_RELEASE
 ARG GVISOR_RELEASE_BASE_URL
 ARG OTELCOL_CONTRIB_URL
+ARG OPEN_YR_CORE_WHEEL_URL
+ARG OPEN_YR_CORE_WHEEL_SHA256
 ARG TARGETARCH
 ARG PIP_INDEX_URL=https://pypi.org/simple
 ENV DEBIAN_FRONTEND=noninteractive
@@ -159,20 +163,26 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
     echo $TZ > /etc/timezone
 
 
-ENV YR_INSTALLATION_DIR=/home/yuanrong
+ENV OPEN_YR_PYTHON_ROOT=/opt/openyuanrong \
+    YR_INSTALLATION_DIR=/opt/openyuanrong/yr \
+    PYTHONPATH=/opt/openyuanrong
 
-# Download and unpack the openyuanrong runtime tarball from the GitHub
-# release mirror. The .sha256 sidecar verifies the download before unpacking.
-RUN mkdir -p "${YR_INSTALLATION_DIR}" /tmp/yr-release && \
-    cd /tmp/yr-release && \
-    yr_tarball="openyuanrong-${OPEN_YR_VERSION}-linux-amd64.tar.gz" && \
-    curl -fSL --retry 10 --retry-delay 2 --retry-all-errors -O \
-      "https://github.com/openYuanrong-mirror/yuanrong/releases/download/${OPEN_YR_VERSION}/${yr_tarball}" && \
-    curl -fSL --retry 10 --retry-delay 2 --retry-all-errors -O \
-      "https://github.com/openYuanrong-mirror/yuanrong/releases/download/${OPEN_YR_VERSION}/${yr_tarball}.sha256" && \
-    sha256sum -c "${yr_tarball}.sha256" && \
-    tar -xzf "${yr_tarball}" -C "${YR_INSTALLATION_DIR}" --strip-components=1 && \
-    cd / && rm -rf /tmp/yr-release && \
+# Install the language-runtime-free core wheel into an isolated prefix.
+# Keep /home/yuanrong as the stable service/config path, but run the native
+# functionsystem/bin/yr shipped by the wheel instead of its console script.
+RUN mkdir -p "${OPEN_YR_PYTHON_ROOT}" /tmp/yr-release && \
+    yr_core_wheel="/tmp/yr-release/openyuanrong_core-0.9.3-py3-none-manylinux_2_31_x86_64.whl" && \
+    curl -fSL --retry 10 --retry-delay 2 --retry-all-errors \
+      "${OPEN_YR_CORE_WHEEL_URL}" -o "${yr_core_wheel}" && \
+    echo "${OPEN_YR_CORE_WHEEL_SHA256}  ${yr_core_wheel}" | sha256sum -c - && \
+    python3 -m pip install \
+      --break-system-packages \
+      --no-cache-dir \
+      --target "${OPEN_YR_PYTHON_ROOT}" \
+      "${yr_core_wheel}" && \
+    test -x "${YR_INSTALLATION_DIR}/functionsystem/bin/yr" && \
+    ln -sfn "${YR_INSTALLATION_DIR}" /home/yuanrong && \
+    rm -rf /tmp/yr-release && \
     ln -sf "${YR_INSTALLATION_DIR}/functionsystem/bin/yr" /usr/bin/yr
 
 COPY --from=runtime-image /yr-runtime-rootfs.img ${YR_INSTALLATION_DIR}/yr-runtime-rootfs.img

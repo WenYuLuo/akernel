@@ -24,6 +24,7 @@ deploy/standalone/output/
 # dedicated Docker stages.
 src/distill-fs/target/
 src/sandboxd/output/
+src/yuanrong/
 
 # Python caches and package outputs.
 **/__pycache__/

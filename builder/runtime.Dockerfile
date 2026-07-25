@@ -3,11 +3,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 ARG AKERNEL_RUNTIME_BASE_IMAGE=ubuntu:24.04
-ARG UV_VERSION=0.7.13
+ARG UV_VERSION=0.11.32
 ARG PYTHON_310_VERSION=3.10.18
 ARG PYTHON_311_VERSION=3.11.13
 ARG PYTHON_312_VERSION=3.12.11
 ARG PYTHON_313_VERSION=3.13.5
+ARG PYTHON_314_VERSION=3.14.6
 
 FROM ${AKERNEL_RUNTIME_BASE_IMAGE} AS python-runtime-base
 
@@ -16,6 +17,7 @@ ARG PYTHON_310_VERSION
 ARG PYTHON_311_VERSION
 ARG PYTHON_312_VERSION
 ARG PYTHON_313_VERSION
+ARG PYTHON_314_VERSION
 
 ENV DEBIAN_FRONTEND=noninteractive \
     UV_CACHE_DIR=/tmp/uv-cache \
@@ -53,7 +55,8 @@ RUN uv python install \
         "${PYTHON_310_VERSION}" \
         "${PYTHON_311_VERSION}" \
         "${PYTHON_312_VERSION}" \
-        "${PYTHON_313_VERSION}"; \
+        "${PYTHON_313_VERSION}" \
+        "${PYTHON_314_VERSION}"; \
     rm -rf "${UV_CACHE_DIR}"
 
 RUN set -eux; \
@@ -61,7 +64,8 @@ RUN set -eux; \
         "3.10:${PYTHON_310_VERSION}" \
         "3.11:${PYTHON_311_VERSION}" \
         "3.12:${PYTHON_312_VERSION}" \
-        "3.13:${PYTHON_313_VERSION}"; do \
+        "3.13:${PYTHON_313_VERSION}" \
+        "3.14:${PYTHON_314_VERSION}"; do \
         py="${spec%%:*}"; \
         version="${spec#*:}"; \
         uv venv "/opt/venv-py${py}" --python "${version}" --seed; \
@@ -73,7 +77,7 @@ RUN set -eux; \
 
 FROM python-runtime-base AS runtime-rootfs
 
-ARG OPEN_YR_VERSION=0.9.2
+ARG OPEN_YR_VERSION=0.9.3
 ARG FASTAPI_VERSION=0.138.0
 ARG PYDANTIC_VERSION=2.13.4
 ARG UVICORN_VERSION=0.49.0
@@ -82,6 +86,7 @@ ARG PYTHON_310_VERSION
 ARG PYTHON_311_VERSION
 ARG PYTHON_312_VERSION
 ARG PYTHON_313_VERSION
+ARG PYTHON_314_VERSION
 
 RUN mkdir -p /var/task/code /__yuanrong && \
     ln -sfn /home /__yuanrong/home && \
@@ -107,7 +112,8 @@ RUN set -eux; \
             "fastapi==${FASTAPI_VERSION}" \
             "pydantic==${PYDANTIC_VERSION}" \
             "uvicorn==${UVICORN_VERSION}" \
-            "openyuanrong_sdk==${OPEN_YR_VERSION}" && break; \
+            "openyuanrong-sdk==${OPEN_YR_VERSION}" \
+            "openyuanrong-sandbox==${OPEN_YR_VERSION}" && break; \
         if [ "${attempt}" -ge 3 ]; then exit 1; fi; \
         sleep $((attempt * 5)); \
         attempt=$((attempt + 1)); \
@@ -128,7 +134,8 @@ RUN set -eux; \
             "fastapi==${FASTAPI_VERSION}" \
             "pydantic==${PYDANTIC_VERSION}" \
             "uvicorn==${UVICORN_VERSION}" \
-            "openyuanrong_sdk==${OPEN_YR_VERSION}" && break; \
+            "openyuanrong-sdk==${OPEN_YR_VERSION}" \
+            "openyuanrong-sandbox==${OPEN_YR_VERSION}" && break; \
         if [ "${attempt}" -ge 3 ]; then exit 1; fi; \
         sleep $((attempt * 5)); \
         attempt=$((attempt + 1)); \
@@ -149,7 +156,8 @@ RUN set -eux; \
             "fastapi==${FASTAPI_VERSION}" \
             "pydantic==${PYDANTIC_VERSION}" \
             "uvicorn==${UVICORN_VERSION}" \
-            "openyuanrong_sdk==${OPEN_YR_VERSION}" && break; \
+            "openyuanrong-sdk==${OPEN_YR_VERSION}" \
+            "openyuanrong-sandbox==${OPEN_YR_VERSION}" && break; \
         if [ "${attempt}" -ge 3 ]; then exit 1; fi; \
         sleep $((attempt * 5)); \
         attempt=$((attempt + 1)); \
@@ -170,7 +178,8 @@ RUN set -eux; \
             "fastapi==${FASTAPI_VERSION}" \
             "pydantic==${PYDANTIC_VERSION}" \
             "uvicorn==${UVICORN_VERSION}" \
-            "openyuanrong_sdk==${OPEN_YR_VERSION}" && break; \
+            "openyuanrong-sdk==${OPEN_YR_VERSION}" \
+            "openyuanrong-sandbox==${OPEN_YR_VERSION}" && break; \
         if [ "${attempt}" -ge 3 ]; then exit 1; fi; \
         sleep $((attempt * 5)); \
         attempt=$((attempt + 1)); \
@@ -180,10 +189,42 @@ RUN set -eux; \
         "/opt/python${py}"; \
     rm -rf "${UV_CACHE_DIR:-/tmp/uv-cache}"
 
+RUN set -eux; \
+    py="3.14"; version="${PYTHON_314_VERSION}"; \
+    attempt=1; \
+    while true; do \
+        uv pip install \
+            --no-cache-dir \
+            --index-url "${PIP_INDEX_URL}" \
+            --python "/opt/venv-py${py}/bin/python" \
+            "fastapi==${FASTAPI_VERSION}" \
+            "pydantic==${PYDANTIC_VERSION}" \
+            "uvicorn==${UVICORN_VERSION}" \
+            "openyuanrong-sdk==${OPEN_YR_VERSION}" \
+            "openyuanrong-sandbox==${OPEN_YR_VERSION}" && break; \
+        if [ "${attempt}" -ge 3 ]; then exit 1; fi; \
+        sleep $((attempt * 5)); \
+        attempt=$((attempt + 1)); \
+    done; \
+    ln -sfn \
+        "uv-python/cpython-${version}-linux-x86_64-gnu/bin/python${py}" \
+        "/opt/python${py}"; \
+    rm -rf "${UV_CACHE_DIR:-/tmp/uv-cache}"
+
+ARG RRT_RUNTIME_URL=https://github.com/openYuanrong-mirror/yuanrong/releases/download/0.9.3/rrt-runtime-amd64
+ARG RRT_RUNTIME_SHA256=89eb9271233e79f97b42b7b12cfd65e81404eb75b49d0e7a0b1ebe4977aae305
+
+RUN set -eux; \
+    curl -fSL --retry 5 --retry-delay 2 --retry-all-errors \
+        -o /tmp/rrt-runtime "${RRT_RUNTIME_URL}"; \
+    echo "${RRT_RUNTIME_SHA256}  /tmp/rrt-runtime" | sha256sum -c -; \
+    install -m 0755 /tmp/rrt-runtime /usr/local/bin/rrt-runtime; \
+    rm -f /tmp/rrt-runtime
+
 COPY ./builder/scripts/entryfile.sh /home/entryfile.sh
 RUN set -eux; \
     chmod 0755 /home/entryfile.sh; \
-    for py in 3.10 3.11 3.12 3.13; do \
+    for py in 3.10 3.11 3.12 3.13 3.14; do \
         "/opt/venv-py${py}/bin/python" -m compileall -q \
             "/opt/venv-py${py}/lib/python${py}/site-packages"; \
     done
