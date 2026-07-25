@@ -50,3 +50,15 @@
         type: erofs
         root: "/home/yuanrong/yr-runtime-rootfs.img"
         entrypoint: "/__yuanrong/usr/bin/tini-static -- sh /__yuanrong/home/entryfile.sh"
+    py314:
+      runtime: python3.14
+      rootfs:
+        runtime: runsc
+        type: local
+        path: /home/yuanrong/yr-runtime-rootfs.img
+        readonly: false
+        mountpoint: /var/task/code
+      bootstrap:
+        type: erofs
+        root: "/home/yuanrong/yr-runtime-rootfs.img"
+        entrypoint: "/__yuanrong/usr/bin/tini-static -- sh /__yuanrong/home/entryfile.sh"

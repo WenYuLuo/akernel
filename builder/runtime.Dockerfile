@@ -3,11 +3,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 ARG AKERNEL_RUNTIME_BASE_IMAGE=ubuntu:24.04
-ARG UV_VERSION=0.7.13
+ARG UV_VERSION=0.11.32
 ARG PYTHON_310_VERSION=3.10.18
 ARG PYTHON_311_VERSION=3.11.13
 ARG PYTHON_312_VERSION=3.12.11
 ARG PYTHON_313_VERSION=3.13.5
+ARG PYTHON_314_VERSION=3.14.6
 
 FROM ${AKERNEL_RUNTIME_BASE_IMAGE} AS python-runtime-base
 
@@ -16,6 +17,7 @@ ARG PYTHON_310_VERSION
 ARG PYTHON_311_VERSION
 ARG PYTHON_312_VERSION
 ARG PYTHON_313_VERSION
+ARG PYTHON_314_VERSION
 
 ENV DEBIAN_FRONTEND=noninteractive \
     UV_CACHE_DIR=/tmp/uv-cache \
@@ -53,7 +55,8 @@ RUN uv python install \
         "${PYTHON_310_VERSION}" \
         "${PYTHON_311_VERSION}" \
         "${PYTHON_312_VERSION}" \
-        "${PYTHON_313_VERSION}"; \
+        "${PYTHON_313_VERSION}" \
+        "${PYTHON_314_VERSION}"; \
     rm -rf "${UV_CACHE_DIR}"
 
 RUN set -eux; \
@@ -61,7 +64,8 @@ RUN set -eux; \
         "3.10:${PYTHON_310_VERSION}" \
         "3.11:${PYTHON_311_VERSION}" \
         "3.12:${PYTHON_312_VERSION}" \
-        "3.13:${PYTHON_313_VERSION}"; do \
+        "3.13:${PYTHON_313_VERSION}" \
+        "3.14:${PYTHON_314_VERSION}"; do \
         py="${spec%%:*}"; \
         version="${spec#*:}"; \
         uv venv "/opt/venv-py${py}" --python "${version}" --seed; \
@@ -82,6 +86,7 @@ ARG PYTHON_310_VERSION
 ARG PYTHON_311_VERSION
 ARG PYTHON_312_VERSION
 ARG PYTHON_313_VERSION
+ARG PYTHON_314_VERSION
 
 RUN mkdir -p /var/task/code /__yuanrong && \
     ln -sfn /home /__yuanrong/home && \
@@ -180,10 +185,31 @@ RUN set -eux; \
         "/opt/python${py}"; \
     rm -rf "${UV_CACHE_DIR:-/tmp/uv-cache}"
 
+RUN set -eux; \
+    py="3.14"; version="${PYTHON_314_VERSION}"; \
+    attempt=1; \
+    while true; do \
+        uv pip install \
+            --no-cache-dir \
+            --index-url "${PIP_INDEX_URL}" \
+            --python "/opt/venv-py${py}/bin/python" \
+            "fastapi==${FASTAPI_VERSION}" \
+            "pydantic==${PYDANTIC_VERSION}" \
+            "uvicorn==${UVICORN_VERSION}" \
+            "openyuanrong_sdk==${OPEN_YR_VERSION}" && break; \
+        if [ "${attempt}" -ge 3 ]; then exit 1; fi; \
+        sleep $((attempt * 5)); \
+        attempt=$((attempt + 1)); \
+    done; \
+    ln -sfn \
+        "uv-python/cpython-${version}-linux-x86_64-gnu/bin/python${py}" \
+        "/opt/python${py}"; \
+    rm -rf "${UV_CACHE_DIR:-/tmp/uv-cache}"
+
 COPY ./builder/scripts/entryfile.sh /home/entryfile.sh
 RUN set -eux; \
     chmod 0755 /home/entryfile.sh; \
-    for py in 3.10 3.11 3.12 3.13; do \
+    for py in 3.10 3.11 3.12 3.13 3.14; do \
         "/opt/venv-py${py}/bin/python" -m compileall -q \
             "/opt/venv-py${py}/lib/python${py}/site-packages"; \
     done
