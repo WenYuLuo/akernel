@@ -174,7 +174,8 @@ deploy-script-check:
 	done < <(git ls-files -z -- 'deploy/**/*.sh.tftpl'); \
 	git ls-files -z -- 'deploy/**/*.py' | \
 		xargs -0 -r python3 -c \
-		'import pathlib, sys; [compile(pathlib.Path(path).read_bytes(), path, "exec") for path in sys.argv[1:]]'
+		'import pathlib, sys; [compile(pathlib.Path(path).read_bytes(), path, "exec") for path in sys.argv[1:]]'; \
+	python3 -m unittest discover -s deploy/tests -p 'test_*.py' -v
 
 .PHONY: destroy
 destroy:
