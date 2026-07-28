@@ -101,6 +101,16 @@ RUN set -eux; \
     cp /usr/bin/tini /usr/bin/tini-static; \
     /usr/bin/tini-static --version
 
+ARG RRT_RUNTIME_URL=https://github.com/openYuanrong-mirror/yuanrong/releases/download/${OPEN_YR_VERSION}/rrt-runtime-amd64
+ARG RRT_RUNTIME_SHA256=89eb9271233e79f97b42b7b12cfd65e81404eb75b49d0e7a0b1ebe4977aae305
+
+RUN set -eux; \
+    curl -fSL --retry 5 --retry-delay 2 --retry-all-errors \
+        -o /tmp/rrt-runtime "${RRT_RUNTIME_URL}"; \
+    echo "${RRT_RUNTIME_SHA256}  /tmp/rrt-runtime" | sha256sum -c -; \
+    install -m 0755 /tmp/rrt-runtime /usr/local/bin/rrt-runtime; \
+    rm -f /tmp/rrt-runtime
+
 RUN set -eux; \
     py="3.10"; version="${PYTHON_310_VERSION}"; \
     attempt=1; \

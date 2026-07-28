@@ -17,13 +17,16 @@
 from __future__ import annotations
 
 import json
+import logging
 import ssl
 import urllib.request
 from collections.abc import Mapping, Sequence
-from typing import Any
+from types import MappingProxyType
+from typing import Literal, cast
 
-from . import _openyuanrong
 from ._addresses import Endpoint, api_endpoint_from_env, gateway_endpoint_from_env
+from ._backends.base import BackendSession, SandboxSpec
+from ._backends.registry import load_backend
 from ._sandbox_resources import normalize_xpu, validate_storage_mb
 from .commands import Commands
 from .filesystem import Filesystem
@@ -32,6 +35,7 @@ from .types import HttpReverseTunnel, Mount, S3Config, SandboxInfo
 
 _SUPPORTED_RUNTIMES = ("runsc", "kata")
 _traefik_internal_ip_cache: str | None = None
+logger = logging.getLogger(__name__)
 
 
 def _validate_port(name: str, port: int) -> None:
@@ -63,6 +67,18 @@ def _normalize_mounts(mounts: Sequence[Mount] | None) -> list[Mount]:
     if not all(isinstance(mount, Mount) for mount in result):
         raise TypeError("mounts must contain only Mount objects")
     return result
+
+
+def _validate_integer(
+    name: str,
+    value: int,
+    *,
+    minimum: int,
+) -> None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(f"{name} must be an integer")
+    if value < minimum:
+        raise ValueError(f"{name} must be greater than or equal to {minimum}")
 
 
 def _get_traefik_internal_ip(gateway: Endpoint) -> tuple[str, int]:
@@ -170,6 +186,17 @@ class Sandbox:
             raise ValueError("xpu is currently supported only by runsc")
         if storage_mb is not None and runtime != "runsc":
             raise ValueError("storage_mb is currently supported only by runsc")
+        _validate_integer("cpu", cpu, minimum=1)
+        _validate_integer("memory", memory, minimum=1)
+        _validate_integer("cpu_limit", cpu_limit, minimum=0)
+        _validate_integer("mem_limit", mem_limit, minimum=0)
+        _validate_integer("idle_timeout", idle_timeout, minimum=0)
+        if schedule_timeout != -1:
+            _validate_integer("schedule_timeout", schedule_timeout, minimum=1)
+        if cpu_limit and cpu_limit < cpu:
+            raise ValueError("cpu_limit must be 0 or greater than or equal to cpu")
+        if mem_limit and mem_limit < memory:
+            raise ValueError("mem_limit must be 0 or greater than or equal to memory")
         if env is not None:
             if not isinstance(env, Mapping) or not all(
                 isinstance(key, str) and isinstance(value, str)
@@ -178,10 +205,18 @@ class Sandbox:
                 raise TypeError("env must map strings to strings")
         if name is not None and (not isinstance(name, str) or not name.strip()):
             raise ValueError("name must be a non-empty string")
-        if cwd is not None and not isinstance(cwd, str):
-            raise TypeError("cwd must be a string")
+        if cwd is not None:
+            if not isinstance(cwd, str):
+                raise TypeError("cwd must be a string")
+            if not cwd.startswith("/"):
+                raise ValueError("cwd must be an absolute POSIX path")
         if not isinstance(detached, bool):
             raise TypeError("detached must be a boolean")
+        if node_id is not None:
+            if not isinstance(node_id, str):
+                raise TypeError("node_id must be a string")
+            if not node_id.strip():
+                raise ValueError("node_id must be a non-empty string")
         if reverse_tunnel is not None and not isinstance(
             reverse_tunnel, HttpReverseTunnel
         ):
@@ -199,8 +234,7 @@ class Sandbox:
                     f"reverse tunnel ports conflict with port_forwardings: {rendered}"
                 )
 
-        self._instance: Any = None
-        self._tunnel_client: Any = None
+        self._session: BackendSession | None = None
         self._pty: Pty | None = None
         self._closed = False
         self._detached = detached
@@ -213,45 +247,50 @@ class Sandbox:
         self._storage_mb = storage_mb
         self._id = ""
 
-        _openyuanrong.ensure_initialized()
-        options = _openyuanrong.build_options(
+        spec = SandboxSpec(
             image=image,
             rootfs=rootfs,
-            runtime=runtime,
+            runtime=cast(Literal["runsc", "kata"], runtime),
             cpu=cpu,
             memory=memory,
             cpu_limit=cpu_limit,
             mem_limit=mem_limit,
             idle_timeout=idle_timeout,
             schedule_timeout=schedule_timeout,
-            env=env,
+            env=MappingProxyType(dict(env or {})),
             name=name,
-            port_forwardings=ports,
-            mounts=mount_list,
+            command_cwd=cwd,
+            port_forwardings=tuple(ports),
+            mounts=tuple(mount_list),
             reverse_tunnel=reverse_tunnel,
             detached=detached,
             node_id=node_id,
             xpu=normalized_xpu,
             storage_mb=storage_mb,
         )
-        self._instance = _openyuanrong.create_instance(options, cwd=cwd)
-        self._id = _openyuanrong.real_instance_id(self._instance)
-
+        self._session = load_backend().create(spec)
         try:
-            if reverse_tunnel is not None:
-                self._tunnel_client = _openyuanrong.start_reverse_tunnel(
-                    self._instance,
-                    reverse_tunnel,
-                    name=name,
-                )
+            self._id = self._session.id
+            self._files = Filesystem(self._session.files)
+            self._commands = Commands(self._session.commands)
+            self._pty = Pty(self._id)
         except Exception:
-            _openyuanrong.terminate_instance(self._instance)
             self._closed = True
+            try:
+                self._session.terminate()
+            except Exception:
+                logger.warning(
+                    "failed to roll back a partially initialized sandbox",
+                    exc_info=True,
+                )
+            try:
+                self._session.close()
+            except Exception:
+                logger.warning(
+                    "failed to close a partially initialized sandbox session",
+                    exc_info=True,
+                )
             raise
-
-        self._files = Filesystem(self._instance, instance_id=self._id)
-        self._commands = Commands(self._instance)
-        self._pty = Pty(self._id)
 
     @property
     def files(self) -> Filesystem:
@@ -318,21 +357,36 @@ class Sandbox:
     def is_running(self) -> bool:
         """Return whether the sandbox currently responds to a health check."""
 
-        if self._closed or self._instance is None:
+        if self._closed or self._session is None:
             return False
-        return _openyuanrong.ping_instance(self._instance)
+        return self._session.is_running()
 
     def get_info(self) -> SandboxInfo:
         """Return current sandbox state and requested resources."""
 
+        if self._session is None:
+            return SandboxInfo(
+                id=self.id,
+                state="stopped",
+                cpu=self._cpu,
+                memory=self._memory,
+                image=self._image,
+                xpu=self._xpu,
+                storage_mb=self._storage_mb,
+            )
+        info = self._session.get_info()
         return SandboxInfo(
-            id=self.id,
-            state=_openyuanrong.instance_state(self._instance),
-            cpu=self._cpu,
-            memory=self._memory,
-            image=self._image,
-            xpu=self._xpu,
-            storage_mb=self._storage_mb,
+            id=info.id,
+            state=info.state,
+            cpu=info.cpu,
+            memory=info.memory,
+            image=info.image,
+            xpu=info.xpu if info.xpu is not None else self._xpu,
+            storage_mb=(
+                info.storage_mb
+                if info.storage_mb is not None
+                else self._storage_mb
+            ),
         )
 
     def kill(self) -> None:
@@ -342,13 +396,40 @@ class Sandbox:
             return
         self._closed = True
 
-        if self._tunnel_client is not None:
-            self._tunnel_client.stop()
-            self._tunnel_client = None
+        local_errors: list[Exception] = []
+        terminate_error: Exception | None = None
+
         if self._pty is not None:
-            self._pty._close()
-        if not self._detached and self._instance is not None:
-            _openyuanrong.terminate_instance(self._instance)
+            try:
+                self._pty._close()
+            except Exception as error:
+                local_errors.append(error)
+
+        if self._session is not None:
+            if not self._detached:
+                try:
+                    self._session.terminate()
+                except Exception as error:
+                    terminate_error = error
+            try:
+                self._session.close()
+            except Exception as error:
+                local_errors.append(error)
+
+        if terminate_error is not None:
+            for cleanup_error in local_errors:
+                logger.warning(
+                    "local sandbox cleanup also failed after termination error: %s",
+                    cleanup_error,
+                )
+            raise terminate_error
+        if local_errors:
+            for cleanup_error in local_errors[1:]:
+                logger.warning(
+                    "additional sandbox cleanup failure: %s",
+                    cleanup_error,
+                )
+            raise local_errors[0]
 
     @classmethod
     def delete(cls, name: str) -> None:
@@ -360,7 +441,7 @@ class Sandbox:
 
         if not isinstance(name, str) or not name.strip():
             raise ValueError("name must be a non-empty string")
-        _openyuanrong.delete_named_instance(name)
+        load_backend().delete_named(name)
 
     def __enter__(self) -> Sandbox:
         return self

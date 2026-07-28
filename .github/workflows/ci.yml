@@ -38,7 +38,7 @@ jobs:
       - name: Install SDK dependencies
         run: |
           unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY no_proxy NO_PROXY
-          python -m pip install -e ./sdk/python
+          python -m pip install -e './sdk/python[all]'
 
       - name: Run unit tests
         run: |

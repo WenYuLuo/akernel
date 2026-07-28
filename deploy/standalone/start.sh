@@ -331,6 +331,13 @@ http:
       rule: "PathPrefix(\`/terminal\`) || PathPrefix(\`/api/instances\`) || PathPrefix(\`/api/jobs\`) || PathPrefix(\`/functions\`) || PathPrefix(\`/api-docs\`) || PathPrefix(\`/admin/v1/functions\`) || PathPrefix(\`/serverless/v1/functions\`) || PathPrefix(\`/serverless/v1/stream\`) || PathPrefix(\`/serverless/v1/componentshealth\`) || PathPrefix(\`/serverless/v1/posix\`) || PathPrefix(\`/serverless/v2\`) || PathPrefix(\`/frontend/v1/instance\`) || PathPrefix(\`/datasystem/v1\`) || PathPrefix(\`/app/v1\`) || PathPrefix(\`/client/v1/lease\`) || PathPrefix(\`/invocations\`) || PathPrefix(\`/global-scheduler\`) || Path(\`/healthz\`)"
       service: akernel-frontend
       tls: {}
+    sandbox-router:
+      entryPoints:
+        - websecure
+      rule: "PathPrefix(\`/api/sandbox\`) || PathPrefix(\`/direct/\`) || Path(\`/direct\`)"
+      priority: 100
+      service: akernel-frontend
+      tls: {}
 
   services:
     akernel-frontend:

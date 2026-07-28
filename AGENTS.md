@@ -111,7 +111,8 @@ The build creates only the selected image reference; it does not add a second
 `akernel-all-in-one` alias. `make push` pushes that selected reference directly.
 
 The build helper performs two Docker builds. `builder/runtime.Dockerfile`
-assembles the Python runtimes and creates `yr-runtime-rootfs.img`.
+assembles the Python runtimes, installs the pinned openYuanRong RRT binary,
+and creates `yr-runtime-rootfs.img`.
 `builder/node.Dockerfile` then compiles the node components and produces the
 AKernel all-in-one image using that runtime image.
 
@@ -308,6 +309,16 @@ Install the SDK development tools and run the complete local quality gate with:
 python3 -m pip install -e './sdk/python[dev]'
 make sdk-check
 ```
+
+The Python SDK installs `openyuanrong-sandbox` as its default execution
+backend. The actor-based `openyuanrong-sdk` backend is available through the
+`openyuanrong-sdk` extra. Installing that extra leaves both distributions
+present, so `openyuanrong-sandbox` remains the automatic default unless
+`AKERNEL_BACKEND=openyuanrong-sdk` is set before import. Backend selection
+happens once during import and backend modules are loaded lazily on first use.
+Keep public `Sandbox`, `Commands`, `Filesystem`, and value types independent
+of both native packages; all native conversions belong under
+`akernel_sdk._backends`.
 
 When changing a public SDK method, update its type annotations and docstring,
 add or update unit coverage, and keep the SDK README and maintained examples in

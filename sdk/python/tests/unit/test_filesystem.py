@@ -20,7 +20,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from yr.cli.exec import CopyRequest, ExecConnection
 
-from akernel_sdk.filesystem import Filesystem
+from akernel_sdk._backends.openyuanrong_sdk_filesystem import Filesystem
 from akernel_sdk.types import EntryInfo
 
 
@@ -31,7 +31,7 @@ class FilesystemTest(unittest.TestCase):
 
     def test_read_text_and_bytes(self):
         with patch(
-            "akernel_sdk.filesystem.yr.get",
+            "akernel_sdk._backends.openyuanrong_sdk_filesystem.yr.get",
             side_effect=[
                 {"data": "hello", "error": None},
                 {"data": "0001ff", "error": None},
@@ -46,7 +46,7 @@ class FilesystemTest(unittest.TestCase):
 
     def test_list_returns_entry_info(self):
         with patch(
-            "akernel_sdk.filesystem.yr.get",
+            "akernel_sdk._backends.openyuanrong_sdk_filesystem.yr.get",
             return_value={
                 "entries": [
                     {

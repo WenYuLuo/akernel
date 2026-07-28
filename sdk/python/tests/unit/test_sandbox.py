@@ -14,39 +14,36 @@
 
 import os
 import unittest
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from akernel_sdk import HttpReverseTunnel, S3Config, Sandbox
 from akernel_sdk import sandbox as sandbox_module
+from akernel_sdk.types import SandboxInfo
 
 
 class SandboxTest(unittest.TestCase):
     def setUp(self):
-        self.handle = SimpleNamespace(instance_id="logical-id")
-        self.client = MagicMock()
-        backend = sandbox_module._openyuanrong
-        self.patchers = [
-            patch.object(backend, "ensure_initialized"),
-            patch.object(backend, "build_options", return_value="options"),
-            patch.object(backend, "create_instance", return_value=self.handle),
-            patch.object(backend, "real_instance_id", return_value="physical-id"),
-            patch.object(backend, "terminate_instance"),
-            patch.object(backend, "delete_named_instance"),
-            patch.object(backend, "ping_instance", return_value=True),
-            patch.object(backend, "instance_state", return_value="running"),
-            patch.object(backend, "start_reverse_tunnel", return_value=self.client),
-        ]
-        self.mocks = [patcher.start() for patcher in self.patchers]
-        self.addCleanup(self._stop_patchers)
-
-    def _stop_patchers(self):
-        for patcher in reversed(self.patchers):
-            patcher.stop()
-
-    @property
-    def backend(self):
-        return sandbox_module._openyuanrong
+        self.session = MagicMock()
+        self.session.id = "physical-id"
+        self.session.commands = MagicMock()
+        self.session.files = MagicMock()
+        self.session.is_running.return_value = True
+        self.session.get_info.return_value = SandboxInfo(
+            id="physical-id",
+            state="running",
+            cpu=2000,
+            memory=8192,
+            image=None,
+        )
+        self.backend = MagicMock()
+        self.backend.create.return_value = self.session
+        self.load_backend = patch.object(
+            sandbox_module,
+            "load_backend",
+            return_value=self.backend,
+        )
+        self.load_backend.start()
+        self.addCleanup(self.load_backend.stop)
 
     def test_default_constructor_and_info(self):
         sandbox = Sandbox(cpu=2000, memory=8192)
@@ -57,24 +54,69 @@ class SandboxTest(unittest.TestCase):
         self.assertEqual(sandbox.get_info().cpu, 2000)
         self.assertIsNone(sandbox.get_info().xpu)
         self.assertIsNone(sandbox.get_info().storage_mb)
-        self.backend.build_options.assert_called_once()
+
+        spec = self.backend.create.call_args.args[0]
+        self.assertEqual(spec.cpu, 2000)
+        self.assertEqual(spec.memory, 8192)
+        self.assertEqual(dict(spec.env), {})
+        self.assertIsNone(spec.xpu)
+        self.assertIsNone(spec.storage_mb)
         sandbox.kill()
-        self.backend.terminate_instance.assert_called_once_with(self.handle)
+        self.session.terminate.assert_called_once_with()
+        self.session.close.assert_called_once_with()
 
     def test_kill_is_idempotent(self):
         sandbox = Sandbox()
         sandbox.kill()
         sandbox.kill()
-        self.backend.terminate_instance.assert_called_once_with(self.handle)
+        self.session.terminate.assert_called_once_with()
+        self.session.close.assert_called_once_with()
 
     def test_detached_sandbox_is_not_terminated_by_kill(self):
         sandbox = Sandbox(name="worker", detached=True)
         sandbox.kill()
-        self.backend.terminate_instance.assert_not_called()
+        self.session.terminate.assert_not_called()
+        self.session.close.assert_called_once_with()
+
+    def test_termination_failure_still_closes_local_resources(self):
+        remote_error = RuntimeError("remote delete failed")
+        self.session.terminate.side_effect = remote_error
+        sandbox = Sandbox()
+        pty = MagicMock()
+        sandbox._pty = pty
+
+        with self.assertRaisesRegex(RuntimeError, "remote delete failed") as raised:
+            sandbox.kill()
+
+        self.assertIs(raised.exception, remote_error)
+        pty._close.assert_called_once_with()
+        self.session.close.assert_called_once_with()
+
+    def test_termination_error_takes_precedence_over_local_cleanup_error(self):
+        remote_error = RuntimeError("remote delete failed")
+        self.session.terminate.side_effect = remote_error
+        self.session.close.side_effect = RuntimeError("client close failed")
+        sandbox = Sandbox()
+        pty = MagicMock()
+        pty._close.side_effect = RuntimeError("PTY close failed")
+        sandbox._pty = pty
+
+        with (
+            self.assertLogs(sandbox_module.logger, level="WARNING"),
+            self.assertRaisesRegex(
+                RuntimeError,
+                "remote delete failed",
+            ) as raised,
+        ):
+            sandbox.kill()
+
+        self.assertIs(raised.exception, remote_error)
+        pty._close.assert_called_once_with()
+        self.session.close.assert_called_once_with()
 
     def test_named_delete_hides_backend_namespace(self):
         Sandbox.delete("worker")
-        self.backend.delete_named_instance.assert_called_once_with("worker")
+        self.backend.delete_named.assert_called_once_with("worker")
 
     def test_rootfs_requires_s3_config(self):
         with self.assertRaisesRegex(TypeError, "S3Config"):
@@ -84,9 +126,11 @@ class SandboxTest(unittest.TestCase):
                 image="ubuntu:24.04",
                 rootfs=S3Config("https://s3.example.com", "rootfs", "rootfs.img"),
             )
+        self.backend.create.assert_not_called()
 
     def test_supported_runtimes(self):
-        Sandbox(runtime="kata")
+        sandbox = Sandbox(runtime="kata")
+        sandbox.kill()
 
         with self.assertRaisesRegex(ValueError, "unsupported runtime"):
             Sandbox(runtime="unknown")
@@ -94,10 +138,8 @@ class SandboxTest(unittest.TestCase):
     def test_xpu_request_is_normalized_and_passed_to_backend(self):
         sandbox = Sandbox(xpu=" GPU:L20:02 ")
         self.assertEqual(sandbox.get_info().xpu, "gpu:l20:2")
-        self.assertEqual(
-            self.backend.build_options.call_args.kwargs["xpu"],
-            "gpu:l20:2",
-        )
+        spec = self.backend.create.call_args.args[0]
+        self.assertEqual(spec.xpu, "gpu:l20:2")
         sandbox.kill()
 
     def test_xpu_request_validation(self):
@@ -115,15 +157,13 @@ class SandboxTest(unittest.TestCase):
                 Sandbox(xpu=value)
         with self.assertRaisesRegex(ValueError, "xpu.*runsc"):
             Sandbox(runtime="kata", xpu="gpu:l20:1")
-        self.backend.ensure_initialized.assert_not_called()
+        self.backend.create.assert_not_called()
 
     def test_storage_request_is_passed_to_backend(self):
         sandbox = Sandbox(storage_mb=256)
         self.assertEqual(sandbox.get_info().storage_mb, 256)
-        self.assertEqual(
-            self.backend.build_options.call_args.kwargs["storage_mb"],
-            256,
-        )
+        spec = self.backend.create.call_args.args[0]
+        self.assertEqual(spec.storage_mb, 256)
         sandbox.kill()
 
     def test_storage_request_validation(self):
@@ -132,7 +172,18 @@ class SandboxTest(unittest.TestCase):
                 Sandbox(storage_mb=value)
         with self.assertRaisesRegex(ValueError, "storage_mb.*runsc"):
             Sandbox(runtime="kata", storage_mb=256)
-        self.backend.ensure_initialized.assert_not_called()
+        self.backend.create.assert_not_called()
+
+    def test_cwd_must_be_absolute(self):
+        with self.assertRaisesRegex(ValueError, "absolute POSIX"):
+            Sandbox(cwd="workspace")
+
+    def test_common_resource_validation_happens_before_backend(self):
+        with self.assertRaisesRegex(ValueError, "cpu_limit"):
+            Sandbox(cpu=2000, cpu_limit=1000)
+        with self.assertRaisesRegex(ValueError, "schedule_timeout"):
+            Sandbox(schedule_timeout=0)
+        self.backend.create.assert_not_called()
 
     def test_port_forwardings_are_integer_ports(self):
         with self.assertRaisesRegex(TypeError, "integer"):
@@ -140,33 +191,66 @@ class SandboxTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "duplicate"):
             Sandbox(port_forwardings=[8080, 8080])
 
-    def test_reverse_tunnel_lifecycle(self):
+    def test_reverse_tunnel_is_passed_through_spec(self):
         tunnel = HttpReverseTunnel(
-            "https://example.com", reverse_port=9000, listen_port=9001
+            "https://example.com",
+            reverse_port=9000,
+            listen_port=9001,
         )
         sandbox = Sandbox(reverse_tunnel=tunnel)
         self.assertIs(sandbox.reverse_tunnel, tunnel)
         self.assertEqual(sandbox.reverse_tunnel.url, "http://127.0.0.1:9001")
-        self.backend.start_reverse_tunnel.assert_called_once_with(
-            self.handle, tunnel, name=None
-        )
+        spec = self.backend.create.call_args.args[0]
+        self.assertIs(spec.reverse_tunnel, tunnel)
         sandbox.kill()
-        self.client.stop.assert_called_once()
+        self.session.close.assert_called_once_with()
 
     def test_reverse_tunnel_port_conflict(self):
         tunnel = HttpReverseTunnel(
-            "http://127.0.0.1:8000", reverse_port=9000, listen_port=9001
+            "http://127.0.0.1:8000",
+            reverse_port=9000,
+            listen_port=9001,
         )
         with self.assertRaisesRegex(ValueError, "conflict"):
             Sandbox(port_forwardings=[9000], reverse_tunnel=tunnel)
         with self.assertRaisesRegex(ValueError, "conflict"):
             Sandbox(port_forwardings=[9001], reverse_tunnel=tunnel)
 
-    def test_tunnel_start_failure_terminates_instance(self):
-        self.backend.start_reverse_tunnel.side_effect = RuntimeError("timeout")
+    def test_backend_create_failure_is_reported(self):
+        self.backend.create.side_effect = RuntimeError("timeout")
         with self.assertRaisesRegex(RuntimeError, "timeout"):
             Sandbox(reverse_tunnel=HttpReverseTunnel("example.com"), detached=True)
-        self.backend.terminate_instance.assert_called_once_with(self.handle)
+
+    def test_partial_facade_initialization_rolls_back_remote_sandbox(self):
+        with (
+            patch.object(sandbox_module, "Pty", side_effect=RuntimeError("pty")),
+            self.assertRaisesRegex(RuntimeError, "pty"),
+        ):
+            Sandbox(detached=True)
+        self.session.terminate.assert_called_once_with()
+        self.session.close.assert_called_once_with()
+
+    def test_partial_facade_cleanup_preserves_initialization_error(self):
+        self.session.terminate.side_effect = RuntimeError("remote delete failed")
+        self.session.close.side_effect = RuntimeError("client close failed")
+        initialization_error = RuntimeError("PTY initialization failed")
+        with (
+            patch.object(
+                sandbox_module,
+                "Pty",
+                side_effect=initialization_error,
+            ),
+            self.assertLogs(sandbox_module.logger, level="WARNING"),
+            self.assertRaisesRegex(
+                RuntimeError,
+                "PTY initialization failed",
+            ) as raised,
+        ):
+            Sandbox(name="worker", detached=True)
+
+        self.assertIs(raised.exception, initialization_error)
+        self.session.terminate.assert_called_once_with()
+        self.session.close.assert_called_once_with()
 
     def test_get_port_url(self):
         with patch.dict(

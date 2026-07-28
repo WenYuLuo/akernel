@@ -28,14 +28,21 @@ classifiers = [
     "Topic :: System :: Distributed Computing",
 ]
 dependencies = [
-    "openyuanrong-sdk==0.9.3",
+    "openyuanrong-sandbox==0.9.3",
     "websockets>=10.0",
 ]
 
 [project.optional-dependencies]
+openyuanrong-sdk = [
+    "openyuanrong-sdk==0.9.3",
+]
+all = [
+    "openyuanrong-sdk==0.9.3",
+]
 dev = [
     "build>=1.2,<2",
     "mypy>=1.10,<2",
+    "openyuanrong-sdk==0.9.3",
     "ruff>=0.11,<1",
 ]
 

@@ -14,12 +14,13 @@
 
 import json
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from akernel_sdk import HttpReverseTunnel, Mount, S3Config, _openyuanrong
+from akernel_sdk import HttpReverseTunnel, Mount, S3Config
+from akernel_sdk._backends import openyuanrong_sdk_impl as _impl
 
 
-class OpenYuanRongAdapterTest(unittest.TestCase):
+class OpenYuanRongSdkImplTest(unittest.TestCase):
     def build_options(self, **overrides):
         values = {
             "image": None,
@@ -42,7 +43,7 @@ class OpenYuanRongAdapterTest(unittest.TestCase):
             "storage_mb": None,
         }
         values.update(overrides)
-        return _openyuanrong.build_options(**values)
+        return _impl.build_options(**values)
 
     def test_oci_rootfs_wire_format(self):
         options = self.build_options(image="ubuntu:24.04")
@@ -120,7 +121,7 @@ class OpenYuanRongAdapterTest(unittest.TestCase):
             self.build_options(runtime="kata", storage_mb=256)
 
     def test_node_info_conversion(self):
-        node = _openyuanrong._to_node_info(
+        node = _impl._to_node_info(
             {
                 "id": "node-1",
                 "status": 0,
@@ -178,14 +179,60 @@ class OpenYuanRongAdapterTest(unittest.TestCase):
             }
         }
         with (
-            patch.object(_openyuanrong, "ensure_initialized"),
-            patch.object(_openyuanrong, "query_resource_view", return_value=response),
+            patch.object(_impl, "ensure_initialized"),
+            patch.object(_impl, "query_resource_view", return_value=response),
         ):
-            result = _openyuanrong.resources()
+            result = _impl.resources()
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].id, "node-1")
         self.assertEqual(result[0].capacity["GPU/l20"], 2.0)
         self.assertEqual(result[0].allocatable["GPU/l20"], 1.0)
+
+    def test_readiness_failure_rolls_back_created_actor(self):
+        instance = MagicMock()
+        invoke = MagicMock(return_value=instance)
+        instance_type = MagicMock()
+        instance_type.options.return_value.invoke = invoke
+        readiness_error = RuntimeError("readiness failed")
+        with (
+            patch.object(_impl, "_SandboxInstance", instance_type),
+            patch.object(
+                _impl.yr,
+                "get",
+                side_effect=readiness_error,
+            ),
+            patch.object(_impl, "terminate_instance") as terminate,
+            self.assertRaisesRegex(RuntimeError, "readiness failed") as raised,
+        ):
+            _impl.create_instance(MagicMock(), cwd="/workspace")
+
+        self.assertIs(raised.exception, readiness_error)
+        terminate.assert_called_once_with(instance)
+
+    def test_readiness_rollback_failure_preserves_original_error(self):
+        instance = MagicMock()
+        instance_type = MagicMock()
+        instance_type.options.return_value.invoke.return_value = instance
+        readiness_error = RuntimeError("readiness failed")
+        with (
+            patch.object(_impl, "_SandboxInstance", instance_type),
+            patch.object(
+                _impl.yr,
+                "get",
+                side_effect=readiness_error,
+            ),
+            patch.object(
+                _impl,
+                "terminate_instance",
+                side_effect=RuntimeError("rollback failed"),
+            ) as terminate,
+            self.assertLogs(_impl.logger, level="WARNING"),
+            self.assertRaisesRegex(RuntimeError, "readiness failed") as raised,
+        ):
+            _impl.create_instance(MagicMock(), cwd=None)
+
+        self.assertIs(raised.exception, readiness_error)
+        terminate.assert_called_once_with(instance)
 
 
 if __name__ == "__main__":
