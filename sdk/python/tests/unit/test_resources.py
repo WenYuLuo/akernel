@@ -1,0 +1,84 @@
+# Copyright (c) 2026 Ant Group Corporation.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import json
+import os
+import unittest
+from unittest.mock import MagicMock, patch
+
+from akernel_sdk import _resources
+from akernel_sdk._addresses import Endpoint
+
+
+class ResourcesTest(unittest.TestCase):
+    def test_frontend_resource_values_are_backend_neutral(self):
+        payload = {
+            "resource": {
+                "fragment": {
+                    "node-1": {
+                        "id": "node-1",
+                        "status": 0,
+                        "capacity": {
+                            "resources": {
+                                "CPU": {"scalar": {"value": 8000}},
+                            }
+                        },
+                        "allocatable": {
+                            "resources": {
+                                "CPU": {"scalar": {"value": 6000}},
+                            }
+                        },
+                        "nodeLabels": {
+                            "HOST_IP": {"items": {"192.0.2.10": 1}},
+                        },
+                    }
+                }
+            }
+        }
+        response = MagicMock()
+        response.read.return_value = json.dumps(payload).encode()
+        context = MagicMock()
+        context.__enter__.return_value = response
+        with (
+            patch.dict(os.environ, {"AKERNEL_TOKEN": "token"}, clear=True),
+            patch.object(
+                _resources,
+                "api_endpoint_from_env",
+                return_value=Endpoint("api.example", 443, "https", False),
+            ),
+            patch.object(_resources.request, "urlopen", return_value=context),
+        ):
+            result = _resources.resources()
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].id, "node-1")
+        self.assertEqual(result[0].capacity["CPU"], 8000.0)
+        self.assertEqual(result[0].allocatable["CPU"], 6000.0)
+        self.assertEqual(result[0].labels["HOST_IP"], ["192.0.2.10"])
+
+    def test_token_is_required_without_loading_a_backend(self):
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch.object(
+                _resources,
+                "api_endpoint_from_env",
+                return_value=Endpoint("api.example", 443, "https", False),
+            ),
+            self.assertRaisesRegex(RuntimeError, "AKERNEL_TOKEN"),
+        ):
+            _resources.resources()
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -34,6 +34,7 @@ os.environ.pop('YR_HTTP_CONNECTION_NUM', None)
 import akernel_sdk
 import akernel_sdk.cli
 assert 'yr' not in sys.modules
+assert 'yr_sandbox' not in sys.modules
 assert 'YR_HTTP_CONNECTION_NUM' not in os.environ
 """
         result = subprocess.run(
@@ -63,6 +64,11 @@ assert 'YR_HTTP_CONNECTION_NUM' not in os.environ
                 "PtySession",
                 "PtyError",
                 "resources",
+                "get_backend",
+                "InvalidBackendError",
+                "BackendNotInstalledError",
+                "UnsupportedBackendFeatureError",
+                "BackendOperationError",
             },
         )
         for removed in (

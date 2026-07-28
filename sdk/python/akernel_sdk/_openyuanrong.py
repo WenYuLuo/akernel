@@ -16,7 +16,6 @@
 
 from __future__ import annotations
 
-import atexit
 import json
 import logging
 import os
@@ -74,8 +73,17 @@ def ensure_initialized() -> None:
                 bypass_datasystem=True,
             )
         )
-        atexit.register(yr.finalize)
         _initialized = True
+
+
+def finalize() -> None:
+    """Release process-level openYuanrong SDK resources."""
+
+    global _initialized
+    if not _initialized:
+        return
+    yr.finalize()
+    _initialized = False
 
 
 def _validate_positive_int(name: str, value: int, *, allow_zero: bool = False) -> None:
@@ -213,7 +221,17 @@ def build_options(
 def create_instance(options: Any, *, cwd: str | None) -> Any:
     instance_class: Any = _SandboxInstance
     handle = instance_class.options(options).invoke(cwd=cwd)
-    yr.get(handle.ping.invoke())
+    try:
+        yr.get(handle.ping.invoke())
+    except Exception:
+        try:
+            terminate_instance(handle)
+        except Exception:
+            logger.warning(
+                "failed to roll back an actor after its readiness check failed",
+                exc_info=True,
+            )
+        raise
     return handle
 
 

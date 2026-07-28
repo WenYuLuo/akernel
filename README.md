@@ -105,7 +105,8 @@ See the [Deployment Guide](./deploy/README.md) for prerequisites, cloud-specific
 
 ### Create a Sandbox
 
-Install the Python SDK from PyPI or source:
+Install the Python SDK. The default installation includes the
+`openyuanrong-sandbox` HTTP/RRT backend:
 
 ```bash
 # PyPI
@@ -113,7 +114,15 @@ python -m pip install akernel-sdk
 
 # Source
 python -m pip install ./sdk/python
+
+# Also install the actor backend
+python -m pip install "akernel-sdk[openyuanrong-sdk]"
 ```
+
+When the actor extra is installed, both backend packages are present and
+`openyuanrong-sandbox` remains the automatic default. Set
+`AKERNEL_BACKEND=openyuanrong-sdk` before importing `akernel_sdk` to select
+the actor backend.
 
 Configure the AKernel environment:
 

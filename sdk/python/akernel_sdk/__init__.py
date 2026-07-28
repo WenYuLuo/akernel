@@ -16,6 +16,13 @@
 
 import importlib
 
+from ._backends.errors import (
+    BackendNotInstalledError,
+    BackendOperationError,
+    InvalidBackendError,
+    UnsupportedBackendFeatureError,
+)
+from ._backends.registry import selected_backend
 from .types import (
     CommandInfo,
     CommandResult,
@@ -42,6 +49,11 @@ __all__ = [
     "PtySession",
     "PtyError",
     "resources",
+    "get_backend",
+    "InvalidBackendError",
+    "BackendNotInstalledError",
+    "UnsupportedBackendFeatureError",
+    "BackendOperationError",
 ]
 
 _LAZY_IMPORTS = {
@@ -50,8 +62,14 @@ _LAZY_IMPORTS = {
     "Pty": (".pty", "Pty"),
     "PtySession": (".pty", "PtySession"),
     "PtyError": (".pty", "PtyError"),
-    "resources": ("._openyuanrong", "resources"),
+    "resources": ("._resources", "resources"),
 }
+
+
+def get_backend() -> str | None:
+    """Return the backend selected during package import without loading it."""
+
+    return selected_backend()
 
 
 def __getattr__(name: str) -> object:

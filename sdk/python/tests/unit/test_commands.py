@@ -15,7 +15,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from akernel_sdk.commands import CommandHandle, Commands
+from akernel_sdk._backends.openyuanrong_sdk_commands import CommandHandle, Commands
 from akernel_sdk.types import CommandInfo, CommandResult
 
 
@@ -27,7 +27,7 @@ class CommandsTest(unittest.TestCase):
         token = object()
         self.instance.cmd_list.invoke.return_value = token
         with patch(
-            "akernel_sdk.commands.yr.get",
+            "akernel_sdk._backends.openyuanrong_sdk_commands.yr.get",
             return_value={
                 "processes": [
                     {"pid": 42, "cmd": "sleep 30", "running": True},
@@ -44,7 +44,7 @@ class CommandsTest(unittest.TestCase):
         token = object()
         self.instance.cmd_run.invoke.return_value = token
         with patch(
-            "akernel_sdk.commands.yr.get",
+            "akernel_sdk._backends.openyuanrong_sdk_commands.yr.get",
             return_value={"stdout": "ok\n", "stderr": "", "exit_code": 0},
         ) as get:
             result = Commands(self.instance).run("echo ok", timeout=60)
@@ -66,7 +66,7 @@ class CommandsTest(unittest.TestCase):
         token = object()
         self.instance.cmd_start.invoke.return_value = token
         with patch(
-            "akernel_sdk.commands.yr.get",
+            "akernel_sdk._backends.openyuanrong_sdk_commands.yr.get",
             return_value={"pid": 99, "error": None},
         ):
             result = Commands(self.instance).run(
@@ -82,7 +82,7 @@ class CommandsTest(unittest.TestCase):
     def test_background_start_error_is_reported(self):
         self.instance.cmd_start.invoke.return_value = object()
         with patch(
-            "akernel_sdk.commands.yr.get",
+            "akernel_sdk._backends.openyuanrong_sdk_commands.yr.get",
             return_value={"pid": -1, "error": "exec failed"},
         ):
             with self.assertRaisesRegex(RuntimeError, "exec failed"):
@@ -92,7 +92,7 @@ class CommandsTest(unittest.TestCase):
         token = object()
         self.instance.cmd_wait.invoke.return_value = token
         with patch(
-            "akernel_sdk.commands.yr.get",
+            "akernel_sdk._backends.openyuanrong_sdk_commands.yr.get",
             return_value={"stdout": "done", "stderr": "", "exit_code": 0},
         ) as get:
             result = CommandHandle(7, self.instance).wait(timeout=60)
@@ -105,7 +105,7 @@ class CommandsTest(unittest.TestCase):
         token = object()
         self.instance.cmd_wait.invoke.return_value = token
         with patch(
-            "akernel_sdk.commands.yr.get",
+            "akernel_sdk._backends.openyuanrong_sdk_commands.yr.get",
             return_value={"stdout": "done", "stderr": "", "exit_code": 0},
         ) as get:
             CommandHandle(7, self.instance).wait()

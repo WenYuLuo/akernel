@@ -69,8 +69,12 @@ jobs:
       - name: Install build dependencies
         run: |
           unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY no_proxy NO_PROXY
-          python -m pip install --upgrade pip
-          python -m pip install -e './sdk/python[dev]' 'twine>=5,<7'
+          python -m pip install \
+            --index-url https://pypi.org/simple \
+            --upgrade pip
+          python -m pip install \
+            --index-url https://pypi.org/simple \
+            -e './sdk/python[dev]' 'twine>=5,<7'
 
       - name: Check SDK
         run: |
@@ -91,7 +95,8 @@ jobs:
           unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY no_proxy NO_PROXY
           python -m venv /tmp/akernel-wheel-test
           /tmp/akernel-wheel-test/bin/python -m pip install \
-            --no-deps sdk/python/dist/*.whl
+            --index-url https://pypi.org/simple \
+            sdk/python/dist/*.whl
           /tmp/akernel-wheel-test/bin/python - <<'PY'
           from importlib.metadata import distribution, version
 
@@ -103,6 +108,7 @@ jobs:
               for entry in distribution("akernel-sdk").entry_points
           )
           assert akernel_sdk.__name__ == "akernel_sdk"
+          assert akernel_sdk.get_backend() == "openyuanrong-sandbox"
           PY
 
       - name: Upload distributions

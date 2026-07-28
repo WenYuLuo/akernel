@@ -153,10 +153,15 @@ def exec_endpoint_from_env() -> Endpoint:
     """Return the endpoint used by the exec WebSocket (/terminal/ws).
 
     File copy uses the frontend exec WebSocket.  If users set an explicit
-    gateway override, respect it; otherwise use the API endpoint so the
-    default cluster/public path is WSS on 443 or the explicit server port.
+    AKERNEL gateway override, respect it; otherwise use the API endpoint so
+    the default cluster/public path is WSS on 443 or the explicit server port.
+
+    Do not use YR_GATEWAY_ADDRESS here.  The openyuanrong-sandbox backend sets
+    that variable internally while it initializes the RRT client, so treating
+    it as a user override would incorrectly move PTY and file-copy traffic
+    from the frontend API endpoint to the public port-forwarding gateway.
     """
-    override = _gateway_override_raw()
+    override = os.environ.get("AKERNEL_GATEWAY_ADDRESS", "").strip()
     if override:
         return _parse_endpoint(
             override,

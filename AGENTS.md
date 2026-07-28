@@ -269,9 +269,22 @@ contain only the project-level entry points and representative examples:
 Install the SDK development tools and run the complete local quality gate with:
 
 ```bash
+python3 -m pip install \
+  --index-url https://pypi.org/simple \
+  "openyuanrong-sandbox==0.9.3"
 python3 -m pip install -e './sdk/python[dev]'
 make sdk-check
 ```
+
+The Python SDK installs `openyuanrong-sandbox` as its default execution
+backend. The actor-based `openyuanrong-sdk` backend is available through the
+`openyuanrong-sdk` extra. Installing that extra leaves both distributions
+present, so `openyuanrong-sandbox` remains the automatic default unless
+`AKERNEL_BACKEND=openyuanrong-sdk` is set before import. Backend selection
+happens once during import and backend modules are loaded lazily on first use.
+Keep public `Sandbox`, `Commands`, `Filesystem`, and value types independent
+of both native packages; all native conversions belong under
+`akernel_sdk._backends`.
 
 When changing a public SDK method, update its type annotations and docstring,
 add or update unit coverage, and keep the SDK README and maintained examples in

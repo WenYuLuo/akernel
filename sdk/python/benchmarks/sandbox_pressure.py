@@ -44,7 +44,10 @@ Usage:
 """
 
 import argparse
+import faulthandler
+import multiprocessing
 import os
+import signal
 import socket
 import subprocess
 import sys
@@ -80,8 +83,9 @@ TUNNEL_CMD_TEMPLATE = (
 def _safe_kill(sb):
     try:
         sb.kill()
-    except Exception:
-        pass
+    except Exception as error:
+        return repr(error)[:300]
+    return None
 
 
 def _build_sandbox_kwargs(
@@ -115,12 +119,32 @@ def _build_sandbox_kwargs(
     return kwargs
 
 
+def _kill_with_timing(sb):
+    started = time.monotonic()
+    error = _safe_kill(sb)
+    return time.monotonic() - started, error
+
+
+def _record_cleanup(stats, cleanup_future):
+    try:
+        elapsed, error = cleanup_future.result()
+    except Exception as exc:
+        elapsed = 0.0
+        error = repr(exc)[:300]
+    with stats["lock"]:
+        stats["cleanup_latencies"].append(elapsed)
+        if error is not None:
+            stats["cleanup_failed"] += 1
+            stats["errors"].append(f"cleanup: {error}")
+
+
 def run_single_request(stats, term_pool, sb_kwargs, cmd, cmd_timeout, tunnel_mode):
-    t0 = time.time()
+    t0 = time.monotonic()
     sb = None
+    cleanup_future = None
     try:
         sb = Sandbox(**sb_kwargs)
-        t_created = time.time()
+        t_created = time.monotonic()
 
         if tunnel_mode:
             tunnel_url = sb.reverse_tunnel.url
@@ -135,28 +159,50 @@ def run_single_request(stats, term_pool, sb_kwargs, cmd, cmd_timeout, tunnel_mod
                 f"stdout={result.stdout!r} stderr={result.stderr!r}"
             )
 
-        elapsed = time.time() - t0
+        elapsed = time.monotonic() - t0
         with stats["lock"]:
             stats["success"] += 1
             stats["latencies"].append(elapsed)
             stats["create_latencies"].append(t_created - t0)
-
-        term_pool.submit(_safe_kill, sb)
-        sb = None
     except Exception as e:
         with stats["lock"]:
             stats["failed"] += 1
             stats["errors"].append(repr(e)[:300])
-        if sb is not None:
-            term_pool.submit(_safe_kill, sb)
     finally:
+        if sb is not None:
+            cleanup_future = term_pool.submit(_kill_with_timing, sb)
         with stats["lock"]:
             stats["total"] += 1
+    return cleanup_future
 
 
-def thread_loop(stats, term_pool, end_time, sb_kwargs, cmd, cmd_timeout, tunnel_mode):
-    while time.time() < end_time:
-        run_single_request(stats, term_pool, sb_kwargs, cmd, cmd_timeout, tunnel_mode)
+def thread_loop(
+    stats,
+    term_pool,
+    end_time,
+    sb_kwargs,
+    cmd,
+    cmd_timeout,
+    tunnel_mode,
+):
+    pending_cleanup = None
+    while time.monotonic() < end_time:
+        next_cleanup = run_single_request(
+            stats,
+            term_pool,
+            sb_kwargs,
+            cmd,
+            cmd_timeout,
+            tunnel_mode,
+        )
+        # Bound cleanup backlog to one item per load-generating thread. The
+        # current create/run overlaps with the previous sandbox's deletion,
+        # but cleanup cannot accumulate without limit.
+        if pending_cleanup is not None:
+            _record_cleanup(stats, pending_cleanup)
+        pending_cleanup = next_cleanup
+    if pending_cleanup is not None:
+        _record_cleanup(stats, pending_cleanup)
 
 
 def worker_process(
@@ -176,12 +222,16 @@ def worker_process(
     cmd_timeout,
     tunnel_mode,
 ):
+    if hasattr(signal, "SIGUSR1"):
+        faulthandler.register(signal.SIGUSR1, all_threads=True)
     stats = {
         "total": 0,
         "success": 0,
         "failed": 0,
+        "cleanup_failed": 0,
         "latencies": [],
         "create_latencies": [],
+        "cleanup_latencies": [],
         "errors": [],
         "lock": threading.Lock(),
     }
@@ -197,10 +247,12 @@ def worker_process(
         reverse_port,
         listen_port,
     )
-    term_pool = ThreadPoolExecutor(max_workers=max(4, threads_per_proc))
-    end_time = time.time() + duration
+    end_time = time.monotonic() + duration
 
-    with ThreadPoolExecutor(max_workers=threads_per_proc) as worker_pool:
+    with (
+        ThreadPoolExecutor(max_workers=threads_per_proc) as term_pool,
+        ThreadPoolExecutor(max_workers=threads_per_proc) as worker_pool,
+    ):
         futs = [
             worker_pool.submit(
                 thread_loop,
@@ -216,7 +268,6 @@ def worker_process(
         ]
         wait(futs)
 
-    term_pool.shutdown(wait=True)
     stats.pop("lock", None)
     return stats
 
@@ -278,7 +329,12 @@ def main(args):
     )
 
     try:
-        pool = ProcessPoolExecutor(max_workers=args.processes)
+        # Use spawn so SDK/native transport state is never inherited across a
+        # fork. Each child creates and owns all of its backend clients.
+        pool = ProcessPoolExecutor(
+            max_workers=args.processes,
+            mp_context=multiprocessing.get_context("spawn"),
+        )
         futs = [
             pool.submit(
                 worker_process,
@@ -301,25 +357,46 @@ def main(args):
             for _ in range(args.processes)
         ]
 
-        t_start = time.time()
-        done = wait(futs)
-        t_end = time.time()
+        t_start = time.monotonic()
+        pending = set(futs)
+        done_futs = set()
+        while pending:
+            completed, pending = wait(pending, timeout=args.progress_interval)
+            done_futs.update(completed)
+            if pending:
+                elapsed = time.monotonic() - t_start
+                phase = (
+                    "running load"
+                    if elapsed < args.duration
+                    else "finishing in-flight lifecycle"
+                )
+                print(
+                    f"[progress] elapsed={elapsed:.1f}s "
+                    f"workers={len(done_futs)}/{len(futs)} complete; "
+                    f"{len(pending)} worker(s) {phase}",
+                    flush=True,
+                )
+        t_end = time.monotonic()
 
         merged = {
             "total": 0,
             "success": 0,
             "failed": 0,
+            "cleanup_failed": 0,
             "latencies": [],
             "create_latencies": [],
+            "cleanup_latencies": [],
             "errors": [],
         }
-        for fut in done.done:
+        for fut in done_futs:
             s = fut.result()
             merged["total"] += s["total"]
             merged["success"] += s["success"]
             merged["failed"] += s["failed"]
+            merged["cleanup_failed"] += s["cleanup_failed"]
             merged["latencies"].extend(s["latencies"])
             merged["create_latencies"].extend(s["create_latencies"])
+            merged["cleanup_latencies"].extend(s["cleanup_latencies"])
             merged["errors"].extend(s["errors"])
 
         total_time = t_end - t_start
@@ -332,6 +409,7 @@ def main(args):
         print(f"🔁 Total Requests : {merged['total']}")
         print(f"✅ Success        : {merged['success']}")
         print(f"❌ Failed         : {merged['failed']}")
+        print(f"🧹 Cleanup Failed : {merged['cleanup_failed']}")
         print(f"⚡ RPS            : {rps:.2f}")
 
         def _percentiles(label, samples_s):
@@ -349,6 +427,7 @@ def main(args):
 
         _percentiles("create+run latency", merged["latencies"])
         _percentiles("create-only latency", merged["create_latencies"])
+        _percentiles("cleanup latency", merged["cleanup_latencies"])
 
         if merged["errors"]:
             print("\n— sample failures (up to 5) —")
@@ -432,6 +511,12 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument("--cmd-timeout", type=int, default=20)
+    parser.add_argument(
+        "--progress-interval",
+        type=float,
+        default=10,
+        help="seconds between progress messages while workers finish",
+    )
     args = parser.parse_args()
 
     main(args)

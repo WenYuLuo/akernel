@@ -14,7 +14,7 @@
 
 import json
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from akernel_sdk import HttpReverseTunnel, Mount, S3Config, _openyuanrong
 
@@ -134,6 +134,52 @@ class OpenYuanRongAdapterTest(unittest.TestCase):
                 result = _openyuanrong.resources()
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].id, "node-1")
+
+    def test_readiness_failure_rolls_back_created_actor(self):
+        instance = MagicMock()
+        invoke = MagicMock(return_value=instance)
+        instance_type = MagicMock()
+        instance_type.options.return_value.invoke = invoke
+        readiness_error = RuntimeError("readiness failed")
+        with (
+            patch.object(_openyuanrong, "_SandboxInstance", instance_type),
+            patch.object(
+                _openyuanrong.yr,
+                "get",
+                side_effect=readiness_error,
+            ),
+            patch.object(_openyuanrong, "terminate_instance") as terminate,
+            self.assertRaisesRegex(RuntimeError, "readiness failed") as raised,
+        ):
+            _openyuanrong.create_instance(MagicMock(), cwd="/workspace")
+
+        self.assertIs(raised.exception, readiness_error)
+        terminate.assert_called_once_with(instance)
+
+    def test_readiness_rollback_failure_preserves_original_error(self):
+        instance = MagicMock()
+        instance_type = MagicMock()
+        instance_type.options.return_value.invoke.return_value = instance
+        readiness_error = RuntimeError("readiness failed")
+        with (
+            patch.object(_openyuanrong, "_SandboxInstance", instance_type),
+            patch.object(
+                _openyuanrong.yr,
+                "get",
+                side_effect=readiness_error,
+            ),
+            patch.object(
+                _openyuanrong,
+                "terminate_instance",
+                side_effect=RuntimeError("rollback failed"),
+            ) as terminate,
+            self.assertLogs(_openyuanrong.logger, level="WARNING"),
+            self.assertRaisesRegex(RuntimeError, "readiness failed") as raised,
+        ):
+            _openyuanrong.create_instance(MagicMock(), cwd=None)
+
+        self.assertIs(raised.exception, readiness_error)
+        terminate.assert_called_once_with(instance)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,11 @@
 # AKernel Python SDK
 
-`akernel-sdk` is the Python interface for creating and managing remote AKernel sandboxes. Applications use one stable API for commands, files, interactive PTYs, port forwarding, and reverse tunnels. The current implementation uses `openYuanrong` as its backend adapter; backend-specific handles and namespaces are not part of the public API.
+`akernel-sdk` is the Python interface for creating and managing remote AKernel
+sandboxes. Applications use one stable API for commands, files, interactive
+PTYs, port forwarding, and reverse tunnels. It supports both the
+`openyuanrong-sandbox` HTTP/RRT backend and the actor-based
+`openyuanrong-sdk` backend; backend-native handles, value types, and namespaces
+are not part of the public API.
 
 ## Navigation
 
@@ -18,10 +23,14 @@
 
 ## Install and configure
 
-AKernel SDK 0.1.0 requires Python 3.10 or newer.
+AKernel SDK requires Python 3.10 or newer. The default installation includes
+the `openyuanrong-sandbox` HTTP/RRT backend:
 
 ```bash
 pip install akernel-sdk
+
+# Also install the actor-based backend:
+pip install "akernel-sdk[openyuanrong-sdk]"
 ```
 
 To install from a source checkout:
@@ -29,6 +38,36 @@ To install from a source checkout:
 ```bash
 python -m pip install ./sdk/python
 ```
+
+During development, install `openyuanrong-sandbox 0.9.3` from PyPI:
+
+```bash
+python -m pip install \
+  --index-url https://pypi.org/simple \
+  "openyuanrong-sandbox==0.9.3"
+python -m pip install -e "./sdk/python[dev]"
+```
+
+The `openyuanrong-sandbox` extra remains as a compatibility alias, so
+`pip install "akernel-sdk[openyuanrong-sandbox]"` is equivalent to the plain
+installation. Python extras only add dependencies; consequently,
+`pip install "akernel-sdk[openyuanrong-sdk]"` installs both backends. Select
+the actor backend with `AKERNEL_BACKEND` before importing `akernel_sdk`.
+
+Backend selection happens once when `akernel_sdk` is imported:
+
+1. `AKERNEL_BACKEND`, when set;
+2. installed `openyuanrong-sandbox`;
+3. installed `openyuanrong-sdk`.
+
+Use the canonical identifier to override auto-detection before import:
+
+```bash
+export AKERNEL_BACKEND=openyuanrong-sdk
+```
+
+`akernel_sdk.get_backend()` reports the selected identifier without importing
+or initializing the backend.
 
 Configure the public AKernel entrypoint and a signed JWT token:
 
@@ -82,7 +121,13 @@ Sandbox(
 )
 ```
 
-`cpu` is measured in millicores and `memory` in MiB. A zero CPU or memory limit means the limit follows the corresponding request. A positive limit must not be smaller than its request.
+`cpu` is measured in millicores and `memory` in MiB. A zero CPU or memory
+limit means the limit follows the corresponding request. A positive limit
+must not be smaller than its request. `cwd`, when provided, must be an absolute
+POSIX path.
+
+`schedule_timeout=-1` is supported only by `openyuanrong-sdk`.
+`openyuanrong-sandbox` rejects it before creating a remote sandbox.
 
 ## Sandbox runtimes
 
@@ -133,7 +178,9 @@ handle.close_stdin()
 result = handle.wait(timeout=15)
 ```
 
-Foreground commands use one actor RPC with the configured timeout. Background commands return a handle whose `wait()` method also performs one actor RPC.
+Foreground commands return a backend-neutral `CommandResult`. Background
+commands return an AKernel `CommandHandle`; its lifecycle operations are
+delegated to the selected backend.
 
 ## Filesystem
 
@@ -234,8 +281,10 @@ the loopback HTTP listener used inside the sandbox. Consequently,
 
 For an HTTPS target, the SDK-side tunnel client performs the TLS handshake and
 certificate verification. The sandbox application talks only to its loopback
-HTTP listener. AKernel 0.1.0 supports one HTTP/WebSocket reverse tunnel per
-sandbox; it does not expose a general TCP tunnel.
+HTTP listener. AKernel supports one HTTP/HTTPS reverse tunnel per sandbox and
+does not expose a general TCP tunnel. The HTTP/RRT backend owns the fixed
+internal ports 8765 and 8766 and rejects custom port values. Reverse WebSocket
+forwarding and custom tunnel ports currently require `openyuanrong-sdk`.
 
 ## Rootfs and mounts
 
