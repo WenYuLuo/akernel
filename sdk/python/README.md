@@ -118,6 +118,8 @@ Sandbox(
     reverse_tunnel: HttpReverseTunnel | None = None,
     detached: bool = False,
     node_id: str | None = None,
+    *,
+    xpu: str | None = None,
 )
 ```
 
@@ -128,6 +130,23 @@ POSIX path.
 
 `schedule_timeout=-1` is supported only by `openyuanrong-sdk`.
 `openyuanrong-sandbox` rejects it before creating a remote sandbox.
+
+Request whole GPU devices with `xpu="type:model:count"`:
+
+```python
+with Sandbox(xpu="gpu:a10:1") as sandbox:
+    print(sandbox.commands.run("nvidia-smi -L").stdout)
+```
+
+The current XPU API supports `gpu`. The model is the scheduler-visible,
+normalized value reported by the node
+resource endpoint (for example, NVIDIA A10 is reported as `a10`). Use
+`xpu="gpu::1"` to accept any GPU model. `count` must be a positive integer.
+Both backends use the same public format; the actor backend translates it to
+openYuanRong's `GPU/<model>/count` resource key. The cluster must advertise
+enough matching GPU resources or creation fails during scheduling.
+See [`examples/gpu_sandbox.py`](./examples/gpu_sandbox.py) for a runnable
+example.
 
 ## Sandbox runtimes
 
@@ -379,6 +398,7 @@ Maintained examples are under [`examples/`](./examples):
 - `basic_usage.py`
 - `command_stdin.py`
 - `custom_image.py`
+- `gpu_sandbox.py`
 - `named_sandbox.py`
 - `pty.py`
 - `port_forwarding.py`

@@ -59,7 +59,6 @@ oss_auths_path="/home/akernel/sandboxd/config/oss_auths.json"
 registry_auths_path="/home/akernel/sandboxd/config/registry_auths.json"
 cgroup_memory_limit="64GiB"
 
-# No [plugin.node_resource] section: standalone/local mode does not report
-# node resources to a scheduler, so sandboxd skips the node-resource module
-# (and does not bind /var/run/resource.sock). Add the section back to enable
-# it.
+[plugin.node_resource]
+provider="cgroup"
+sock_path="/var/run/resource.sock"

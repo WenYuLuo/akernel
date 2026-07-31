@@ -26,6 +26,7 @@ LITEBUS_DATA_KEY=""
 DOCKER_CMD=""
 DOCKER_PREFIX=()
 PROXY_RUN_ARGS=()
+GPU_RUN_ARGS=()
 
 # Colors for output
 RED='\033[0;31m'
@@ -74,6 +75,19 @@ check_prerequisites() {
     fi
 
     log_info "${DOCKER_CMD} is available"
+
+    if [[ "${DOCKER_CMD}" = "docker" && -c /dev/nvidiactl ]]; then
+        if "${DOCKER_PREFIX[@]}" ${DOCKER_CMD} info \
+            --format '{{json .Runtimes}}' 2> /dev/null | grep -q '"nvidia"'; then
+            GPU_RUN_ARGS=(
+                --gpus all
+                -e NVIDIA_DRIVER_CAPABILITIES=compute,utility
+            )
+            log_info "NVIDIA container runtime detected; exposing all GPUs to the AKernel node"
+        else
+            log_warn "NVIDIA GPU detected but Docker's nvidia runtime is not configured; GPU sandboxes will not be advertised"
+        fi
+    fi
 
     if [[ ! -c /dev/kvm ]]; then
         log_warn "/dev/kvm is unavailable; standalone will support runsc but will not advertise the Kata runtime"
@@ -229,6 +243,7 @@ start_node_container() {
         -e TZ=Asia/Shanghai \
         -e ENABLE_TRACE="${ENABLE_TRACE:-false}" \
         -e ENABLE_METRICS="${ENABLE_METRICS:-false}" \
+        "${GPU_RUN_ARGS[@]}" \
         "${PROXY_RUN_ARGS[@]}" \
         --entrypoint=/usr/local/bin/akernel-entrypoint \
         -v "${DATA_DIR}:/home/akernel" \

@@ -56,6 +56,7 @@ class SandboxTest(unittest.TestCase):
         self.assertEqual(spec.cpu, 2000)
         self.assertEqual(spec.memory, 8192)
         self.assertEqual(dict(spec.env), {})
+        self.assertIsNone(spec.xpu)
 
         sandbox.kill()
         self.session.terminate.assert_called_once_with()
@@ -140,6 +141,29 @@ class SandboxTest(unittest.TestCase):
             Sandbox(cpu=2000, cpu_limit=1000)
         with self.assertRaisesRegex(ValueError, "schedule_timeout"):
             Sandbox(schedule_timeout=0)
+        self.backend.create.assert_not_called()
+
+    def test_xpu_request_is_passed_to_backend(self):
+        sandbox = Sandbox(xpu="gpu:NVIDIA-A10:2")
+        spec = self.backend.create.call_args.args[0]
+        self.assertEqual(spec.xpu, "gpu:NVIDIA-A10:2")
+        sandbox.kill()
+
+    def test_xpu_request_is_validated_before_backend(self):
+        invalid = (
+            (1, TypeError, "string"),
+            ("gpu", ValueError, "three fields"),
+            (" gpu::1", ValueError, "whitespace"),
+            ("npu::1", ValueError, "unsupported xpu type"),
+            ("gpu::0", ValueError, "positive integer"),
+            ("gpu::1.5", ValueError, "positive integer"),
+        )
+        for value, error_type, message in invalid:
+            with self.subTest(value=value), self.assertRaisesRegex(
+                error_type,
+                message,
+            ):
+                Sandbox(xpu=value)
         self.backend.create.assert_not_called()
 
     def test_port_forwardings_are_integer_ports(self):

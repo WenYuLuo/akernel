@@ -363,6 +363,7 @@ class OpenYuanRongSandboxBackend:
                 ),
                 detached=spec.detached,
                 node_id=spec.node_id,
+                xpu=spec.xpu,
                 create_timeout=create_timeout,
             )
         except Exception as error:

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import ssl
 import urllib.request
 from collections.abc import Mapping, Sequence
@@ -33,6 +34,7 @@ from .pty import Pty
 from .types import HttpReverseTunnel, Mount, S3Config, SandboxInfo
 
 _SUPPORTED_RUNTIMES = ("runsc", "kata")
+_SUPPORTED_XPU_TYPES = frozenset({"gpu"})
 _traefik_internal_ip_cache: str | None = None
 logger = logging.getLogger(__name__)
 
@@ -78,6 +80,26 @@ def _validate_integer(
         raise TypeError(f"{name} must be an integer")
     if value < minimum:
         raise ValueError(f"{name} must be greater than or equal to {minimum}")
+
+
+def _validate_xpu(xpu: str | None) -> None:
+    if xpu is None:
+        return
+    if not isinstance(xpu, str):
+        raise TypeError("xpu must be a string or None")
+
+    fields = xpu.split(":")
+    if len(fields) != 3 or not fields[0] or not fields[2]:
+        raise ValueError("xpu must have exactly three fields: type:model:count")
+    if any(field != field.strip() for field in fields):
+        raise ValueError("xpu fields must not contain surrounding whitespace")
+
+    xpu_type, _, count_text = fields
+    xpu_type = xpu_type.lower()
+    if xpu_type not in _SUPPORTED_XPU_TYPES:
+        raise ValueError(f"unsupported xpu type: {xpu_type}")
+    if re.fullmatch(r"[0-9]+", count_text) is None or int(count_text) <= 0:
+        raise ValueError("xpu count must be a positive integer")
 
 
 def _get_traefik_internal_ip(gateway: Endpoint) -> tuple[str, int]:
@@ -130,6 +152,8 @@ class Sandbox:
         reverse_tunnel: HttpReverseTunnel | None = None,
         detached: bool = False,
         node_id: str | None = None,
+        *,
+        xpu: str | None = None,
     ) -> None:
         """Create and wait for a sandbox to become ready.
 
@@ -152,6 +176,9 @@ class Sandbox:
             reverse_tunnel: SDK-side HTTP service exposed inside the sandbox.
             detached: Keep the sandbox alive when this client closes.
             node_id: Require placement on a specific AKernel node.
+            xpu: Optional whole-device XPU request in ``type:model:count``
+                format. Leave ``model`` empty to accept any model. Currently
+                only ``gpu`` is supported.
 
         Raises:
             TypeError: An argument has an invalid type.
@@ -201,6 +228,7 @@ class Sandbox:
                 raise TypeError("node_id must be a string")
             if not node_id.strip():
                 raise ValueError("node_id must be a non-empty string")
+        _validate_xpu(xpu)
         if reverse_tunnel is not None and not isinstance(
             reverse_tunnel, HttpReverseTunnel
         ):
@@ -248,6 +276,7 @@ class Sandbox:
             reverse_tunnel=reverse_tunnel,
             detached=detached,
             node_id=node_id,
+            xpu=xpu,
         )
         self._session = load_backend().create(spec)
         try:

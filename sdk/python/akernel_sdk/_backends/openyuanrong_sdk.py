@@ -287,6 +287,7 @@ class OpenYuanRongSdkBackend:
             reverse_tunnel=spec.reverse_tunnel,
             detached=spec.detached,
             node_id=spec.node_id,
+            xpu=spec.xpu,
         )
         try:
             instance = _openyuanrong.create_instance(

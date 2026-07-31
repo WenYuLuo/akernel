@@ -59,6 +59,7 @@ def _spec(**overrides):
         "reverse_tunnel": None,
         "detached": False,
         "node_id": None,
+        "xpu": None,
     }
     values.update(overrides)
     return SandboxSpec(**values)
@@ -155,6 +156,7 @@ class OpenYuanRongSandboxBackendTest(unittest.TestCase):
         with patch.object(
             openyuanrong_sandbox.yr_sandbox,
             "Sandbox",
+            autospec=True,
             return_value=native,
         ) as sandbox_type:
             session = self.backend.create(
@@ -170,6 +172,7 @@ class OpenYuanRongSandboxBackendTest(unittest.TestCase):
                     reverse_tunnel=tunnel,
                     detached=True,
                     node_id="node-1",
+                    xpu="gpu:NVIDIA-A10:2",
                 )
             )
 
@@ -184,6 +187,7 @@ class OpenYuanRongSandboxBackendTest(unittest.TestCase):
         self.assertEqual(kwargs["upstream"], "https://service.example")
         self.assertEqual(kwargs["create_timeout"], 60)
         self.assertEqual(kwargs["node_id"], "node-1")
+        self.assertEqual(kwargs["xpu"], "gpu:NVIDIA-A10:2")
 
         self.assertEqual(
             session.commands.run("echo ok", envs=None, cwd=None, timeout=60),

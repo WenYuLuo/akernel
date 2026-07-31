@@ -146,6 +146,7 @@ def build_options(
     reverse_tunnel: HttpReverseTunnel | None,
     detached: bool,
     node_id: str | None,
+    xpu: str | None,
 ) -> Any:
     """Translate the stable SDK configuration to openYuanrong options."""
 
@@ -188,6 +189,11 @@ def build_options(
         options.custom_extensions["mounts"] = json.dumps(
             [mount.to_dict() for mount in mounts]
         )
+    if xpu is not None:
+        xpu_type, model, count_text = xpu.split(":")
+        options.custom_resources[
+            f"{xpu_type.upper()}/{model or '.+'}/count"
+        ] = float(count_text)
 
     forwarded = list(port_forwardings)
     if reverse_tunnel is not None:

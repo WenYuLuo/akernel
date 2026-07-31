@@ -286,6 +286,11 @@ Keep public `Sandbox`, `Commands`, `Filesystem`, and value types independent
 of both native packages; all native conversions belong under
 `akernel_sdk._backends`.
 
+The public XPU request format is `type:model:count`. The sandbox backend
+passes it to `yr_sandbox.Sandbox`, while the actor backend converts it to an
+openYuanRong custom resource such as `GPU/NVIDIA-A10/count`; an empty model
+uses the `.+` scheduler wildcard.
+
 When changing a public SDK method, update its type annotations and docstring,
 add or update unit coverage, and keep the SDK README and maintained examples in
 sync. Benchmark programs under `sdk/python/benchmarks/` are manual tools and

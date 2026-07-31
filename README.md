@@ -166,7 +166,8 @@ See the complete [basic usage example](./sdk/python/examples/basic_usage.py), th
 ### How It Works
 
 1. **Agent Submits Workload**: Through unified API or SDK
-2. **Scheduler Places Sandbox**: Selects a worker based on requested CPU, memory, and available capacity
+2. **Scheduler Places Sandbox**: Selects a worker based on requested CPU,
+   memory, optional GPU devices, and available capacity
 3. **Sandbox Created**: Prepares the rootfs and network and starts the selected sandbox runtime on the worker
 4. **Workload Executes**: In secure, isolated sandboxes
 5. **Resources Recycled**: Deletes the sandbox and returns its capacity to the cluster

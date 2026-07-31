@@ -74,6 +74,7 @@ class SandboxSpec:
     reverse_tunnel: HttpReverseTunnel | None
     detached: bool
     node_id: str | None
+    xpu: str | None
 
 
 class CommandsDriver(Protocol):

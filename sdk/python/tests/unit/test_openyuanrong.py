@@ -38,6 +38,7 @@ class OpenYuanRongAdapterTest(unittest.TestCase):
             "reverse_tunnel": None,
             "detached": False,
             "node_id": None,
+            "xpu": None,
         }
         values.update(overrides)
         return _openyuanrong.build_options(**values)
@@ -100,6 +101,16 @@ class OpenYuanRongAdapterTest(unittest.TestCase):
             self.build_options(cpu=2000, cpu_limit=1000)
         with self.assertRaisesRegex(ValueError, "mem_limit"):
             self.build_options(memory=4096, mem_limit=2048)
+
+    def test_xpu_translation(self):
+        specific = self.build_options(xpu="gpu:NVIDIA-A10:2")
+        self.assertEqual(
+            specific.custom_resources,
+            {"GPU/NVIDIA-A10/count": 2.0},
+        )
+
+        any_model = self.build_options(xpu="GPU::1")
+        self.assertEqual(any_model.custom_resources, {"GPU/.+/count": 1.0})
 
     def test_node_info_conversion(self):
         node = _openyuanrong._to_node_info(

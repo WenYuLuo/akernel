@@ -19,6 +19,7 @@ ARG AKERNEL_VERSION=unknown
 ARG AKERNEL_REVISION=unknown
 ARG OPEN_YR_CORE_WHEEL_URL=https://github.com/openYuanrong-mirror/yuanrong/releases/download/0.9.3/openyuanrong_core-0.9.3-py3-none-manylinux_2_31_x86_64.whl
 ARG OPEN_YR_CORE_WHEEL_SHA256=dd472bfa60d3d934056801ae011db7b1993cb19c5681da2395e7f1e2d84e58c3
+ARG LIBNVIDIA_CONTAINER_VERSION=1.19.1-1
 
 FROM ${KATA_BUILD_IMAGE} AS kata-runtime
 ARG KATA_RELEASE
@@ -94,6 +95,7 @@ ARG GVISOR_RELEASE_BASE_URL
 ARG OTELCOL_CONTRIB_URL
 ARG OPEN_YR_CORE_WHEEL_URL
 ARG OPEN_YR_CORE_WHEEL_SHA256
+ARG LIBNVIDIA_CONTAINER_VERSION
 ARG TARGETARCH
 ARG PIP_INDEX_URL=https://pypi.org/simple
 ENV DEBIAN_FRONTEND=noninteractive
@@ -104,6 +106,7 @@ RUN apt-get update && \
         curl \
         e2fsprogs \
         fuse3 \
+        gnupg \
         iproute2 \
         iptables \
         jq \
@@ -119,6 +122,25 @@ RUN apt-get update && \
         systemd-sysv \
         tzdata \
         xfsprogs && \
+    rm -rf /var/lib/apt/lists/*
+
+# sandboxd's gVisor GPU provider uses nvidia-container-cli for discovery and
+# the legacy prestart hook to inject the host driver into the private rootfs.
+RUN set -eux; \
+    curl -fsSL --retry 10 --retry-delay 2 --retry-all-errors \
+      https://nvidia.github.io/libnvidia-container/gpgkey \
+      | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg; \
+    curl -fsSL --retry 10 --retry-delay 2 --retry-all-errors \
+      https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+      | sed \
+        's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
+      > /etc/apt/sources.list.d/nvidia-container-toolkit.list; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      "libnvidia-container1=${LIBNVIDIA_CONTAINER_VERSION}" \
+      "libnvidia-container-tools=${LIBNVIDIA_CONTAINER_VERSION}" \
+      "nvidia-container-toolkit-base=${LIBNVIDIA_CONTAINER_VERSION}" \
+      "nvidia-container-toolkit=${LIBNVIDIA_CONTAINER_VERSION}"; \
     rm -rf /var/lib/apt/lists/*
 
 RUN if command -v update-alternatives >/dev/null 2>&1; then \
