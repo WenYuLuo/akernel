@@ -64,6 +64,14 @@ export AKERNEL_BACKEND=openyuanrong-sdk
 `akernel_sdk.get_backend()` reports the selected identifier without importing
 or initializing the backend.
 
+When `openyuanrong-sdk` is used from a YuanRong function, the SDK process
+inherits runtime paths configured by `entryfile.sh`. The entrypoint exports
+`PYTHONPATH` and may export `LD_LIBRARY_PATH`; these variables are inherited
+by application code and child processes. `PYTHONPATH` prepends the runtime
+site-packages directory and can shadow Python modules or dependencies.
+`LD_LIBRARY_PATH` prepends runtime library directories and can change native
+library lookup, causing ABI or version conflicts.
+
 Configure the public AKernel entrypoint and a signed JWT token:
 
 ```bash

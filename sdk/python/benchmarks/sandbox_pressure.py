@@ -124,6 +124,7 @@ def _build_sandbox_kwargs(
 def run_single_request(stats, term_pool, sb_kwargs, cmd, cmd_timeout, tunnel_mode):
     t0 = time.time()
     sb = None
+    cleanup_future = None
     try:
         sb = Sandbox(**sb_kwargs)
         t_created = time.time()
@@ -150,22 +151,38 @@ def run_single_request(stats, term_pool, sb_kwargs, cmd, cmd_timeout, tunnel_mod
         if sb_kwargs.get("xpu"):
             _safe_kill(sb)
         else:
-            term_pool.submit(_safe_kill, sb)
+            cleanup_future = term_pool.submit(_safe_kill, sb)
         sb = None
     except Exception as e:
         with stats["lock"]:
             stats["failed"] += 1
             stats["errors"].append(repr(e)[:300])
         if sb is not None:
-            term_pool.submit(_safe_kill, sb)
+            cleanup_future = term_pool.submit(_safe_kill, sb)
     finally:
         with stats["lock"]:
             stats["total"] += 1
+    return cleanup_future
 
 
 def thread_loop(stats, term_pool, end_time, sb_kwargs, cmd, cmd_timeout, tunnel_mode):
+    pending_cleanup = None
     while time.time() < end_time:
-        run_single_request(stats, term_pool, sb_kwargs, cmd, cmd_timeout, tunnel_mode)
+        next_cleanup = run_single_request(
+            stats,
+            term_pool,
+            sb_kwargs,
+            cmd,
+            cmd_timeout,
+            tunnel_mode,
+        )
+        # Overlap the current lifecycle with the previous deletion while
+        # keeping cleanup work bounded to one pending task per load thread.
+        if pending_cleanup is not None:
+            pending_cleanup.result()
+        pending_cleanup = next_cleanup
+    if pending_cleanup is not None:
+        pending_cleanup.result()
 
 
 def worker_process(

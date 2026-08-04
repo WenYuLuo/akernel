@@ -122,7 +122,20 @@ python -m pip install "akernel-sdk[openyuanrong-sdk]"
 When the actor extra is installed, both backend packages are present and
 `openyuanrong-sandbox` remains the automatic default. Set
 `AKERNEL_BACKEND=openyuanrong-sdk` before importing `akernel_sdk` to select
-the actor backend.
+the actor backend:
+
+```bash
+export AKERNEL_BACKEND=openyuanrong-sdk
+```
+
+When `openyuanrong-sdk` is used from a YuanRong function, the SDK process
+inherits runtime paths configured by `builder/scripts/entryfile.sh`. That
+entrypoint exports `PYTHONPATH` and, in some runtime layouts,
+`LD_LIBRARY_PATH`; both variables are inherited by the application and its
+child processes. `PYTHONPATH` prepends the runtime site-packages directory and
+can change import resolution or shadow application dependencies.
+`LD_LIBRARY_PATH` prepends runtime library directories and can change native
+library resolution, causing ABI or version conflicts.
 
 Configure the AKernel environment:
 
