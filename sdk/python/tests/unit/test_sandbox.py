@@ -80,7 +80,7 @@ class SandboxTest(unittest.TestCase):
 
     def test_termination_failure_still_closes_local_resources(self):
         remote_error = RuntimeError("remote delete failed")
-        self.session.terminate.side_effect = remote_error
+        self.session.terminate.side_effect = [remote_error, None]
         sandbox = Sandbox()
         pty = MagicMock()
         sandbox._pty = pty
@@ -89,6 +89,13 @@ class SandboxTest(unittest.TestCase):
             sandbox.kill()
 
         self.assertIs(raised.exception, remote_error)
+        pty._close.assert_called_once_with()
+        self.session.close.assert_called_once_with()
+
+        sandbox.kill()
+        sandbox.kill()
+
+        self.assertEqual(self.session.terminate.call_count, 2)
         pty._close.assert_called_once_with()
         self.session.close.assert_called_once_with()
 

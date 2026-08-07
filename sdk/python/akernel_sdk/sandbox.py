@@ -237,7 +237,7 @@ class Sandbox:
         self._session: BackendSession | None = None
         self._pty: Pty | None = None
         self._closed = False
-        self._detached = detached
+        self._terminated = detached
         self._reverse_tunnel = reverse_tunnel
         self._forwarded_ports = set(ports)
         self._image = image
@@ -392,29 +392,34 @@ class Sandbox:
     def kill(self) -> None:
         """Release client resources and terminate a non-detached sandbox."""
 
-        if self._closed:
+        if self._closed and self._terminated:
             return
-        self._closed = True
 
         local_errors: list[Exception] = []
         terminate_error: Exception | None = None
 
-        if self._pty is not None:
-            try:
-                self._pty._close()
-            except Exception as error:
-                local_errors.append(error)
-
         if self._session is not None:
-            if not self._detached:
+            if not self._terminated:
                 try:
                     self._session.terminate()
                 except Exception as error:
                     terminate_error = error
-            try:
-                self._session.close()
-            except Exception as error:
-                local_errors.append(error)
+                else:
+                    self._terminated = True
+
+        if not self._closed:
+            if self._pty is not None:
+                try:
+                    self._pty._close()
+                except Exception as error:
+                    local_errors.append(error)
+
+            if self._session is not None:
+                try:
+                    self._session.close()
+                except Exception as error:
+                    local_errors.append(error)
+            self._closed = True
 
         if terminate_error is not None:
             for cleanup_error in local_errors:

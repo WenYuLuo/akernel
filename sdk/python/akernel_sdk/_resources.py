@@ -21,7 +21,8 @@ from urllib import request
 from urllib.error import HTTPError, URLError
 
 from ._addresses import api_endpoint_from_env
-from .cli import _create_ssl_context, _extract_labels, _extract_resources
+from ._resource_api import parse_resource_nodes
+from .cli import _create_ssl_context
 from .types import NodeInfo
 
 
@@ -52,24 +53,6 @@ def resources() -> list[NodeInfo]:
         payload = json.loads(body)
     except json.JSONDecodeError as error:
         raise RuntimeError("resource query returned invalid JSON") from error
-    resource = payload.get("resource") if isinstance(payload, Mapping) else None
-    if not isinstance(resource, Mapping):
+    if not isinstance(payload, Mapping):
         return []
-    fragments = resource.get("fragment")
-    if not isinstance(fragments, Mapping):
-        fragments = {str(resource.get("id", "")): resource}
-
-    result = []
-    for node_id, value in fragments.items():
-        if not isinstance(value, dict):
-            continue
-        result.append(
-            NodeInfo(
-                id=str(value.get("id") or node_id),
-                status=int(value.get("status", 0)),
-                capacity=_extract_resources(value.get("capacity", {})),
-                allocatable=_extract_resources(value.get("allocatable", {})),
-                labels=_extract_labels(value.get("nodeLabels", {})),
-            )
-        )
-    return result
+    return parse_resource_nodes(payload)

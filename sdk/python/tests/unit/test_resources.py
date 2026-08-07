@@ -22,6 +22,22 @@ from akernel_sdk._addresses import Endpoint
 
 
 class ResourcesTest(unittest.TestCase):
+    def _query(self, payload):
+        response = MagicMock()
+        response.read.return_value = json.dumps(payload).encode()
+        context = MagicMock()
+        context.__enter__.return_value = response
+        with (
+            patch.dict(os.environ, {"AKERNEL_TOKEN": "token"}, clear=True),
+            patch.object(
+                _resources,
+                "api_endpoint_from_env",
+                return_value=Endpoint("api.example", 443, "https", False),
+            ),
+            patch.object(_resources.request, "urlopen", return_value=context),
+        ):
+            return _resources.resources()
+
     def test_frontend_resource_values_are_backend_neutral(self):
         payload = {
             "resource": {
@@ -46,26 +62,35 @@ class ResourcesTest(unittest.TestCase):
                 }
             }
         }
-        response = MagicMock()
-        response.read.return_value = json.dumps(payload).encode()
-        context = MagicMock()
-        context.__enter__.return_value = response
-        with (
-            patch.dict(os.environ, {"AKERNEL_TOKEN": "token"}, clear=True),
-            patch.object(
-                _resources,
-                "api_endpoint_from_env",
-                return_value=Endpoint("api.example", 443, "https", False),
-            ),
-            patch.object(_resources.request, "urlopen", return_value=context),
-        ):
-            result = _resources.resources()
+        result = self._query(payload)
 
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].id, "node-1")
         self.assertEqual(result[0].capacity["CPU"], 8000.0)
         self.assertEqual(result[0].allocatable["CPU"], 6000.0)
         self.assertEqual(result[0].labels["HOST_IP"], ["192.0.2.10"])
+
+    def test_empty_fragment_falls_back_to_aggregate_resource(self):
+        payload = {
+            "resource": {
+                "id": "domain-scheduler",
+                "fragment": {},
+                "status": 0,
+                "capacity": {
+                    "resources": {"CPU": {"scalar": {"value": 8000}}}
+                },
+                "allocatable": {
+                    "resources": {"CPU": {"scalar": {"value": 6000}}}
+                },
+            }
+        }
+
+        result = self._query(payload)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].id, "domain-scheduler")
+        self.assertEqual(result[0].capacity["CPU"], 8000.0)
+        self.assertEqual(result[0].allocatable["CPU"], 6000.0)
 
     def test_token_is_required_without_loading_a_backend(self):
         with (

@@ -245,8 +245,7 @@ class _Session:
             _impl.terminate_instance(self._instance)
         except Exception as error:
             raise _convert_error("terminate sandbox", error) from error
-        finally:
-            self._terminated = True
+        self._terminated = True
 
     def close(self) -> None:
         if self._closed:

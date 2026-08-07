@@ -312,23 +312,50 @@ class OpenYuanRongSandboxBackendTest(unittest.TestCase):
         native.id = "default-worker"
         native.commands = MagicMock()
         native.files = MagicMock()
-        with (
-            patch.object(
-                openyuanrong_sandbox.yr_sandbox,
-                "Sandbox",
-                return_value=native,
-            ) as sandbox_type,
-            self.assertRaisesRegex(BackendOperationError, "remote delete failed"),
-        ):
-            sandbox_type.delete.side_effect = RuntimeError("remote delete failed")
+        with patch.object(
+            openyuanrong_sandbox.yr_sandbox,
+            "Sandbox",
+            return_value=native,
+        ) as sandbox_type:
+            sandbox_type.delete.side_effect = [
+                RuntimeError("remote delete failed"),
+                None,
+            ]
             session = self.backend.create(_spec(detached=True))
-            try:
-                session.terminate()
-            finally:
-                session.close()
+            with self.assertRaisesRegex(
+                BackendOperationError, "remote delete failed"
+            ):
+                try:
+                    session.terminate()
+                finally:
+                    session.close()
+            session.terminate()
+            session.terminate()
 
-        sandbox_type.delete.assert_called_once_with("default-worker")
+        self.assertEqual(sandbox_type.delete.call_count, 2)
+        sandbox_type.delete.assert_called_with("default-worker")
         native.kill.assert_called_once_with()
+
+    def test_non_detached_termination_uses_retryable_id_delete(self):
+        native = MagicMock()
+        native.id = "default-anonymous"
+        native.commands = MagicMock()
+        native.files = MagicMock()
+        with patch.object(
+            openyuanrong_sandbox.yr_sandbox,
+            "Sandbox",
+            return_value=native,
+        ) as sandbox_type:
+            sandbox_type.delete.side_effect = [RuntimeError("temporary failure"), None]
+            session = self.backend.create(_spec())
+            with self.assertRaisesRegex(BackendOperationError, "temporary failure"):
+                session.terminate()
+            session.terminate()
+            session.terminate()
+
+        self.assertEqual(sandbox_type.delete.call_count, 2)
+        sandbox_type.delete.assert_called_with("default-anonymous")
+        native.kill.assert_not_called()
 
     def test_custom_reverse_tunnel_ports_are_rejected(self):
         tunnel = HttpReverseTunnel(
@@ -459,22 +486,23 @@ class OpenYuanRongSdkBackendTest(unittest.TestCase):
             patch.object(
                 openyuanrong_sdk._impl,
                 "terminate_instance",
-                side_effect=terminate_error,
-            ),
+                side_effect=[terminate_error, None],
+            ) as terminate,
         ):
             session = self.backend.create(
                 _spec(reverse_tunnel=HttpReverseTunnel("http://127.0.0.1:9000"))
             )
-            try:
-                with self.assertRaisesRegex(
-                    BackendOperationError,
-                    "remote delete failed",
-                ) as raised:
-                    session.terminate()
-            finally:
-                session.close()
+            with self.assertRaisesRegex(
+                BackendOperationError,
+                "remote delete failed",
+            ) as raised:
+                session.terminate()
+            session.close()
+            session.terminate()
+            session.terminate()
 
         self.assertIs(raised.exception.__cause__, terminate_error)
+        self.assertEqual(terminate.call_count, 2)
         tunnel_client.stop.assert_called_once_with()
 
     def test_close_finalizes_actor_sdk(self):

@@ -233,15 +233,12 @@ class _Session:
         self,
         sandbox: Any,
         spec: SandboxSpec,
-        *,
-        detached: bool,
     ) -> None:
         self.id = str(sandbox.id)
         self.commands = _CommandsDriver(sandbox.commands)
         self.files = _FilesystemDriver(sandbox.files)
         self._sandbox = sandbox
         self._spec = spec
-        self._detached = detached
         self._terminated = False
         self._closed = False
 
@@ -269,14 +266,12 @@ class _Session:
         if self._terminated:
             return
         try:
-            if self._detached:
-                yr_sandbox.Sandbox.delete(self.id)
-            else:
-                self._sandbox.kill()
+            # The native instance is one-shot: kill() closes its HTTP client even
+            # when deletion fails. Delete by stable ID so a retry gets a new client.
+            yr_sandbox.Sandbox.delete(self.id)
         except Exception as error:
             raise _convert_error("terminate sandbox", error) from error
-        finally:
-            self._terminated = True
+        self._terminated = True
 
     def close(self) -> None:
         if self._closed:
@@ -399,7 +394,7 @@ class OpenYuanRongSandboxBackend:
             )
         except Exception as error:
             raise _convert_error("create sandbox", error) from error
-        return _Session(sandbox, spec, detached=spec.detached)
+        return _Session(sandbox, spec)
 
     def delete_named(self, name: str) -> None:
         sandbox_id = f"{self.namespace}-{name}"
