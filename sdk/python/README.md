@@ -2,75 +2,45 @@
 
 `akernel-sdk` is the Python interface for creating and managing remote AKernel
 sandboxes. Applications use one stable API for commands, files, interactive
-PTYs, port forwarding, and reverse tunnels. It supports both the
-`openyuanrong-sandbox` backend, which uses its RESTful API and Rust runtime,
-and the actor-based `openyuanrong-sdk` backend. Backend-native handles, value
-types, and namespaces are not part of the public API.
+PTYs, port forwarding, and reverse tunnels.
+
+It supports two backends:
+
+- `openyuanrong-sandbox` (default), using a RESTful API and Rust runtime.
+- `openyuanrong-sdk` (legacy), using YuanRong actors and a Python runtime.
 
 ## Navigation
 
-- [Install and configure](#install-and-configure)
-- [Create a sandbox](#create-a-sandbox)
-- [Commands](#commands)
-- [Filesystem](#filesystem)
-- [Interactive PTYs](#interactive-ptys)
-- [Port forwarding](#port-forwarding)
-- [Reverse tunnels](#reverse-tunnels)
-- [Rootfs and mounts](#rootfs-and-mounts)
-- [Resources and lifecycle](#resources-and-lifecycle)
-- [CLI](#cli)
-- [Examples and tests](#examples-and-tests)
+- [AKernel Python SDK](#akernel-python-sdk)
+  - [Navigation](#navigation)
+  - [Install and configure](#install-and-configure)
+  - [Create a sandbox](#create-a-sandbox)
+    - [Experimental GPU and writable storage](#experimental-gpu-and-writable-storage)
+  - [Sandbox runtimes](#sandbox-runtimes)
+  - [Commands](#commands)
+  - [Filesystem](#filesystem)
+  - [Interactive PTYs](#interactive-ptys)
+  - [Port forwarding](#port-forwarding)
+  - [Reverse tunnels](#reverse-tunnels)
+  - [Rootfs and mounts](#rootfs-and-mounts)
+  - [Resources and lifecycle](#resources-and-lifecycle)
+  - [CLI](#cli)
+  - [Examples and tests](#examples-and-tests)
+  - [Public value types](#public-value-types)
 
 ## Install and configure
 
-AKernel SDK requires Python 3.10 or newer. The default installation includes
-the `openyuanrong-sandbox` backend:
+AKernel SDK requires Python 3.10 or newer.
 
 ```bash
 pip install akernel-sdk
-
-# Also install the actor-based backend:
-pip install "akernel-sdk[openyuanrong-sdk]"
 ```
 
-To install from a source checkout:
+To install from source:
 
 ```bash
 python -m pip install ./sdk/python
 ```
-
-During development, install the project with its development dependencies:
-
-```bash
-python -m pip install -e "./sdk/python[dev]"
-```
-
-Python extras only add dependencies; consequently,
-`pip install "akernel-sdk[openyuanrong-sdk]"` installs both backends. Select
-the actor backend with `AKERNEL_BACKEND` before importing `akernel_sdk`.
-
-Backend selection happens once when `akernel_sdk` is imported:
-
-1. `AKERNEL_BACKEND`, when set;
-2. installed `openyuanrong-sandbox`;
-3. installed `openyuanrong-sdk`.
-
-Use the canonical identifier to override auto-detection before import:
-
-```bash
-export AKERNEL_BACKEND=openyuanrong-sdk
-```
-
-`akernel_sdk.get_backend()` reports the selected identifier without importing
-or initializing the backend.
-
-When `openyuanrong-sdk` is used from a YuanRong function, the SDK process
-inherits runtime paths configured by `entryfile.sh`. The entrypoint exports
-`PYTHONPATH` and may export `LD_LIBRARY_PATH`; these variables are inherited
-by application code and child processes. `PYTHONPATH` prepends the runtime
-site-packages directory and can shadow Python modules or dependencies.
-`LD_LIBRARY_PATH` prepends runtime library directories and can change native
-library lookup, causing ABI or version conflicts.
 
 Configure the public AKernel entrypoint and a signed JWT token:
 
@@ -87,8 +57,13 @@ Address behavior is deterministic:
 - `AKERNEL_GATEWAY_ADDRESS` overrides the port-forwarding and exec gateway for
   standalone or custom topologies. An override without a scheme uses HTTP/WS.
 
-The standalone launcher prints the Traefik container IP to use as
-`AKERNEL_SERVER_ADDRESS`.
+The legacy actor backend is optional. Install and select it before importing
+`akernel_sdk`:
+
+```bash
+pip install "akernel-sdk[openyuanrong-sdk]"
+export AKERNEL_BACKEND=openyuanrong-sdk
+```
 
 ## Create a sandbox
 
@@ -126,14 +101,6 @@ Sandbox(
     storage_mb: int | None = None,
 )
 ```
-
-`cpu` is measured in millicores and `memory` in MiB. A zero CPU or memory
-limit means the limit follows the corresponding request. A positive limit
-must not be smaller than its request. `cwd`, when provided, must be an absolute
-POSIX path.
-
-`schedule_timeout=-1` is supported only by `openyuanrong-sdk`.
-`openyuanrong-sandbox` rejects it before creating a remote sandbox.
 
 ### Experimental GPU and writable storage
 
@@ -315,10 +282,13 @@ the loopback HTTP listener used inside the sandbox. Consequently,
 For an HTTPS target, the SDK-side tunnel client performs the TLS handshake and
 certificate verification. The sandbox application talks only to its loopback
 HTTP listener. AKernel supports one HTTP/HTTPS reverse tunnel per sandbox and
-does not expose a general TCP tunnel. The `openyuanrong-sandbox` backend owns
-the fixed internal ports 8765 and 8766 and rejects custom port values. Reverse
-WebSocket forwarding and custom tunnel ports currently require
-`openyuanrong-sdk`.
+does not expose a general TCP tunnel.
+
+> The default `openyuanrong-sandbox` backend reserves ports `8765` and `8766`
+> inside each sandbox while a reverse tunnel is active. They do not occupy
+> ports on the SDK host, but applications in the same sandbox cannot bind
+> them. The SDK-side target port remains configurable through `target`;
+> custom internal tunnel ports currently require `openyuanrong-sdk`.
 
 ## Rootfs and mounts
 
@@ -450,7 +420,7 @@ not part of the default test suite.
 | `CommandResult` | `stdout`, `stderr`, `exit_code` |
 | `CommandInfo` | `pid`, `command`, `running` |
 | `EntryInfo` | `name`, `path`, `type`, `size`, `permissions`, `modified_time` |
-| `SandboxInfo` | `id`, `state`, `cpu`, `memory`, `image` |
+| `SandboxInfo` | `id`, `state`, `cpu`, `memory`, `image`, `xpu`, `storage_mb` |
 | `NodeInfo` | `id`, `status`, `capacity`, `allocatable`, `labels` |
 | `S3Config` | `endpoint`, `bucket`, `object`, optional credentials |
 | `Mount` | `target`, one source, and `type` |
