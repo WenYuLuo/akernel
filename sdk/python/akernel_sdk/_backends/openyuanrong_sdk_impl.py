@@ -167,8 +167,7 @@ def build_options(
     _validate_positive_int("cpu_limit", cpu_limit, allow_zero=True)
     _validate_positive_int("mem_limit", mem_limit, allow_zero=True)
     _validate_positive_int("idle_timeout", idle_timeout, allow_zero=True)
-    if schedule_timeout != -1:
-        _validate_positive_int("schedule_timeout", schedule_timeout, allow_zero=True)
+    _validate_positive_int("schedule_timeout", schedule_timeout)
     if cpu_limit and cpu_limit < cpu:
         raise ValueError("cpu_limit must be 0 or greater than or equal to cpu")
     if mem_limit and mem_limit < memory:
@@ -185,9 +184,7 @@ def build_options(
     # execution prevents a missing sequence number from stalling later calls.
     options.need_order = False
     options.idle_timeout = idle_timeout
-    options.schedule_timeout_ms = (
-        -1 if schedule_timeout == -1 else schedule_timeout * 1000
-    )
+    options.schedule_timeout_ms = schedule_timeout * 1000
     options.cpu = cpu
     options.memory = memory
     options.cpu_limit = cpu_limit

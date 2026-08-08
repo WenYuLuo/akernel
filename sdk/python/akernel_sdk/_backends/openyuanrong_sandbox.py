@@ -307,12 +307,6 @@ class OpenYuanRongSandboxBackend:
         os.environ["YR_TOKEN"] = config.token
 
     def _validate(self, spec: SandboxSpec) -> None:
-        if spec.schedule_timeout == -1:
-            raise UnsupportedBackendFeatureError(
-                "Backend 'openyuanrong-sandbox' does not support "
-                "schedule_timeout=-1. Use a positive scheduling timeout or "
-                "select 'openyuanrong-sdk'."
-            )
         tunnel = spec.reverse_tunnel
         if tunnel is not None and (
             tunnel.reverse_port != _DEFAULT_REVERSE_PORT

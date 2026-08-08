@@ -103,6 +103,11 @@ class OpenYuanRongSdkImplTest(unittest.TestCase):
             self.build_options(cpu=2000, cpu_limit=1000)
         with self.assertRaisesRegex(ValueError, "mem_limit"):
             self.build_options(memory=4096, mem_limit=2048)
+        for value in (0, -1):
+            with self.subTest(schedule_timeout=value), self.assertRaisesRegex(
+                ValueError, "schedule_timeout"
+            ):
+                self.build_options(schedule_timeout=value)
 
     def test_xpu_and_storage_translation(self):
         options = self.build_options(xpu="GPU:L20:2", storage_mb=256)

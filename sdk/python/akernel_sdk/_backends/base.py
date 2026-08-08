@@ -39,7 +39,6 @@ class Capability(Enum):
     KATA_RUNTIME = auto()
     S3_ROOTFS = auto()
     NODE_PLACEMENT = auto()
-    UNBOUNDED_SCHEDULE_TIMEOUT = auto()
     CUSTOM_REVERSE_TUNNEL_PORTS = auto()
     REVERSE_WEBSOCKET = auto()
 

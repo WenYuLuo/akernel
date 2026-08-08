@@ -279,17 +279,6 @@ class OpenYuanRongSandboxBackendTest(unittest.TestCase):
         session.close()
         native.kill.assert_called_once_with()
 
-    def test_unbounded_schedule_timeout_is_rejected_before_create(self):
-        with (
-            patch.object(openyuanrong_sandbox.yr_sandbox, "Sandbox") as sandbox_type,
-            self.assertRaisesRegex(
-                UnsupportedBackendFeatureError,
-                "schedule_timeout=-1",
-            ),
-        ):
-            self.backend.create(_spec(schedule_timeout=-1))
-        sandbox_type.assert_not_called()
-
     def test_terminate_forces_deletion_of_detached_native_sandbox(self):
         native = MagicMock()
         native.id = "default-worker"

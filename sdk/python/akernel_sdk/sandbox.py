@@ -146,8 +146,7 @@ class Sandbox:
             cpu_limit: CPU limit in millicores, or zero to follow ``cpu``.
             mem_limit: Memory limit in MiB, or zero to follow ``memory``.
             idle_timeout: Seconds before an idle sandbox is reclaimed.
-            schedule_timeout: Scheduling timeout in seconds, or ``-1`` for no
-                deadline.
+            schedule_timeout: Positive scheduling timeout in seconds.
             env: Environment variables applied to the sandbox process.
             name: Optional stable name for a detached sandbox.
             cwd: Initial working directory inside the sandbox.
@@ -191,8 +190,7 @@ class Sandbox:
         _validate_integer("cpu_limit", cpu_limit, minimum=0)
         _validate_integer("mem_limit", mem_limit, minimum=0)
         _validate_integer("idle_timeout", idle_timeout, minimum=0)
-        if schedule_timeout != -1:
-            _validate_integer("schedule_timeout", schedule_timeout, minimum=1)
+        _validate_integer("schedule_timeout", schedule_timeout, minimum=1)
         if cpu_limit and cpu_limit < cpu:
             raise ValueError("cpu_limit must be 0 or greater than or equal to cpu")
         if mem_limit and mem_limit < memory:

@@ -188,8 +188,11 @@ class SandboxTest(unittest.TestCase):
     def test_common_resource_validation_happens_before_backend(self):
         with self.assertRaisesRegex(ValueError, "cpu_limit"):
             Sandbox(cpu=2000, cpu_limit=1000)
-        with self.assertRaisesRegex(ValueError, "schedule_timeout"):
-            Sandbox(schedule_timeout=0)
+        for value in (0, -1, -2):
+            with self.subTest(schedule_timeout=value), self.assertRaisesRegex(
+                ValueError, "schedule_timeout"
+            ):
+                Sandbox(schedule_timeout=value)
         self.backend.create.assert_not_called()
 
     def test_port_forwardings_are_integer_ports(self):
