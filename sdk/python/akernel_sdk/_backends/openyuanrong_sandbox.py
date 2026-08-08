@@ -277,6 +277,9 @@ class _Session:
         if self._closed:
             return
         try:
+            # TODO: Upgrade openyuanrong-sandbox once it exposes a local-only
+            # close(). Native kill() also DELETEs the sandbox, so after a
+            # successful terminate() this cleanup can issue a redundant DELETE.
             self._sandbox.kill()
         except Exception as error:
             raise _convert_error("close sandbox resources", error) from error
@@ -312,6 +315,9 @@ class OpenYuanRongSandboxBackend:
             tunnel.reverse_port != _DEFAULT_REVERSE_PORT
             or tunnel.listen_port != _DEFAULT_LISTEN_PORT
         ):
+            # TODO: Relax this after openyuanrong-sandbox forwards proxy_port
+            # to the frontend. Then require reverse_port == listen_port - 1
+            # and pass listen_port as proxy_port.
             raise UnsupportedBackendFeatureError(
                 "Backend 'openyuanrong-sandbox' supports only reverse tunnel "
                 "ports 8765 and 8766."
