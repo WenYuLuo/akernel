@@ -284,11 +284,11 @@ certificate verification. The sandbox application talks only to its loopback
 HTTP listener. AKernel supports one HTTP/HTTPS reverse tunnel per sandbox and
 does not expose a general TCP tunnel.
 
-> The default `openyuanrong-sandbox` backend reserves ports `8765` and `8766`
-> inside each sandbox while a reverse tunnel is active. They do not occupy
-> ports on the SDK host, but applications in the same sandbox cannot bind
-> them. The SDK-side target port remains configurable through `target`;
-> custom internal tunnel ports currently require `openyuanrong-sdk`.
+The default `openyuanrong-sandbox` backend supports custom internal tunnel
+ports. Its frontend derives the WebSocket port from the HTTP listener, so
+`reverse_port` must equal `listen_port - 1`. Both ports are reserved inside
+that sandbox while the tunnel is active and must not also appear in
+`port_forwardings`; they do not occupy ports on the SDK host.
 
 ## Rootfs and mounts
 

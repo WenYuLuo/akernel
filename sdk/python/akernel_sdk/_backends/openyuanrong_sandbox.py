@@ -33,7 +33,6 @@ from .base import (
 from .errors import BackendOperationError, UnsupportedBackendFeatureError
 
 _NAMESPACE = "default"
-_DEFAULT_REVERSE_PORT = 8765
 _DEFAULT_LISTEN_PORT = 8766
 
 
@@ -262,10 +261,7 @@ class _Session:
         if self._closed:
             return
         try:
-            # TODO: Upgrade openyuanrong-sandbox once it exposes a local-only
-            # close(). Native kill() also DELETEs the sandbox, so after a
-            # successful terminate() this cleanup can issue a redundant DELETE.
-            self._sandbox.kill()
+            self._sandbox.close()
         except Exception as error:
             raise _convert_error("close sandbox resources", error) from error
         finally:
@@ -296,16 +292,10 @@ class OpenYuanRongSandboxBackend:
 
     def _validate(self, spec: SandboxSpec) -> None:
         tunnel = spec.reverse_tunnel
-        if tunnel is not None and (
-            tunnel.reverse_port != _DEFAULT_REVERSE_PORT
-            or tunnel.listen_port != _DEFAULT_LISTEN_PORT
-        ):
-            # TODO: Relax this after openyuanrong-sandbox forwards proxy_port
-            # to the frontend. Then require reverse_port == listen_port - 1
-            # and pass listen_port as proxy_port.
+        if tunnel is not None and tunnel.reverse_port != tunnel.listen_port - 1:
             raise UnsupportedBackendFeatureError(
-                "Backend 'openyuanrong-sandbox' supports only reverse tunnel "
-                "ports 8765 and 8766."
+                "Backend 'openyuanrong-sandbox' requires reverse_port to equal "
+                "listen_port - 1."
             )
 
     def create(self, spec: SandboxSpec) -> BackendSession:
@@ -370,6 +360,11 @@ class OpenYuanRongSandboxBackend:
                     spec.reverse_tunnel.connect_timeout
                     if spec.reverse_tunnel is not None
                     else None
+                ),
+                proxy_port=(
+                    spec.reverse_tunnel.listen_port
+                    if spec.reverse_tunnel is not None
+                    else _DEFAULT_LISTEN_PORT
                 ),
                 detached=spec.detached,
                 node_id=spec.node_id,
