@@ -35,21 +35,6 @@ from .errors import BackendOperationError, UnsupportedBackendFeatureError
 _NAMESPACE = "default"
 _DEFAULT_REVERSE_PORT = 8765
 _DEFAULT_LISTEN_PORT = 8766
-_DEFAULT_LOCAL_ROOTFS = "/home/yuanrong/yr-runtime-rootfs.img"
-
-
-class _LocalRootfsSandbox(yr_sandbox.Sandbox):
-    """Supply the AKernel local rootfs until frontend owns runtime override."""
-
-    def _create(self, body: dict[str, Any]) -> dict[str, Any]:
-        request = dict(body)
-        request["rootfs"] = {
-            "runtime": request["runtime"],
-            "type": "local",
-            "readonly": False,
-            "path": _DEFAULT_LOCAL_ROOTFS,
-        }
-        return super()._create(request)
 
 
 def _convert_error(operation: str, error: Exception) -> BackendOperationError:
@@ -325,12 +310,6 @@ class OpenYuanRongSandboxBackend:
 
     def create(self, spec: SandboxSpec) -> BackendSession:
         self._validate(spec)
-        sandbox_type = yr_sandbox.Sandbox
-        if spec.runtime == "kata" and spec.image is None and spec.rootfs is None:
-            # openyuanrong-sandbox 0.9.3 forwards the isolation runtime only
-            # through an explicit rootfs. Keep this aligned with the actor
-            # backend until frontend can override the service rootfs runtime.
-            sandbox_type = _LocalRootfsSandbox
         rootfs = None
         if spec.rootfs is not None:
             rootfs = yr_sandbox.S3Config(
@@ -339,6 +318,12 @@ class OpenYuanRongSandboxBackend:
                 object=spec.rootfs.object,
                 access_key=spec.rootfs.access_key,
                 secret_key=spec.rootfs.secret_key,
+            )
+        network = None
+        if spec.network_policy is not None:
+            network = yr_sandbox.NetworkPolicy(
+                block_network=spec.network_policy.block_network,
+                dns_blacklist=spec.network_policy.dns_blacklist,
             )
         mounts = [
             yr_sandbox.Mount(
@@ -361,7 +346,7 @@ class OpenYuanRongSandboxBackend:
         ]
         create_timeout = max(60, spec.schedule_timeout + 30)
         try:
-            sandbox = sandbox_type(
+            sandbox = yr_sandbox.Sandbox(
                 image=spec.image,
                 rootfs=rootfs,
                 runtime=spec.runtime,
@@ -390,6 +375,7 @@ class OpenYuanRongSandboxBackend:
                 node_id=spec.node_id,
                 xpu=spec.xpu,
                 storage_mb=spec.storage_mb,
+                network=network,
                 create_timeout=create_timeout,
             )
         except Exception as error:
