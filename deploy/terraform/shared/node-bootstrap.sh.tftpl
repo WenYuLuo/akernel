@@ -6,15 +6,15 @@
 set -euo pipefail
 
 %{ if sandboxd_nat_backend == "iptables" ~}
-# ip_tables required for iptables NAT backend
-cat >/etc/systemd/system/akernel-modprobe-ip-tables.service <<'EOF'
+# ip_tables provides NAT and br_netfilter provides bridged ACL enforcement.
+cat >/etc/systemd/system/akernel-network-modules.service <<'EOF'
 [Unit]
-Description=Load ip_tables kernel module on boot
+Description=Load AKernel iptables networking modules on boot
 After=network-pre.target
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c 'modprobe ip_tables'
+ExecStart=/bin/sh -c 'modprobe ip_tables && modprobe br_netfilter'
 RemainAfterExit=yes
 
 [Install]
@@ -22,8 +22,8 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable akernel-modprobe-ip-tables.service
-systemctl start akernel-modprobe-ip-tables.service
+systemctl enable akernel-network-modules.service
+systemctl start akernel-network-modules.service
 %{ endif ~}
 
 # Enable user namespaces (required by gVisor/runsc).
