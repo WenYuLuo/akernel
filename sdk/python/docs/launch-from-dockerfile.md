@@ -146,12 +146,22 @@ polls **sandbox readiness** and, when enabled, dispatches the resolved
 needed. Construction confirms dispatch, not that the application remains
 running or passes a health check. Callers own application readiness checks.
 
+This handle observes the ordinary background command dispatched by the SDK
+after Dockerfile instructions complete. `wait_entrypoint()` and
+`entrypoint_exit_info` apply only to `Sandbox(image=..., inherit_entrypoint=True)`;
+they do not observe Dockerfile launches. Calling `wait_entrypoint()` on a
+Dockerfile launch raises `RuntimeError`, and `entrypoint_exit_info` is `None`.
+In either path, waiting observes process exit, not application readiness.
+
 ## External-build fallback
 
 For Dockerfiles outside this subset, or build-once reuse, build with the chosen
-external build system and use `Sandbox(image=...)`. Then explicitly launch the
-desired command with `sandbox.commands.run(..., background=True)`; image
-configuration does not auto-start `CMD` or `ENTRYPOINT` in this SDK path.
+external build system and use `Sandbox(image=..., inherit_entrypoint=True)`
+to start the image's effective `ENTRYPOINT`/`CMD`. Observe its exit with
+`wait_entrypoint()` and `entrypoint_exit_info`; `startup_command` is `None`.
+See the [image launch examples](../README.md#rootfs-and-mounts).
+With the default `inherit_entrypoint=False`, explicitly launch the desired
+command with `sandbox.commands.run(..., background=True)`.
 
 ## Parser, matching, and license references
 

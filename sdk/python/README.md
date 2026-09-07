@@ -517,6 +517,27 @@ with Sandbox(image="example/worker:latest", inherit_entrypoint=True) as sandbox:
     print(exit_code, sandbox.entrypoint_exit_info)
 ```
 
+For this image-inheritance path, `sandbox.startup_command` is `None`.
+`wait_entrypoint()` returns an integer exit code; `entrypoint_exit_info`
+contains the structured exit details collected by that call. Waiting observes
+process exit, not application readiness. An inherited process exiting after
+successful sandbox creation does not by itself terminate the sandbox.
+For a long-running service, check its application health endpoint separately.
+
+`Sandbox(cwd=...)` sets the default working directory for subsequent
+`sandbox.commands.run()` calls that omit `cwd`. With `inherit_entrypoint=True`,
+the image process starts in the image's OCI `WORKDIR`; the constructor's
+`cwd` does not override it. For example, if the image declares `WORKDIR /app`:
+
+```python
+with Sandbox(
+    image="example/worker:latest", inherit_entrypoint=True, cwd="/tmp"
+) as sandbox:
+    # The inherited image entrypoint starts in /app.
+    print(sandbox.commands.run("pwd").stdout)  # /tmp
+    print(sandbox.commands.run("pwd", cwd="/").stdout)  # /
+```
+
 Or use an object in S3-compatible storage as the rootfs:
 
 ```python
@@ -579,8 +600,24 @@ from akernel_sdk import DockerfileLaunch, LocalDockerContext, Sandbox, check_dir
 context = LocalDockerContext("Dockerfile", context_dir=".")
 if check_direct_launch(context).direct_launchable:
     with Sandbox(dockerfile=DockerfileLaunch(context, run_timeout=300)) as sandbox:
-        pass
+        startup = sandbox.startup_command
+        if startup is not None:
+            # For a finite CMD/ENTRYPOINT, collect its exit code and output.
+            result = startup.wait(timeout=60)
+            print(result.exit_code, result.stdout, result.stderr)
 ```
+
+`startup_command` is a `CommandHandle` for the Dockerfile's background
+`CMD`/`ENTRYPOINT`. It is `None` when `auto_start_cmd=False` or no startup
+command is declared. The handle supports `wait(timeout=...)` and `kill()`;
+construction confirms dispatch, while application readiness requires a
+separate health check. For long-running services, perform that check instead
+of waiting for exit during startup.
+
+`wait_entrypoint()` is exclusive to image launches with
+`inherit_entrypoint=True`; calling it on a Dockerfile launch raises
+`RuntimeError`, and `entrypoint_exit_info` is `None`. See the
+[image launch examples](#rootfs-and-mounts) for that path.
 
 `RUN`, `COPY`, and `ADD` run on every launch without a snapshot or cache;
 unsupported Dockerfiles must be built externally. Read the complete contract,

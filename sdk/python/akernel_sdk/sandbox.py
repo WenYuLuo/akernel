@@ -215,7 +215,10 @@ class Sandbox:
             schedule_timeout: Positive scheduling timeout in seconds.
             env: Environment variables applied to the sandbox process.
             name: Optional stable name for a detached sandbox.
-            cwd: Initial working directory inside the sandbox.
+            cwd: Default working directory for subsequent ``commands.run()``
+                calls that omit ``cwd``. This does not override the inherited
+                image entrypoint's working directory, which uses the image's
+                OCI WORKDIR when ``inherit_entrypoint=True``.
             port_forwardings: Sandbox TCP ports exposed through the gateway.
             mounts: Additional read-only OCI or S3-backed mounts.
             reverse_tunnel: SDK-side HTTP service exposed inside the sandbox.
@@ -440,6 +443,9 @@ class Sandbox:
         normal image/rootfs launches, disabled startup dispatch, or Dockerfiles
         without CMD or ENTRYPOINT. Sandbox construction does not guarantee that
         the process remains running or healthy after dispatch.
+
+        For ``image=..., inherit_entrypoint=True``, this property remains None;
+        use :meth:`wait_entrypoint` and :attr:`entrypoint_exit_info` instead.
         """
 
         return self._startup_command
@@ -477,7 +483,13 @@ class Sandbox:
         return self._session.reload()
 
     def wait_entrypoint(self) -> int:
-        """Wait for the inherited OCI image process and return its exit code."""
+        """Wait for the inherited OCI image process and return its exit code.
+
+        Requires ``image=..., inherit_entrypoint=True``. For Dockerfile direct
+        launches, use :attr:`startup_command` and its ``wait()`` method instead.
+        This waits for process exit, not application readiness. An exit after
+        successful sandbox creation does not by itself terminate the sandbox.
+        """
 
         if not self._inherit_entrypoint:
             raise RuntimeError("inherit_entrypoint was not enabled for this sandbox")
@@ -487,7 +499,11 @@ class Sandbox:
 
     @property
     def entrypoint_exit_info(self) -> Mapping[str, object] | None:
-        """Structured exit details cached after :meth:`wait_entrypoint`."""
+        """Structured exit details cached after :meth:`wait_entrypoint`.
+
+        None before exit details have been collected or when entrypoint
+        inheritance is disabled, including Dockerfile direct launches.
+        """
 
         if not self._inherit_entrypoint or self._session is None:
             return None
