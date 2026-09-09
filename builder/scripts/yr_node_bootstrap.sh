@@ -46,13 +46,66 @@ CHECKPOINT_DIR="/home/akernel/checkpoints"
 mkdir -p "${CHECKPOINT_DIR}"
 
 # Select the legacy etcd registry or the FunctionMaster HTTP provider.
-if [ "${TRAEFIK_MODE:-etcd}" = "etcd" ]; then
+if [ "${ENABLE_TRAEFIK:-true}" != "true" ]; then
+    ENABLE_TRAEFIK_REGISTRY=false
+    ENABLE_TRAEFIK_PROVIDER=false
+elif [ "${TRAEFIK_MODE:-etcd}" = "etcd" ]; then
     ENABLE_TRAEFIK_REGISTRY=${ENABLE_TRAEFIK_REGISTRY:-true}
     ENABLE_TRAEFIK_PROVIDER=false
 else
     ENABLE_TRAEFIK_REGISTRY=false
     ENABLE_TRAEFIK_PROVIDER=true
 fi
+
+NODE_PROXY_ARGS=()
+if [ "${ENABLE_NODE_PROXY:-false}" = "true" ]; then
+    NODE_PROXY_ARGS=(
+        --enable_node_proxy true
+        --node_proxy_bind "0.0.0.0:${NODE_PROXY_PORT:-9443}"
+        --node_proxy_advertise_address "${YR_NODE_IP}:${NODE_PROXY_PORT:-9443}"
+        --node_proxy_health_bind "0.0.0.0:${NODE_PROXY_HEALTH_PORT:-18443}"
+        --node_proxy_security_mode network
+        --node_proxy_allowed_target_cidrs "${NODE_PROXY_ALLOWED_TARGET_CIDRS:?required for Node Proxy}"
+        --node_proxy_allowed_edge_cidrs "${NODE_PROXY_ALLOWED_EDGE_CIDRS:?required for Node Proxy}"
+        --data_plane_log_dir "${DATA_PLANE_LOG_DIR:-/var/log/akernel-edge}"
+        --data_plane_log_stdout true
+    )
+fi
+
+run_yuanrong() {
+    local child_pid=""
+    local stop_requested=false
+    local status=0
+    stop_yuanrong() {
+        if [ "$stop_requested" = false ]; then
+            stop_requested=true
+            if [ -n "$child_pid" ]; then
+                kill -TERM "$child_pid" 2>/dev/null || true
+            fi
+        fi
+    }
+    trap stop_yuanrong TERM INT
+    "$@" &
+    child_pid=$!
+    if [ "$stop_requested" = true ]; then
+        kill -TERM "$child_pid" 2>/dev/null || true
+    fi
+    # A signal interrupts wait; keep the service MainPID alive until the CLI
+    # has finished its ordered shutdown, including sandbox cleanup.
+    while true; do
+        if wait "$child_pid"; then
+            status=0
+            break
+        else
+            status=$?
+        fi
+        if ! kill -0 "$child_pid" 2>/dev/null; then
+            break
+        fi
+    done
+    trap - TERM INT
+    return "$status"
+}
 
 if [  "x${AKS_LOCAL_MODE}" == "xtrue" ]; then
     if [ -z "${LITEBUS_DATA_KEY:-}" ] && [ -r /home/akernel/iam-seed ]; then
@@ -63,7 +116,7 @@ if [  "x${AKS_LOCAL_MODE}" == "xtrue" ]; then
         echo "LITEBUS_DATA_KEY is required in standalone mode" >&2
         exit 1
     fi
-    /usr/bin/yr start --master \
+    run_yuanrong /usr/bin/yr start --master "${NODE_PROXY_ARGS[@]}" \
         --ip_address "${YR_NODE_IP}" \
         --port_policy FIX \
         --enable_function_scheduler=false \
@@ -115,7 +168,7 @@ if [  "x${AKS_LOCAL_MODE}" == "xtrue" ]; then
         --enable_sandbox_router true \
         --enable_direct_routing false
 else
-    /usr/bin/yr start \
+    run_yuanrong /usr/bin/yr start "${NODE_PROXY_ARGS[@]}" \
         --ip_address "${YR_NODE_IP}" \
         --port_policy FIX \
         --ds_node_timeout_s 30 \

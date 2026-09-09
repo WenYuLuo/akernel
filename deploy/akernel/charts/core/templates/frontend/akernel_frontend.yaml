@@ -87,6 +87,24 @@ spec:
           command:
             - /usr/local/bin/akernel-entrypoint
           env:
+            {{- if .Values.dataPlane.enabled }}
+            - name: ENABLE_EDGE_FRONTEND
+              value: "true"
+            - name: INSTANCE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: EDGE_TLS_PORT
+              value: {{ .Values.dataPlane.edge.tlsPort | quote }}
+            - name: EDGE_PLAIN_PORT
+              value: {{ .Values.dataPlane.edge.plainPort | quote }}
+            - name: EDGE_HEALTH_PORT
+              value: {{ .Values.dataPlane.edge.healthPort | quote }}
+            - name: EDGE_ALLOWED_CLIENT_CIDRS
+              value: {{ required "dataPlane.edge.allowedClientCIDRs is required" .Values.dataPlane.edge.allowedClientCIDRs | quote }}
+            {{- end }}
+            - name: ENABLE_TRAEFIK
+              value: {{ and .Values.traefik.enabled (not .Values.dataPlane.enabled) | quote }}
             - name: AKERNEL_ROLE
               value: "frontend"
             - name: LITEBUS_DATA_KEY
@@ -129,22 +147,30 @@ spec:
             - name: ENABLE_TRACE
               value: {{ ne (.Values.monitoring.tempoEndpoint | default "") "" | ternary "true" "false" | quote }}
           ports:
+            {{- if .Values.dataPlane.enabled }}
+            - name: websecure
+              containerPort: {{ .Values.dataPlane.edge.tlsPort }}
+            - name: web
+              containerPort: {{ .Values.dataPlane.edge.plainPort }}
+            - name: edge-health
+              containerPort: {{ .Values.dataPlane.edge.healthPort }}
+            {{- end }}
             - name: http
               containerPort: 8888
           livenessProbe:
             httpGet:
               path: /healthz
               port: 8888
-              scheme: HTTPS
+              scheme: {{ .Values.dataPlane.enabled | ternary "HTTP" "HTTPS" }}
             initialDelaySeconds: 15
             periodSeconds: 20
             timeoutSeconds: 5
             failureThreshold: 3
           readinessProbe:
             httpGet:
-              path: /healthz
-              port: 8888
-              scheme: HTTPS
+              path: {{ .Values.dataPlane.enabled | ternary "/readyz" "/healthz" }}
+              port: {{ .Values.dataPlane.enabled | ternary (.Values.dataPlane.edge.healthPort | int) 8888 }}
+              scheme: {{ .Values.dataPlane.enabled | ternary "HTTP" "HTTPS" }}
             initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 3
@@ -152,6 +178,11 @@ spec:
           resources:
             {{- toYaml .Values.frontend.resources | nindent 12 }}
           volumeMounts:
+            {{- if .Values.dataPlane.enabled }}
+            - name: edge-tls
+              mountPath: /etc/akernel-edge-tls
+              readOnly: true
+            {{- end }}
             - name: component-tls
               mountPath: /home/yuanrong/.cert
               readOnly: true
@@ -161,6 +192,12 @@ spec:
               readOnly: true
           {{- end }}
       volumes:
+        {{- if .Values.dataPlane.enabled }}
+        - name: edge-tls
+          secret:
+            secretName: {{ .Values.dataPlane.edge.tlsSecretName }}
+            defaultMode: 0400
+        {{- end }}
         - name: component-tls
           secret:
             secretName: {{ include "core.componentTLSSecretName" . }}

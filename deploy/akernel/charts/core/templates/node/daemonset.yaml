@@ -21,11 +21,11 @@ spec:
     {{- if .Values.kruise.enabled }}
     rollingUpdate:
       rollingUpdateType: Standard
-      maxUnavailable: 200
+      maxUnavailable: 1
       partition: 0
     {{- else }}
     rollingUpdate:
-      maxUnavailable: 200
+      maxUnavailable: 1
     {{- end }}
     type: RollingUpdate
   selector:
@@ -65,6 +65,15 @@ spec:
         imagePullPolicy: {{ include "core.image.pullPolicy" (dict "root" . "image" .Values.node.image) }}
         command:
         - /usr/local/bin/akernel-entrypoint
+        {{- if .Values.dataPlane.enabled }}
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: {{ .Values.dataPlane.nodeProxy.healthPort }}
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 3
+        {{- end }}
         lifecycle:
           postStart:
             exec:
@@ -72,10 +81,28 @@ spec:
               - bash
               - -c
               - |
-                cp /etc/resolv.conf /etc/resolv_akernel.conf && sed -i 's/127.0.0.1/10.88.0.1/g' /etc/resolv_akernel.conf
+                sandbox_resolver_ip={{ first (splitList "/" (.Values.node.sandboxIPRange | default "10.88.0.1/16")) | quote }}
+                awk -v resolver="${sandbox_resolver_ip}" '
+                  $1 == "nameserver" && $2 ~ /^127\./ { $2 = resolver }
+                  { print }
+                ' /etc/resolv.conf > /etc/resolv_akernel.conf
         resources:
           {{- toYaml .Values.node.resources | nindent 10 }}
         env:
+        {{- if .Values.dataPlane.enabled }}
+        - name: ENABLE_NODE_PROXY
+          value: "true"
+        - name: NODE_PROXY_PORT
+          value: {{ .Values.dataPlane.nodeProxy.port | quote }}
+        - name: NODE_PROXY_HEALTH_PORT
+          value: {{ .Values.dataPlane.nodeProxy.healthPort | quote }}
+        - name: NODE_PROXY_ALLOWED_TARGET_CIDRS
+          value: {{ required "dataPlane.nodeProxy.allowedTargetCIDRs is required" .Values.dataPlane.nodeProxy.allowedTargetCIDRs | quote }}
+        - name: NODE_PROXY_ALLOWED_EDGE_CIDRS
+          value: {{ required "dataPlane.nodeProxy.allowedEdgeCIDRs is required" .Values.dataPlane.nodeProxy.allowedEdgeCIDRs | quote }}
+        {{- end }}
+        - name: ENABLE_TRAEFIK
+          value: {{ and .Values.traefik.enabled (not .Values.dataPlane.enabled) | quote }}
         - name: AKERNEL_ROLE
           value: "node"
         - name: RUNSC_AKERNEL

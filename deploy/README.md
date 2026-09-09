@@ -339,3 +339,49 @@ deploy/
 ├── terraform/      # multi-cloud provisioning (aliyun, huaweicloud, shared)
 └── scripts/        # deployment and image helper scripts
 ```
+
+## Edge and Node Proxy ingress
+
+Node shutdown is supervised by systemd. The YuanRong bootstrap forwards the
+stop signal to the Go CLI and waits for its ordered cleanup before exiting;
+sandboxd stops after YuanRong. The YuanRong service uses `KillMode=mixed` so
+the bootstrap controls the initial shutdown of its child processes.
+
+Images containing the YuanRong data-plane package can run Edge alongside the
+Frontend and Node Proxy alongside each node through the Go CLI. Set
+`dataPlane.enabled=true` and `traefik.enabled=false` in the core chart. Supply an
+existing TLS Secret (`tls.crt` and `tls.key`) as
+`dataPlane.edge.tlsSecretName`, and configure the allowed client, Edge pod and
+sandbox destination CIDRs explicitly:
+
+```yaml
+dataPlane:
+  enabled: true
+  edge:
+    tlsSecretName: akernel-edge-tls
+    allowedClientCIDRs: "0.0.0.0/0"
+    service:
+      name: akernel-edge
+      type: LoadBalancer
+  nodeProxy:
+    allowedEdgeCIDRs: "192.168.0.0/16"
+    allowedTargetCIDRs: "10.88.0.0/16"
+traefik:
+  enabled: false
+```
+
+Replace the CIDRs with those of the deployment. Edge exposes HTTPS/WSS on
+service port 443 and HTTP/WS on port 80; API and authenticated direct routes
+use TLS. The local Frontend and IAM hops use HTTP with IAM validation enabled.
+Node Proxy uses network security mode and only accepts connections from the
+configured Edge CIDRs. Node readiness includes Node Proxy; nodes roll one at
+a time. Frontend readiness includes Edge route readiness.
+
+During migration, `dataPlane.edge.service.name` can match the existing ingress
+Service name to retain its LoadBalancer identity and public address. Transfer
+its annotations, clusterIP and loadBalancerIP as well. The Service then selects
+Frontend/Edge pods; the Traefik Deployment and configuration are removed.
+Existing SDK API and gateway address settings select TLS or plain WebSocket.
+
+`make print-env` discovers the Service labeled `app.kubernetes.io/component=edge`.
+Set `AKERNEL_GATEWAY_SERVICE` to select a specific gateway Service.

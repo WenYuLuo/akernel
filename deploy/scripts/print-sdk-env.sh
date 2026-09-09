@@ -52,14 +52,20 @@ get_lb_host() {
   printf '%s' "${host}"
 }
 
-traefik_host="$(get_lb_host "${core_ns}" traefik)"
-[[ -n "${traefik_host}" ]] || die "traefik LoadBalancer address is not ready"
+gateway_service="${AKERNEL_GATEWAY_SERVICE:-}"
+if [[ -z "${gateway_service}" ]]; then
+  gateway_service="$(kubectl --kubeconfig "${kubeconfig}" -n "${core_ns}" get svc \
+    -l app.kubernetes.io/component=edge -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+fi
+gateway_service="${gateway_service:-traefik}"
+gateway_host="$(get_lb_host "${core_ns}" "${gateway_service}")"
+[[ -n "${gateway_host}" ]] || die "${gateway_service} LoadBalancer address is not ready"
 
 token="$("${AKERNEL_REPO_ROOT}/deploy/scripts/generate-token.py" --env "${env_name}" --write-file "${dir}/token")"
 
 sdk_env="${dir}/sdk.env"
 {
-  printf 'export AKERNEL_SERVER_ADDRESS=%q\n' "${traefik_host}"
+  printf 'export AKERNEL_SERVER_ADDRESS=%q\n' "${gateway_host}"
   printf 'export AKERNEL_TOKEN=%q\n' "${token}"
 } > "${sdk_env}"
 chmod 600 "${sdk_env}"

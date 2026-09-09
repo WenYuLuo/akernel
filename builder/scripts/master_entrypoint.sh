@@ -51,7 +51,7 @@ else
 fi
 
 # Set enable_traefik_provider based on TRAEFIK_MODE
-if [ "${TRAEFIK_MODE:-etcd}" = "http" ]; then
+if [ "${ENABLE_TRAEFIK:-true}" = "true" ] && [ "${TRAEFIK_MODE:-etcd}" = "http" ]; then
     ENABLE_TRAEFIK_PROVIDER=true
 else
     ENABLE_TRAEFIK_PROVIDER=false
@@ -68,7 +68,29 @@ if [ ! -x "${YR_BIN}" ]; then
     exit 1
 fi
 
-exec "${YR_BIN}" start --master --block true \
+EDGE_ARGS=()
+if [ "${ENABLE_EDGE_FRONTEND:-false}" = "true" ]; then
+    EDGE_ARGS=(
+        --enable_edge_frontend true
+        --edge_frontend_tls_bind "0.0.0.0:${EDGE_TLS_PORT:-8443}"
+        --edge_frontend_plain_bind "0.0.0.0:${EDGE_PLAIN_PORT:-8080}"
+        --edge_frontend_health_bind "0.0.0.0:${EDGE_HEALTH_PORT:-18080}"
+        --edge_frontend_tls_cert "${EDGE_TLS_CERT:-/etc/akernel-edge-tls/tls.crt}"
+        --edge_frontend_tls_key "${EDGE_TLS_KEY:-/etc/akernel-edge-tls/tls.key}"
+        --edge_frontend_control_plane_address "${INSTANCE_IP:?required for Edge}:8888"
+        --edge_frontend_iam_address 127.0.0.1:31113
+        --edge_frontend_validate_iam true
+        --edge_frontend_allowed_client_cidrs "${EDGE_ALLOWED_CLIENT_CIDRS:?required for Edge}"
+        --data_plane_log_dir "${DATA_PLANE_LOG_DIR:-/var/log/akernel-edge}"
+        --data_plane_log_stdout true
+        --edge_frontend_access_log_enabled true
+    )
+    # Edge terminates client TLS; its local Frontend and IAM hops use HTTP.
+    FRONTEND_SSL_ENABLE=false
+    IAM_SSL_ENABLE=false
+fi
+
+exec "${YR_BIN}" start --master --block true "${EDGE_ARGS[@]}" \
     -e -c 0 -m 8000 -s 4096 -n $HOSTNAME \
     -d $DEPLOY_PATH \
     --fs_health_check_retry_interval 1 \
@@ -79,7 +101,7 @@ exec "${YR_BIN}" start --master --block true \
     --enable_iam_server ${ENABLE_IAM_SERVER:-true} \
     --iam_token_expired_time_span 604800 \
     --ssl_base_path=/home/yuanrong/.cert/ \
-    --frontend_ssl_enable=true \
+    --frontend_ssl_enable=${FRONTEND_SSL_ENABLE:-true} \
     --frontend_client_auth_type NoClientCert \
     --enable_function_token_auth ${ENABLE_FUNCTION_TOKEN_AUTH:-true} \
     --enable_inherit_env false \
@@ -103,7 +125,7 @@ exec "${YR_BIN}" start --master --block true \
     --traefik_enable_tls=${TRAEFIK_ENABLE_TLS:-false} \
     --traefik_forward_timeout_ms=3000 \
     --frontend_lease_bypass true \
-    --iam_ssl_enable true \
+    --iam_ssl_enable ${IAM_SSL_ENABLE:-true} \
     --ssl_root_file ca.crt \
     --ssl_cert_file module.crt \
     --ssl_key_file module.key \

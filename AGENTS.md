@@ -175,7 +175,10 @@ source revisions are traceable through the AKernel commit's submodule gitlinks.
 
 Use [`deploy/README.md`](./deploy/README.md) as the deployment entry point.
 AKernel supports standalone, existing Kubernetes clusters via Helm, and
-Terraform-based cloud provisioning.
+Terraform-based cloud provisioning. The core chart can use Edge and Node Proxy
+through `dataPlane.enabled` with an image containing the data-plane binaries;
+configure its TLS Secret and allowed CIDRs and disable `traefik.enabled`.
+See `deploy/README.md` for ingress migration and SDK endpoint configuration.
 
 Aliyun's aggregate Pod PID budget is configurable independently of the
 per-sandbox limit; see `deploy/terraform/aliyun/README.md#pod-pid-budget`.

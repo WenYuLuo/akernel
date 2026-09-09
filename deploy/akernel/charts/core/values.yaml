@@ -569,3 +569,27 @@ traefik:
   grafana:
     enabled: false
     url: "http://grafana.akernel-monitor.svc:3000"
+
+# Edge handles API, direct, tunnel and published-port ingress. It is started
+# with Frontend by the Go CLI; Node Proxy runs in each node network namespace.
+dataPlane:
+  enabled: false
+  edge:
+    tlsPort: 8443
+    plainPort: 8080
+    healthPort: 18080
+    tlsSecretName: akernel-edge-tls
+    allowedClientCIDRs: ""
+    service:
+      name: akernel-edge
+      type: LoadBalancer
+      annotations: {}
+      clusterIP: ""
+      loadBalancerIP: ""
+      httpsPort: 443
+      httpPort: 80
+  nodeProxy:
+    port: 9443
+    healthPort: 18443
+    allowedTargetCIDRs: ""
+    allowedEdgeCIDRs: ""
