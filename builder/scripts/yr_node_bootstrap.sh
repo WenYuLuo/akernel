@@ -45,17 +45,8 @@ echo "Using ${YR_NODE_IP} as the YuanRong node address"
 CHECKPOINT_DIR="/home/akernel/checkpoints"
 mkdir -p "${CHECKPOINT_DIR}"
 
-# Select the legacy etcd registry or the FunctionMaster HTTP provider.
-if [ "${ENABLE_TRAEFIK:-true}" != "true" ]; then
-    ENABLE_TRAEFIK_REGISTRY=false
-    ENABLE_TRAEFIK_PROVIDER=false
-elif [ "${TRAEFIK_MODE:-etcd}" = "etcd" ]; then
-    ENABLE_TRAEFIK_REGISTRY=${ENABLE_TRAEFIK_REGISTRY:-true}
-    ENABLE_TRAEFIK_PROVIDER=false
-else
-    ENABLE_TRAEFIK_REGISTRY=false
-    ENABLE_TRAEFIK_PROVIDER=true
-fi
+. /root/edge-config.sh
+configure_edge || exit 1
 
 NODE_PROXY_ARGS=()
 if [ "${ENABLE_NODE_PROXY:-false}" = "true" ]; then
@@ -116,7 +107,7 @@ if [  "x${AKS_LOCAL_MODE}" == "xtrue" ]; then
         echo "LITEBUS_DATA_KEY is required in standalone mode" >&2
         exit 1
     fi
-    run_yuanrong /usr/bin/yr start --master "${NODE_PROXY_ARGS[@]}" \
+    run_yuanrong /usr/bin/yr start --master "${NODE_PROXY_ARGS[@]}" "${EDGE_ARGS[@]}" \
         --ip_address "${YR_NODE_IP}" \
         --port_policy FIX \
         --enable_function_scheduler=false \
@@ -125,7 +116,7 @@ if [  "x${AKS_LOCAL_MODE}" == "xtrue" ]; then
         --enable_iam_server=true \
         --iam_token_expired_time_span 604800 \
         --ssl_base_path=/home/yuanrong/.cert/ \
-        --frontend_ssl_enable=true \
+        --frontend_ssl_enable="${FRONTEND_SSL_ENABLE:-true}" \
         --frontend_client_auth_type NoClientCert \
         --enable_function_token_auth true \
         --ds_node_timeout_s 30 \
@@ -140,13 +131,8 @@ if [  "x${AKS_LOCAL_MODE}" == "xtrue" ]; then
         --npu_collection_mode off \
         --enable_distributed_master false \
         --metrics_collector_type external \
-        --enable_traefik_registry=${ENABLE_TRAEFIK_REGISTRY} \
-        --enable_traefik_provider=${ENABLE_TRAEFIK_PROVIDER} \
-        --traefik_enable_tls=${TRAEFIK_ENABLE_TLS:-false} \
-        --traefik_etcd_prefix=traefik \
-        --traefik_lease_ttl=300000 \
-        --traefik_http_entrypoint=${TRAEFIK_HTTP_ENTRYPOINT:-websecure} \
-        --traefik_http_entry_point=${TRAEFIK_HTTP_ENTRYPOINT:-websecure} \
+        --enable_traefik_registry=false \
+        --enable_traefik_provider=false \
         --enable_metrics ${ENABLE_METRICS} \
         --metrics_config_file "/home/yuanrong/metrics/metrics_config.json" \
         --enable_trace ${ENABLE_TRACE} \
@@ -155,7 +141,7 @@ if [  "x${AKS_LOCAL_MODE}" == "xtrue" ]; then
         --function_proxy_merge_process_enable true \
         --fc_agent_mgr_retry_times 30 \
         --fc_agent_mgr_retry_cycle 60000 \
-        --iam_ssl_enable true \
+        --iam_ssl_enable "${IAM_SSL_ENABLE:-true}" \
         --ssl_root_file ca.crt \
         --ssl_cert_file module.crt \
         --ssl_key_file module.key \
@@ -168,7 +154,7 @@ if [  "x${AKS_LOCAL_MODE}" == "xtrue" ]; then
         --enable_sandbox_router true \
         --enable_direct_routing false
 else
-    run_yuanrong /usr/bin/yr start "${NODE_PROXY_ARGS[@]}" \
+    run_yuanrong /usr/bin/yr start "${NODE_PROXY_ARGS[@]}" "${EDGE_ARGS[@]}" \
         --ip_address "${YR_NODE_IP}" \
         --port_policy FIX \
         --ds_node_timeout_s 30 \
@@ -189,11 +175,7 @@ else
         --enable_trace ${ENABLE_TRACE} \
         --trace_config "$(cat /home/yuanrong/trace/trace_config.json)" \
         -n ${HOSTNAME} \
-        --enable_traefik_registry=${ENABLE_TRAEFIK_REGISTRY} \
-        --traefik_enable_tls=${TRAEFIK_ENABLE_TLS:-false} \
-        --traefik_etcd_prefix=traefik \
-        --traefik_lease_ttl=300000 \
-        --traefik_http_entrypoint=${TRAEFIK_HTTP_ENTRYPOINT:-websecure} \
+        --enable_traefik_registry=false \
         --log_root "${YR_LOG_PATH}" \
         --fc_agent_mgr_retry_times 30 \
         --fc_agent_mgr_retry_cycle 60000 \

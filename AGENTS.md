@@ -123,6 +123,14 @@ runtimes and `openyuanrong_sdk`. `builder/node.Dockerfile` then compiles the
 node components and produces the AKernel all-in-one image using the selected
 runtime image and its matching service configuration.
 
+The image also builds Edge, Node Proxy and the forwarding helper from a
+checksum-pinned YuanRong source archive with its Cargo lockfile; their binaries
+are installed under `data_plane/bin` for the Go CLI. The default Core wheel
+and data-plane source are pinned to the matching YuanRong `2b54c26885c6`
+build so the Core package includes Node Proxy address
+registration and Edge process scripts. The RRT binary and sandbox SDK retain
+their matching `0.10.2rc2` command protocol.
+
 The control-plane and RRT release version is independent of the optional
 actor-based `openyuanrong_sdk` installed in the Python runtime profile. This
 actor backend is deprecated and retained only for compatibility with existing
@@ -175,9 +183,9 @@ source revisions are traceable through the AKernel commit's submodule gitlinks.
 
 Use [`deploy/README.md`](./deploy/README.md) as the deployment entry point.
 AKernel supports standalone, existing Kubernetes clusters via Helm, and
-Terraform-based cloud provisioning. The core chart can use Edge and Node Proxy
-through `dataPlane.enabled` with an image containing the data-plane binaries;
-configure its TLS Secret and allowed CIDRs and disable `traefik.enabled`.
+Terraform-based cloud provisioning. The core chart enables Edge and Node Proxy
+by default with an image containing the data-plane binaries and Go CLI support;
+configure its TLS Secret and allowed CIDRs.
 See `deploy/README.md` for ingress migration and SDK endpoint configuration.
 
 Aliyun's aggregate Pod PID budget is configurable independently of the
@@ -383,13 +391,13 @@ export AKERNEL_SERVER_ADDRESS="<server_address>"
 export AKERNEL_TOKEN="<your_token>"
 ```
 
-When the public Traefik dual-entrypoint mode is enabled, a host/IP-only
+With the default Edge ingress, a host/IP-only
 `AKERNEL_SERVER_ADDRESS` uses HTTPS/WSS on 443 for the frontend API and exec
 websocket, and HTTP on 80 for sandbox port URLs. For standalone deployments,
-use the Traefik container IP printed by `deploy/standalone/start.sh`:
+use the AKernel container IP printed by `deploy/standalone/start.sh`:
 
 ```bash
-export AKERNEL_SERVER_ADDRESS=<traefik-container-ip>
+export AKERNEL_SERVER_ADDRESS=<akernel-container-ip>
 ```
 
 No separate `AKERNEL_GATEWAY_ADDRESS` is required for the default standalone

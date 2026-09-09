@@ -1,6 +1,6 @@
 # Git metadata is not part of the image build. Component versions come from
 # their source manifests, and exact revisions remain traceable through the
-# parent repository's submodule gitlinks.
+# parent repository's submodule gitlinks or checksum-pinned source archives.
 .git
 **/.git
 

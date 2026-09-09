@@ -50,13 +50,6 @@ else
     echo "otelcol watchdog skipped"
 fi
 
-# Set enable_traefik_provider based on TRAEFIK_MODE
-if [ "${ENABLE_TRAEFIK:-true}" = "true" ] && [ "${TRAEFIK_MODE:-etcd}" = "http" ]; then
-    ENABLE_TRAEFIK_PROVIDER=true
-else
-    ENABLE_TRAEFIK_PROVIDER=false
-fi
-
 if [ -z "${LITEBUS_DATA_KEY:-}" ]; then
     echo "LITEBUS_DATA_KEY is required for akernel master/frontend" >&2
     exit 1
@@ -68,27 +61,8 @@ if [ ! -x "${YR_BIN}" ]; then
     exit 1
 fi
 
-EDGE_ARGS=()
-if [ "${ENABLE_EDGE_FRONTEND:-false}" = "true" ]; then
-    EDGE_ARGS=(
-        --enable_edge_frontend true
-        --edge_frontend_tls_bind "0.0.0.0:${EDGE_TLS_PORT:-8443}"
-        --edge_frontend_plain_bind "0.0.0.0:${EDGE_PLAIN_PORT:-8080}"
-        --edge_frontend_health_bind "0.0.0.0:${EDGE_HEALTH_PORT:-18080}"
-        --edge_frontend_tls_cert "${EDGE_TLS_CERT:-/etc/akernel-edge-tls/tls.crt}"
-        --edge_frontend_tls_key "${EDGE_TLS_KEY:-/etc/akernel-edge-tls/tls.key}"
-        --edge_frontend_control_plane_address "${INSTANCE_IP:?required for Edge}:8888"
-        --edge_frontend_iam_address 127.0.0.1:31113
-        --edge_frontend_validate_iam true
-        --edge_frontend_allowed_client_cidrs "${EDGE_ALLOWED_CLIENT_CIDRS:?required for Edge}"
-        --data_plane_log_dir "${DATA_PLANE_LOG_DIR:-/var/log/akernel-edge}"
-        --data_plane_log_stdout true
-        --edge_frontend_access_log_enabled true
-    )
-    # Edge terminates client TLS; its local Frontend and IAM hops use HTTP.
-    FRONTEND_SSL_ENABLE=false
-    IAM_SSL_ENABLE=false
-fi
+. /root/edge-config.sh
+configure_edge || exit 1
 
 exec "${YR_BIN}" start --master --block true "${EDGE_ARGS[@]}" \
     -e -c 0 -m 8000 -s 4096 -n $HOSTNAME \
@@ -120,10 +94,7 @@ exec "${YR_BIN}" start --master --block true "${EDGE_ARGS[@]}" \
     --ds_rpc_thread_num 128 \
     --function_proxy_merge_process_enable true \
     --force_low_reliability_instance true \
-    --enable_traefik_provider=${ENABLE_TRAEFIK_PROVIDER} \
-    --traefik_http_entry_point=${TRAEFIK_HTTP_ENTRYPOINT:-websecure} \
-    --traefik_enable_tls=${TRAEFIK_ENABLE_TLS:-false} \
-    --traefik_forward_timeout_ms=3000 \
+    --enable_traefik_provider=false \
     --frontend_lease_bypass true \
     --iam_ssl_enable ${IAM_SSL_ENABLE:-true} \
     --ssl_root_file ca.crt \

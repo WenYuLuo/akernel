@@ -77,8 +77,6 @@ spec:
           command:
             - /usr/local/bin/akernel-entrypoint
           env:
-            - name: ENABLE_TRAEFIK
-              value: {{ and .Values.traefik.enabled (not .Values.dataPlane.enabled) | quote }}
             - name: AKERNEL_ROLE
               value: "master"
             {{- if .Values.frontend.enabled }}
@@ -114,12 +112,6 @@ spec:
               value: {{ ne (.Values.monitoring.prometheusEndpoint | default "") "" | ternary "true" "false" | quote }}
             - name: ENABLE_TRACE
               value: {{ ne (.Values.monitoring.tempoEndpoint | default "") "" | ternary "true" "false" | quote }}
-            - name: TRAEFIK_MODE
-              value: {{ .Values.traefik.mode | default "http" | quote }}
-            - name: TRAEFIK_ENABLE_TLS
-              value: {{ .Values.traefik.enableWebEntrypoint | default false | ternary false (.Values.traefik.enableTLS | default false) | quote }}
-            - name: TRAEFIK_HTTP_ENTRYPOINT
-              value: {{ .Values.traefik.enableWebEntrypoint | default false | ternary "web" "websecure" | quote }}
           ports:
             - name: http
               containerPort: 8888

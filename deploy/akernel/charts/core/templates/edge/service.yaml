@@ -2,9 +2,6 @@
 {{- if not .Values.frontend.enabled }}
 {{- fail "dataPlane.enabled requires frontend.enabled" }}
 {{- end }}
-{{- if .Values.traefik.enabled }}
-{{- fail "Disable traefik.enabled when dataPlane.enabled is true" }}
-{{- end }}
 apiVersion: v1
 kind: Service
 metadata:

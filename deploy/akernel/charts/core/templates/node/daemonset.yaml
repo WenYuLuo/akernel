@@ -101,8 +101,6 @@ spec:
         - name: NODE_PROXY_ALLOWED_EDGE_CIDRS
           value: {{ required "dataPlane.nodeProxy.allowedEdgeCIDRs is required" .Values.dataPlane.nodeProxy.allowedEdgeCIDRs | quote }}
         {{- end }}
-        - name: ENABLE_TRAEFIK
-          value: {{ and .Values.traefik.enabled (not .Values.dataPlane.enabled) | quote }}
         - name: AKERNEL_ROLE
           value: "node"
         - name: RUNSC_AKERNEL
@@ -153,12 +151,6 @@ spec:
           value: {{ ne (.Values.monitoring.prometheusEndpoint | default "") "" | ternary "true" "false" | quote }}
         - name: ENABLE_TRACE
           value: {{ ne (.Values.monitoring.tempoEndpoint | default "") "" | ternary "true" "false" | quote }}
-        - name: TRAEFIK_MODE
-          value: {{ .Values.traefik.mode | default "http" | quote }}
-        - name: TRAEFIK_ENABLE_TLS
-          value: {{ .Values.traefik.enableWebEntrypoint | default false | ternary false (.Values.traefik.enableTLS | default false) | quote }}
-        - name: TRAEFIK_HTTP_ENTRYPOINT
-          value: {{ .Values.traefik.enableWebEntrypoint | default false | ternary "web" "websecure" | quote }}
         securityContext:
           privileged: true
         volumeMounts:

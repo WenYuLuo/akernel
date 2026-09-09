@@ -179,7 +179,7 @@ start/stop instructions.
 The umbrella chart in [`akernel/`](./akernel/) bundles two subcharts:
 
 - **core** — scheduler + node-side components (etcd, master, frontend, node
-  DaemonSet, and Traefik)
+  DaemonSet, and Edge ingress)
 - **monitor** — observability stack (Prometheus, Grafana, Loki, Tempo)
 
 ```bash
@@ -213,40 +213,18 @@ image:
 Each component can still override `master.image`, `frontend.image`, or
 `node.image` when a split-image deployment is required.
 
-### Public Traefik entrypoints
+### Public Edge entrypoints
 
-For cloud deployments, use Traefik with two public entrypoints:
-
-```yaml
-traefik:
-  enabled: true
-  enableWebEntrypoint: true
-  ports:
-    websecure: 443
-    web: 80
-```
-
-The `websecure` entrypoint serves the AKernel frontend API and exec websocket
-over HTTPS/WSS. The `web` entrypoint serves function port-forwarding traffic
-over plain HTTP/WS. With this layout the Python SDK only needs the LoadBalancer
-host or IP:
+The core chart starts Edge alongside Frontend and Node Proxy alongside each
+node by default. Edge serves API and exec WebSocket traffic over HTTPS/WSS on
+443, and published sandbox ports and reverse tunnels over HTTP/WS on 80.
 
 ```bash
-export AKERNEL_SERVER_ADDRESS=<traefik-load-balancer-ip>
+export AKERNEL_SERVER_ADDRESS=<edge-load-balancer-ip>
 ```
 
-Do not set `traefik.tls.enabled` just to make port 443 work. The frontend
-router is already configured as a TLS router; `traefik.tls.enabled` only mounts
-a custom default certificate Secret. When it is `false`, Traefik uses its
-default certificate.
-
-The legacy single-entrypoint mode is still available by setting
-`traefik.enableWebEntrypoint=false`. In that mode API, exec, and function
-traffic share `traefik.ports.tcp`, so SDK clients should use an explicit port:
-
-```bash
-export AKERNEL_SERVER_ADDRESS=<traefik-load-balancer-ip>:<port>
-```
+See [Edge and Node Proxy ingress](#edge-and-node-proxy-ingress) for certificate,
+network allowlist, and existing LoadBalancer migration settings.
 
 ### IAM token signing seed
 
@@ -274,8 +252,8 @@ helm template akernel ./akernel \
 The all-in-one image does not contain a TLS private key. The core chart creates
 one deployment-specific Secret and mounts the same certificate into master and
 frontend Pods. This certificate protects the openYuanrong frontend and IAM
-service connections; it is separate from the certificate served by Traefik's
-public `websecure` entrypoint.
+service connections and is also the default Edge ingress certificate. Set
+`dataPlane.edge.tlsSecretName` to use a dedicated ingress certificate.
 
 Regular `helm install` and `helm upgrade` reuse the existing Secret. For a
 render-and-apply workflow, create it once before rendering so a new certificate
@@ -314,7 +292,7 @@ Per-vendor details are in
 [`terraform/huaweicloud/README.md`](./terraform/huaweicloud/README.md).
 
 The Alibaba Cloud Terraform defaults follow the recommended public layout:
-frontend enabled, Traefik `websecure:443` plus `web:80`, and Grafana exposed
+frontend enabled, Edge HTTPS 443 plus HTTP 80, and Grafana exposed
 through its own LoadBalancer when `install_monitor=true`. Set
 `install_dragonfly=true` to install the pinned official Dragonfly chart and
 inject its seed-client proxy into the node runtime configuration.
@@ -326,7 +304,7 @@ loop-backed filestore. See the Aliyun guide for capacity, opt-out, and node
 replacement details.
 
 Only the AKernel all-in-one image is pushed to the registry selected by
-`make config`. etcd, Traefik, Grafana, Prometheus, Loki, Tempo, and BusyBox use
+`make config`. etcd, Grafana, Prometheus, Loki, Tempo, and BusyBox use
 their pinned official public images by default. Set the per-component image
 overrides when a private cluster requires mirrored third-party images.
 
@@ -347,12 +325,14 @@ stop signal to the Go CLI and waits for its ordered cleanup before exiting;
 sandboxd stops after YuanRong. The YuanRong service uses `KillMode=mixed` so
 the bootstrap controls the initial shutdown of its child processes.
 
-Images containing the YuanRong data-plane package can run Edge alongside the
-Frontend and Node Proxy alongside each node through the Go CLI. Set
-`dataPlane.enabled=true` and `traefik.enabled=false` in the core chart. Supply an
-existing TLS Secret (`tls.crt` and `tls.key`) as
-`dataPlane.edge.tlsSecretName`, and configure the allowed client, Edge pod and
-sandbox destination CIDRs explicitly:
+The image must contain the YuanRong Edge and Node Proxy binaries and Go CLI
+data-plane deployment support. The builder pins Core and the data-plane source to the matching
+`2b54c26885c6` build, including `config.sh`/`deploy.sh` and FunctionProxy
+address registration. RRT and the sandbox SDK use `0.10.2rc2`. Both data-plane
+components are enabled by default. Edge uses the
+component TLS certificate unless an existing Secret (`tls.crt` and `tls.key`)
+is selected with `dataPlane.edge.tlsSecretName`. Configure the allowed client,
+Edge Pod and sandbox destination CIDRs for the deployment:
 
 ```yaml
 dataPlane:
@@ -366,11 +346,10 @@ dataPlane:
   nodeProxy:
     allowedEdgeCIDRs: "192.168.0.0/16"
     allowedTargetCIDRs: "10.88.0.0/16"
-traefik:
-  enabled: false
 ```
 
-Replace the CIDRs with those of the deployment. Edge exposes HTTPS/WSS on
+Replace the CIDRs with those of the deployment. Node Proxy defaults allow
+RFC1918 private networks; narrow them to the actual Pod and sandbox ranges. Edge exposes HTTPS/WSS on
 service port 443 and HTTP/WS on port 80; API and authenticated direct routes
 use TLS. The local Frontend and IAM hops use HTTP with IAM validation enabled.
 Node Proxy uses network security mode and only accepts connections from the
@@ -382,6 +361,13 @@ Service name to retain its LoadBalancer identity and public address. Transfer
 its annotations, clusterIP and loadBalancerIP as well. The Service then selects
 Frontend/Edge pods; the Traefik Deployment and configuration are removed.
 Existing SDK API and gateway address settings select TLS or plain WebSocket.
+The `/internal-stats` endpoint reports the Edge Pod address and listener ports
+for SDK `internal=True` URLs. Set `dataPlane.edge.grafanaURL` to the Grafana
+HTTP service URL to expose its configured `/grafana` subpath through Edge.
+
+Cloud profiles use `edge_*` and `node_proxy_allowed_*` Terraform variables.
+Migrate existing ingress Service annotations, name and IP to the corresponding
+`edge_service_*` variables before planning an upgrade.
 
 `make print-env` discovers the Service labeled `app.kubernetes.io/component=edge`.
 Set `AKERNEL_GATEWAY_SERVICE` to select a specific gateway Service.

@@ -90,10 +90,16 @@ spec:
             {{- if .Values.dataPlane.enabled }}
             - name: ENABLE_EDGE_FRONTEND
               value: "true"
+            - name: EDGE_GRAFANA_URL
+              value: {{ .Values.dataPlane.edge.grafanaURL | quote }}
             - name: INSTANCE_IP
               valueFrom:
                 fieldRef:
                   fieldPath: status.podIP
+            - name: EDGE_TLS_CERT
+              value: /etc/akernel-edge-tls/tls.crt
+            - name: EDGE_TLS_KEY
+              value: /etc/akernel-edge-tls/tls.key
             - name: EDGE_TLS_PORT
               value: {{ .Values.dataPlane.edge.tlsPort | quote }}
             - name: EDGE_PLAIN_PORT
@@ -103,8 +109,6 @@ spec:
             - name: EDGE_ALLOWED_CLIENT_CIDRS
               value: {{ required "dataPlane.edge.allowedClientCIDRs is required" .Values.dataPlane.edge.allowedClientCIDRs | quote }}
             {{- end }}
-            - name: ENABLE_TRAEFIK
-              value: {{ and .Values.traefik.enabled (not .Values.dataPlane.enabled) | quote }}
             - name: AKERNEL_ROLE
               value: "frontend"
             - name: LITEBUS_DATA_KEY
@@ -195,7 +199,14 @@ spec:
         {{- if .Values.dataPlane.enabled }}
         - name: edge-tls
           secret:
-            secretName: {{ .Values.dataPlane.edge.tlsSecretName }}
+            secretName: {{ .Values.dataPlane.edge.tlsSecretName | default (include "core.componentTLSSecretName" .) }}
+            {{- if not .Values.dataPlane.edge.tlsSecretName }}
+            items:
+              - key: module.crt
+                path: tls.crt
+              - key: module.key
+                path: tls.key
+            {{- end }}
             defaultMode: 0400
         {{- end }}
         - name: component-tls

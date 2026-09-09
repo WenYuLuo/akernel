@@ -428,7 +428,7 @@ with Sandbox(port_forwardings=[8080]) as sandbox:
 ```
 
 `get_port_url()` rejects undeclared ports. Pass `internal=True` only when a
-deployment operator explicitly wants the direct Traefik address instead of the
+deployment operator explicitly wants the direct Edge address instead of the
 public gateway.
 
 ## Local failover and reload
@@ -483,7 +483,7 @@ with Sandbox(reverse_tunnel=tunnel) as sandbox:
     )
 ```
 
-`reverse_port` carries the WebSocket tunnel through Traefik. `listen_port` is
+`reverse_port` carries the WebSocket tunnel through Edge. `listen_port` is
 the loopback HTTP listener used inside the sandbox. Consequently,
 `sandbox.reverse_tunnel.url` is always
 `http://127.0.0.1:<listen_port>`, even when `target` uses HTTPS.
