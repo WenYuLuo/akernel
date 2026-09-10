@@ -40,6 +40,28 @@ resolve_node_ip() {
     printf '%s\n' "${node_ip}"
 }
 
+# Read the same final TOML file as sandboxd, including mounted overrides.
+resolve_node_proxy_target_cidrs() {
+    python3 - <<'PY'
+import ipaddress
+import os
+import sys
+import tomllib
+
+try:
+    value = os.environ.get("NODE_PROXY_ALLOWED_TARGET_CIDRS", "").strip()
+    if not value:
+        path = os.environ.get("SANDBOXD_CONFIG_PATH", "/home/akernel/sandboxd/config.toml")
+        with open(path, "rb") as config_file:
+            value = tomllib.load(config_file)["plugin"]["network"]["ip_range"]
+    networks = [str(ipaddress.ip_network(part.strip(), strict=False)) for part in value.split(",")]
+    print(",".join(networks))
+except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+    print(f"Cannot resolve Node Proxy target CIDRs: {error}", file=sys.stderr)
+    sys.exit(1)
+PY
+}
+
 YR_NODE_IP="$(resolve_node_ip)"
 echo "Using ${YR_NODE_IP} as the YuanRong node address"
 CHECKPOINT_DIR="/home/akernel/checkpoints"
@@ -50,15 +72,20 @@ configure_edge || exit 1
 
 NODE_PROXY_ARGS=()
 if [ "${ENABLE_NODE_PROXY:-false}" = "true" ]; then
+    NODE_PROXY_TARGET_CIDRS="$(resolve_node_proxy_target_cidrs)" || exit 1
+    if [ -z "${NODE_PROXY_ALLOWED_EDGE_CIDRS:-}" ] && [ "${AKS_LOCAL_MODE:-false}" = true ]; then
+        # Standalone Edge shares this network namespace and connects locally.
+        NODE_PROXY_ALLOWED_EDGE_CIDRS="127.0.0.1/32,${YR_NODE_IP}/32"
+    fi
     NODE_PROXY_ARGS=(
         --enable_node_proxy true
         --node_proxy_bind "0.0.0.0:${NODE_PROXY_PORT:-9443}"
         --node_proxy_advertise_address "${YR_NODE_IP}:${NODE_PROXY_PORT:-9443}"
         --node_proxy_health_bind "0.0.0.0:${NODE_PROXY_HEALTH_PORT:-18443}"
         --node_proxy_security_mode network
-        --node_proxy_allowed_target_cidrs "${NODE_PROXY_ALLOWED_TARGET_CIDRS:?required for Node Proxy}"
+        --node_proxy_allowed_target_cidrs "${NODE_PROXY_TARGET_CIDRS}"
         --node_proxy_allowed_edge_cidrs "${NODE_PROXY_ALLOWED_EDGE_CIDRS:?required for Node Proxy}"
-        --data_plane_log_dir "${DATA_PLANE_LOG_DIR:-/var/log/akernel-edge}"
+        --data_plane_log_dir "${DATA_PLANE_LOG_DIR:-${YR_LOG_PATH:-/home/yuanrong/logs}}"
         --data_plane_log_stdout true
     )
 fi

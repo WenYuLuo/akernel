@@ -8,7 +8,7 @@ configure_edge() {
         return
     fi
     export EDGE_ADVERTISE_IP="${INSTANCE_IP:-${YR_NODE_IP:-127.0.0.1}}"
-    export YR_DATA_PLANE_EDGE_FRONTEND_PROXY_ROUTES_FILE=/run/akernel/edge-proxy-routes.json
+    export YR_DATA_PLANE_EDGE_FRONTEND_PROXY_ROUTES_FILE="${YR_DATA_PLANE_EDGE_FRONTEND_PROXY_ROUTES_FILE:-/run/akernel/edge-proxy-routes.json}"
     mkdir -p /run/akernel/edge-http || return 1
     python3 - <<'PY' || return 1
 import json
@@ -25,7 +25,9 @@ routes = [{'name': 'internal-stats', 'path_prefix': '/internal-stats',
 if os.environ.get('EDGE_GRAFANA_URL'):
     routes.append({'name': 'grafana', 'path_prefix': '/grafana',
                    'upstream': os.environ['EDGE_GRAFANA_URL'], 'strip_prefix': False})
-Path(os.environ['YR_DATA_PLANE_EDGE_FRONTEND_PROXY_ROUTES_FILE']).write_text(json.dumps(routes))
+route_file = Path(os.environ['YR_DATA_PLANE_EDGE_FRONTEND_PROXY_ROUTES_FILE'])
+if route_file == Path('/run/akernel/edge-proxy-routes.json'):
+    route_file.write_text(json.dumps(routes))
 PY
     python3 -m http.server 18081 --bind 127.0.0.1 --directory /run/akernel/edge-http &
     EDGE_ARGS=(
@@ -39,7 +41,7 @@ PY
         --edge_frontend_iam_address 127.0.0.1:31113
         --edge_frontend_validate_iam true
         --edge_frontend_allowed_client_cidrs "${EDGE_ALLOWED_CLIENT_CIDRS:-0.0.0.0/0}"
-        --data_plane_log_dir "${DATA_PLANE_LOG_DIR:-/var/log/akernel-edge}"
+        --data_plane_log_dir "${DATA_PLANE_LOG_DIR:-${YR_LOG_PATH:-/home/yuanrong/logs}}"
         --data_plane_log_stdout true
         --edge_frontend_access_log_enabled true
     )

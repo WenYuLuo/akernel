@@ -9,6 +9,11 @@ provider "huaweicloud" {
 resource "null_resource" "input_validation" {
   lifecycle {
     precondition {
+      condition     = trimspace(local.node_proxy_edge_cidrs) != ""
+      error_message = "Set node_proxy_allowed_edge_cidrs to the actual Edge source CIDRs when using an existing cluster or imported Pod networks."
+    }
+
+    precondition {
       condition     = var.create_cluster || length(var.kubeconfig_path) > 0
       error_message = "kubeconfig_path must be set when create_cluster=false."
     }
@@ -26,6 +31,10 @@ resource "null_resource" "input_validation" {
 data "huaweicloud_availability_zones" "this" {}
 
 locals {
+  # Derive only from networks managed here; imported networks need their real CIDRs.
+  derived_edge_cidrs    = var.create_cluster ? (var.container_network_type == "eni" ? var.eni_subnet_cidr : var.pod_cidr) : ""
+  node_proxy_edge_cidrs = trimspace(var.node_proxy_allowed_edge_cidrs) != "" ? var.node_proxy_allowed_edge_cidrs : local.derived_edge_cidrs
+
   selected_az = var.availability_zone != "" ? var.availability_zone : data.huaweicloud_availability_zones.this.names[0]
   kubeconfig_path = var.create_cluster ? (
     length(var.kubeconfig_output_path) > 0 ? var.kubeconfig_output_path : "${path.module}/.kubeconfig"
@@ -155,7 +164,7 @@ locals {
     edge_tls_key                    = var.edge_tls_key
     edge_allowed_client_cidrs       = var.edge_allowed_client_cidrs
     node_proxy_allowed_target_cidrs = var.node_proxy_allowed_target_cidrs
-    node_proxy_allowed_edge_cidrs   = var.node_proxy_allowed_edge_cidrs
+    node_proxy_allowed_edge_cidrs   = local.node_proxy_edge_cidrs
     edge_service_annotations        = merge(local.huaweicloud_edge_elb_annotations, var.edge_service_annotations)
     edge_grafana_url                = var.install_monitor && !var.grafana_public_access ? "http://grafana.${var.monitor_namespace}.svc:3000" : ""
 

@@ -42,7 +42,7 @@ otel_watchdog() {
 }
 
 export -f otel_watchdog
-if { [ "${ENABLE_METRICS:-false}" = "true" ] || [ "${ENABLE_TRACE:-false}" = "true" ]; } && command -v otelcol-contrib >/dev/null 2>&1; then
+if { [ "${ENABLE_METRICS:-false}" = "true" ] || [ "${ENABLE_TRACE:-false}" = "true" ] || [ -n "${LOKI_ENDPOINT:-}" ]; } && command -v otelcol-contrib >/dev/null 2>&1; then
     nohup bash -c otel_watchdog &
     echo "otelcol watchdog started"
     echo "otel log: ${DEPLOY_PATH}/otelcol.log"

@@ -179,8 +179,8 @@ through its Docker bridge IP.
 # View AKernel logs
 sudo docker logs -f akernel-node
 
-# View data-plane logs
-sudo docker exec akernel-node ls /var/log/akernel-edge
+# View data-plane logs (the Edge-enabled CLI uses the YuanRong log directory)
+sudo docker exec akernel-node sh -c 'ls "${DATA_PLANE_LOG_DIR:-${YR_LOG_PATH:-/home/yuanrong/logs}}"'
 
 # Enter the container
 sudo docker exec -it akernel-node bash

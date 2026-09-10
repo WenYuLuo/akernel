@@ -17,6 +17,12 @@ monitoring:
   prometheusEndpoint: ""
   lokiEndpoint: ""
   tempoEndpoint: ""
+  processMetrics:
+    enabled: false
+    interval: "15s"
+  dataPlaneMetrics:
+    enabled: false
+    interval: "5s"
 
 image:
   repository: registry.example.com/akernel/all-in-one
@@ -98,6 +104,9 @@ master:
     port: "2379"
 
 frontend:
+  # Optional Frontend-only log collection endpoint; inherits monitoring.lokiEndpoint.
+  monitoring:
+    lokiEndpoint: ""
   enabled: true
   replicas: 2
   service:
@@ -123,6 +132,9 @@ frontend:
     iamServerAddress: ""
 
 node:
+  # Optional Node-only log collection endpoint; inherits monitoring.lokiEndpoint.
+  monitoring:
+    lokiEndpoint: ""
   secret:
     create: true
     oss_auths: {}
@@ -551,5 +563,7 @@ dataPlane:
   nodeProxy:
     port: 9443
     healthPort: 18443
-    allowedTargetCIDRs: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
-    allowedEdgeCIDRs: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+    # Empty reads plugin.network.ip_range from the final sandboxd TOML at startup.
+    allowedTargetCIDRs: ""
+    # Terraform derives this for managed clusters; direct Helm installs must set it.
+    allowedEdgeCIDRs: ""

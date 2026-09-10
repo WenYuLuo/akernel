@@ -920,14 +920,14 @@ variable "edge_allowed_client_cidrs" {
 
 variable "node_proxy_allowed_target_cidrs" {
   type        = string
-  description = "Comma-separated sandbox target CIDRs allowed by Node Proxy."
-  default     = "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+  description = "Optional sandbox target CIDRs. Empty reads plugin.network.ip_range from the final sandboxd TOML."
+  default     = ""
 }
 
 variable "node_proxy_allowed_edge_cidrs" {
   type        = string
-  description = "Comma-separated Edge Pod CIDRs allowed by Node Proxy."
-  default     = "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+  description = "Optional Edge source CIDRs. Empty derives Pod CIDRs for managed networks. Set explicitly for existing clusters or SNAT."
+  default     = ""
 }
 
 variable "edge_service_annotations" {

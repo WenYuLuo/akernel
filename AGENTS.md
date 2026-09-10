@@ -185,8 +185,15 @@ Use [`deploy/README.md`](./deploy/README.md) as the deployment entry point.
 AKernel supports standalone, existing Kubernetes clusters via Helm, and
 Terraform-based cloud provisioning. The core chart enables Edge and Node Proxy
 by default with an image containing the data-plane binaries and Go CLI support;
-configure its TLS Secret and allowed CIDRs.
+configure its TLS Secret and Edge source CIDRs. Node Proxy derives target CIDRs
+from the final sandboxd `plugin.network.ip_range`; Terraform derives Edge CIDRs
+for managed Pod networks. Imported networks and direct Helm installs require
+explicit Edge source CIDRs.
 See `deploy/README.md` for ingress migration and SDK endpoint configuration.
+The monitor chart provisions data-plane and process-resource dashboards. See
+`deploy/akernel/charts/monitor/README.md` for metric prerequisites, Grafana access
+through Edge, and metric interpretation. The image startup helper must respect
+an explicit `YR_DATA_PLANE_EDGE_FRONTEND_PROXY_ROUTES_FILE` mounted by Helm.
 
 Aliyun's aggregate Pod PID budget is configurable independently of the
 per-sandbox limit; see `deploy/terraform/aliyun/README.md#pod-pid-budget`.

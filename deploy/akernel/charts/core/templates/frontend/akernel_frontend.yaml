@@ -1,4 +1,5 @@
 {{- if .Values.frontend.enabled }}
+{{- $frontendLokiEndpoint := get (.Values.frontend.monitoring | default dict) "lokiEndpoint" | default .Values.monitoring.lokiEndpoint }}
 {{- if .Values.kruise.enabled }}
 apiVersion: apps.kruise.io/v1alpha1
 kind: CloneSet
@@ -34,6 +35,10 @@ spec:
     metadata:
       annotations:
         checksum/litebus-secret: {{ include "core.litebusSecretChecksum" . }}
+        checksum/edge-proxy-routes: {{ include (print $.Template.BasePath "/frontend/edge-routes-configmap.yaml") . | sha256sum }}
+        {{- if or .Values.monitoring.prometheusEndpoint $frontendLokiEndpoint .Values.monitoring.tempoEndpoint }}
+        checksum/otel-collector-config: {{ include (print $.Template.BasePath "/frontend/otel-configmap.yaml") . | sha256sum }}
+        {{- end }}
         {{- with .Values.frontend.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -92,6 +97,10 @@ spec:
               value: "true"
             - name: EDGE_GRAFANA_URL
               value: {{ .Values.dataPlane.edge.grafanaURL | quote }}
+            {{- if .Values.dataPlane.edge.grafanaURL }}
+            - name: YR_DATA_PLANE_EDGE_FRONTEND_PROXY_ROUTES_FILE
+              value: /etc/akernel-edge/proxy-routes.json
+            {{- end }}
             - name: INSTANCE_IP
               valueFrom:
                 fieldRef:
@@ -136,14 +145,26 @@ spec:
             - name: PROMETHEUS_ENDPOINT
               value: {{ .Values.monitoring.prometheusEndpoint | quote }}
             {{- end }}
-            {{- if .Values.monitoring.lokiEndpoint }}
+            {{- if $frontendLokiEndpoint }}
             - name: LOKI_ENDPOINT
-              value: {{ .Values.monitoring.lokiEndpoint | quote }}
+              value: {{ $frontendLokiEndpoint | quote }}
             {{- end }}
             {{- if .Values.monitoring.tempoEndpoint }}
             - name: TEMPO_ENDPOINT
               value: {{ .Values.monitoring.tempoEndpoint | quote }}
             {{- end }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
             - name: AKERNEL_ENV
               value: {{ .Values.monitoring.akernelEnv | default "default" | quote }}
             - name: ENABLE_METRICS
@@ -183,6 +204,11 @@ spec:
             {{- toYaml .Values.frontend.resources | nindent 12 }}
           volumeMounts:
             {{- if .Values.dataPlane.enabled }}
+            {{- if .Values.dataPlane.edge.grafanaURL }}
+            - name: edge-proxy-routes
+              mountPath: /etc/akernel-edge
+              readOnly: true
+            {{- end }}
             - name: edge-tls
               mountPath: /etc/akernel-edge-tls
               readOnly: true
@@ -190,13 +216,18 @@ spec:
             - name: component-tls
               mountPath: /home/yuanrong/.cert
               readOnly: true
-          {{- if or .Values.monitoring.prometheusEndpoint .Values.monitoring.lokiEndpoint .Values.monitoring.tempoEndpoint }}
+          {{- if or .Values.monitoring.prometheusEndpoint $frontendLokiEndpoint .Values.monitoring.tempoEndpoint }}
             - name: otel-collector-config
               mountPath: /etc/otel-collector
               readOnly: true
           {{- end }}
       volumes:
         {{- if .Values.dataPlane.enabled }}
+        {{- if .Values.dataPlane.edge.grafanaURL }}
+        - name: edge-proxy-routes
+          configMap:
+            name: akernel-edge-proxy-routes
+        {{- end }}
         - name: edge-tls
           secret:
             secretName: {{ .Values.dataPlane.edge.tlsSecretName | default (include "core.componentTLSSecretName" .) }}
@@ -213,9 +244,9 @@ spec:
           secret:
             secretName: {{ include "core.componentTLSSecretName" . }}
             defaultMode: 0400
-      {{- if or .Values.monitoring.prometheusEndpoint .Values.monitoring.lokiEndpoint .Values.monitoring.tempoEndpoint }}
+      {{- if or .Values.monitoring.prometheusEndpoint $frontendLokiEndpoint .Values.monitoring.tempoEndpoint }}
         - name: otel-collector-config
           configMap:
-            name: akernel-otel-collector-config
+            name: akernel-frontend-otel-collector-config
       {{- end }}
 {{- end }}

@@ -331,8 +331,8 @@ data-plane deployment support. The builder pins Core and the data-plane source t
 address registration. RRT and the sandbox SDK use `0.10.2rc2`. Both data-plane
 components are enabled by default. Edge uses the
 component TLS certificate unless an existing Secret (`tls.crt` and `tls.key`)
-is selected with `dataPlane.edge.tlsSecretName`. Configure the allowed client,
-Edge Pod and sandbox destination CIDRs for the deployment:
+is selected with `dataPlane.edge.tlsSecretName`. Configure the allowed client
+and Edge source CIDRs for the deployment:
 
 ```yaml
 dataPlane:
@@ -345,11 +345,23 @@ dataPlane:
       type: LoadBalancer
   nodeProxy:
     allowedEdgeCIDRs: "192.168.0.0/16"
-    allowedTargetCIDRs: "10.88.0.0/16"
+    allowedTargetCIDRs: "" # Read sandboxd plugin.network.ip_range at node startup.
 ```
 
-Replace the CIDRs with those of the deployment. Node Proxy defaults allow
-RFC1918 private networks; narrow them to the actual Pod and sandbox ranges. Edge exposes HTTPS/WSS on
+Node Proxy reads its default target range from the final sandboxd TOML, so changing
+`plugin.network.ip_range` also updates the target ACL after restart (for example,
+`10.88.0.1/16` becomes `10.88.0.0/16`). `allowedTargetCIDRs` remains an explicit
+override. Missing or invalid address pools fail Node Proxy startup.
+
+Terraform generates Edge source CIDRs from the managed CCE Pod/ENI network or
+ACK Flannel/managed Terway vSwitch networks. Existing clusters and imported Pod
+networks require `node_proxy_allowed_edge_cidrs`; direct Helm installs require
+`allowedEdgeCIDRs`. If the CNI applies SNAT between Edge and Node Proxy, override
+this with the source range actually seen by Node Proxy. Standalone defaults to
+the shared container's node address and IPv4 loopback. These startup defaults
+require an image built with the updated bootstrap script.
+
+ Edge exposes HTTPS/WSS on
 service port 443 and HTTP/WS on port 80; API and authenticated direct routes
 use TLS. The local Frontend and IAM hops use HTTP with IAM validation enabled.
 Node Proxy uses network security mode and only accepts connections from the
@@ -364,6 +376,8 @@ Existing SDK API and gateway address settings select TLS or plain WebSocket.
 The `/internal-stats` endpoint reports the Edge Pod address and listener ports
 for SDK `internal=True` URLs. Set `dataPlane.edge.grafanaURL` to the Grafana
 HTTP service URL to expose its configured `/grafana` subpath through Edge.
+See [operations dashboards](./akernel/charts/monitor/README.md) for the matching
+Grafana public URL, metric collection settings and dashboard interpretation.
 
 Cloud profiles use `edge_*` and `node_proxy_allowed_*` Terraform variables.
 Migrate existing ingress Service annotations, name and IP to the corresponding
