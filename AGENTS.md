@@ -529,6 +529,11 @@ the wheel and source distribution, and publishes them through the PyPI trusted
 publisher configured for the `pypi` GitHub environment. Do not add a PyPI
 password or API token to the repository.
 
+PR CI and publishing share `.github/actions/python-distributions`, which
+builds the wheel and source distribution and installs each in a separate clean
+environment with its declared dependencies. Keep dependency validation,
+isolated imports, version checks, and CLI smoke tests in this shared action.
+
 ## Test
 
 Run SDK unit tests with:
