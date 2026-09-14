@@ -32,10 +32,30 @@ and do not advertise either VM runtime. If no eligible node advertises a
 requested runtime, `Sandbox(runtime="kata")` or
 `Sandbox(runtime="firecracker")` fails scheduling with a no-resource error.
 
-The bundled Firecracker payload is selected by sandboxd's shared runtime
-manifest. Set `AKERNEL_ENABLE_FIRECRACKER=false` while building to exclude it.
-For supported operations and filesystem constraints, see the
-[sandbox runtime comparison](https://github.com/inclusionAI/sandboxd/blob/1918fadb03b59bc6f540196e14b90a91bdf31b7d/doc/runtime.md).
+The bundled Firecracker VMM and guest kernel are selected by sandboxd's shared
+runtime manifest, and its guest-agent initrd is built from that same sandboxd
+revision. AKernel also builds pinned virtiofsd 1.14.0 with its release lockfile
+and enables read-only virtio-fs in standalone and Helm. OCI/Nydus image roots
+use the directory provided by the image manager directly, without EROFS
+conversion. The sandbox's writable layer remains a private ext4 image;
+writable host sharing and OCI image mounts are unsupported. EROFS roots and
+mounts remain supported. Set `AKERNEL_ENABLE_FIRECRACKER=false` while building
+to exclude the VMM, kernel, virtiofsd, and initrd.
+
+The default writable disk policy is `AsyncDirect` with `Writeback`. Hosts must
+provide usable `io_uring` and filesystem alignment queries through
+`statx(STATX_DIOALIGN)` (normally ext4/XFS on Linux 6.1 or newer). Capability
+checks, rather than the kernel version alone, determine compatibility. There
+is no automatic buffered fallback. For older hosts, explicitly configure
+`writable_io_engine="Async"`, or `"Sync"` without io_uring, under
+`[plugin.runtime.firecracker]` in the standalone config or Helm's
+`node.config.sandboxd.config`. Keep `writable_cache_type="Writeback"`.
+
+Drain sandboxes before replacing the Firecracker stack. Checkpoints record
+VMM, kernel, initrd, and, when used, virtiofsd digests; mismatched stacks are
+rejected on restore. Changing the writable I/O default does not convert the
+engine saved in an existing checkpoint. For the full contract, see the
+[sandbox runtime comparison](https://github.com/inclusionAI/sandboxd/blob/b8f4656c57432bce1b50111e766bcd21510ee482/doc/runtime.md).
 
 The native Linux runc backend is opt-in because it uses the host kernel. For a
 guided cloud profile, `make config ENABLE_RUNC=true` records both sides of the
@@ -50,6 +70,14 @@ embedded TC eBPF backend on nodes without iptables NAT or conntrack modules.
 The node must support TC eBPF and bpffs. bpfnat does not manage host firewall
 policy, so custom host-network deployments must allow forwarding to and from
 the sandbox bridge when their `FORWARD` policy is `DROP`.
+
+### systemd container identity
+
+The all-in-one image, Helm node template, and standalone launcher set
+`container=oci` so PID 1 systemd recognizes the container and does not remount
+shared host filesystems read-only during shutdown. Preserve this variable in
+custom launchers. Applying the fix requires replacing the node Pod or
+standalone container; it does not repair an already read-only filesystem.
 
 ### Network ACLs
 
@@ -326,10 +354,11 @@ sandboxd stops after YuanRong. The YuanRong service uses `KillMode=mixed` so
 the bootstrap controls the initial shutdown of its child processes.
 
 The image must contain the YuanRong Edge and Node Proxy binaries and Go CLI
-data-plane deployment support. The builder pins Core and the data-plane source to the matching
-`2b54c26885c6` build, including `config.sh`/`deploy.sh` and FunctionProxy
-address registration. RRT and the sandbox SDK use `0.10.2rc2`. Both data-plane
-components are enabled by default. Edge uses the
+data-plane deployment support. The builder pins Core, data plane, RRT and the
+sandbox SDK to `0.10.3rc1`. Core includes `config.sh`/`deploy.sh` and
+FunctionProxy address registration; the matching data-plane wheel supplies
+Edge, Node Proxy and Forward. Both data-plane components are enabled by
+default. Edge uses the
 component TLS certificate unless an existing Secret (`tls.crt` and `tls.key`)
 is selected with `dataPlane.edge.tlsSecretName`. Configure the allowed client
 and Edge source CIDRs for the deployment:
@@ -385,3 +414,11 @@ Migrate existing ingress Service annotations, name and IP to the corresponding
 
 `make print-env` discovers the Service labeled `app.kubernetes.io/component=edge`.
 Set `AKERNEL_GATEWAY_SERVICE` to select a specific gateway Service.
+
+### distill-fs release dependency
+
+The all-in-one image downloads the static Linux/amd64 distill-fs release pinned in `builder/distill-fs-versions.env`. It does not compile `src/distill-fs`; that checkout is optional source reference. `make versions` reports the release tag and archive SHA-256. The AKernel installer at `builder/scripts/install-distill-fs.sh` checks the archive, package provenance, CLI version, and static ELF linkage, and retains licenses and provenance in `/usr/local/share/distill-fs`.
+
+Publish and verify the distill-fs release before updating the AKernel version, URL, and checksum pin together. Missing or invalid pins stop `make build` before either image is built. There is no source-build fallback.
+
+Validate installation against a downloaded candidate or release with `python3 builder/scripts/test-install-distill-fs.py /path/to/distill-fs-vX.Y.Z-linux-amd64.tar.gz` on Linux/amd64 with curl, jq, and binutils. This checks normal installation and rejects missing/invalid pins, corrupted archives, version/architecture mismatch, binary hash mismatch, and dynamically linked executables. The sandboxd pipeline and gitlink are independent of this dependency.

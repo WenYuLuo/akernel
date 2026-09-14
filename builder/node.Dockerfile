@@ -9,18 +9,15 @@ ARG AKERNEL_ENABLE_KATA=true
 ARG AKERNEL_ENABLE_RUNC=false
 ARG AKERNEL_ENABLE_FIRECRACKER=true
 ARG SANDBOXD_BUILD_IMAGE=golang:1.25.5-bookworm
-ARG DISTILL_FS_BUILD_IMAGE=rust:1.85.0-bookworm
-ARG DATA_PLANE_BUILD_IMAGE=rust:1.95.0-bookworm
-ARG DATA_PLANE_SOURCE_URL=https://codeload.github.com/openYuanrong-mirror/yuanrong/tar.gz/2b54c26885c67535e7b5b80608812f0d5ed33244
-ARG DATA_PLANE_SOURCE_SHA256=c57b633b3fe50802ec9fcd70cb1da24ac80bea54984ed8d5d2cff15e7781dcfb
-ARG OPEN_YR_VERSION=0.7.0+2b54c26885c6
+ARG OPEN_YR_VERSION=0.10.3rc1
 ARG OPEN_YR_CORE_WHEEL_URL=
 ARG OPEN_YR_CORE_WHEEL_SHA256=
-# Core includes the matching process scripts and FunctionProxy registration.
-ARG OPEN_YR_CORE_AMD64_URL=https://openyuanrong.obs.cn-southwest-2.myhuaweicloud.com/daily/20260909023812/linux/amd64/openyuanrong_core-0.7.0%2B2b54c26885c6-py3-none-manylinux_2_31_x86_64.whl
-ARG OPEN_YR_CORE_ARM64_URL=https://openyuanrong.obs.cn-southwest-2.myhuaweicloud.com/daily/20260909024016/linux/arm64/openyuanrong_core-0.7.0%2B2b54c26885c6-py3-none-manylinux_2_31_aarch64.whl
-ARG OPEN_YR_CORE_AMD64_SHA256=b459e916e75d5ef6c59988ad7b4108fd15a19c8fd102f2ca7ab98b5e9fc7a09c
-ARG OPEN_YR_CORE_ARM64_SHA256=0678dc164e371471665fa2468967c456055c5cbd2f24bb130384189f75fc7a2a
+ARG OPEN_YR_RELEASE_BASE_URL=https://openyuanrong.obs.cn-southwest-2.myhuaweicloud.com/release
+ARG OPEN_YR_CORE_AMD64_SHA256=75c266092a70201609f5f0510eba8339965cf92fd9dd833842d64ca02438ac6f
+ARG OPEN_YR_CORE_ARM64_SHA256=b7e2664a6d3760e495dd13b7dbb00851c1120b8f8c40a68d8b469a59454a2eb3
+ARG OPEN_YR_DATA_PLANE_RELEASE_BASE_URL=https://github.com/openYuanrong-mirror/yuanrong/releases/download
+ARG OPEN_YR_DATA_PLANE_AMD64_SHA256=b3b6f099554bb0539ef51227efc40268430805c3dbe388b1c9de83f95a65a409
+ARG OPEN_YR_DATA_PLANE_ARM64_SHA256=1a5a4c8585be46c12e90377e775f0535aa621ed47597691328cf7235a045f0b3
 ARG GVISOR_DOWNLOAD_IMAGE=ubuntu:24.04
 ARG GVISOR_RELEASE
 ARG GVISOR_AMD64_URL
@@ -38,33 +35,13 @@ ARG FIRECRACKER_BUILD_IMAGE=ubuntu:24.04
 ARG FIRECRACKER_RELEASE
 ARG FIRECRACKER_AMD64_SHA256
 ARG FIRECRACKER_AMD64_URL
+ARG VIRTIOFSD_BUILD_IMAGE=rust:1.90.0-bookworm
+# virtiofsd v1.14.0, including the release Cargo.lock.
+ARG VIRTIOFSD_REVISION=c2540f8db14caba81c1e37fba23fc7bf2cd7f0dd
 ARG OTELCOL_CONTRIB_VERSION=0.120.0
 ARG OTELCOL_CONTRIB_URL=https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${OTELCOL_CONTRIB_VERSION}/otelcol-contrib_${OTELCOL_CONTRIB_VERSION}_linux_amd64.tar.gz
 ARG AKERNEL_VERSION=unknown
 ARG AKERNEL_REVISION=unknown
-
-# The data plane is packaged independently from the Core wheel. Build the
-# checksum-pinned source with its lockfile and include it in every node image.
-FROM ${DATA_PLANE_BUILD_IMAGE} AS data-plane-builder
-ARG DATA_PLANE_SOURCE_URL
-ARG DATA_PLANE_SOURCE_SHA256
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates curl protobuf-compiler && \
-    rm -rf /var/lib/apt/lists/*
-WORKDIR /src/data-plane-gateway
-RUN set -eux; \
-    curl -fSL --retry 5 --retry-delay 2 \
-      "${DATA_PLANE_SOURCE_URL}" -o /tmp/data-plane-source.tar.gz; \
-    echo "${DATA_PLANE_SOURCE_SHA256}  /tmp/data-plane-source.tar.gz" | sha256sum -c -; \
-    tar -xzf /tmp/data-plane-source.tar.gz --strip-components=2 \
-      --wildcards '*/data-plane-gateway/*'; \
-    rm /tmp/data-plane-source.tar.gz; \
-    cargo build --locked --release --all-features --bins; \
-    mkdir -p /output/bin; \
-    for binary in yr-edge-frontend yr-node-proxy yr-data-plane-forward; do \
-      install -m 0755 "target/release/${binary}" "/output/bin/${binary}"; \
-      strip "/output/bin/${binary}"; \
-    done
 
 FROM ${GVISOR_DOWNLOAD_IMAGE} AS gvisor-runtime
 ARG GVISOR_RELEASE
@@ -142,6 +119,19 @@ WORKDIR /src/sandboxd
 COPY ./src/sandboxd/ ./
 RUN make release
 
+FROM ${VIRTIOFSD_BUILD_IMAGE} AS virtiofsd-builder
+ARG VIRTIOFSD_REVISION
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      ca-certificates git libcap-ng-dev libseccomp-dev pkg-config && \
+    rm -rf /var/lib/apt/lists/*
+WORKDIR /src/virtiofsd
+RUN git init && \
+    git fetch --depth=1 https://gitlab.com/virtio-fs/virtiofsd.git "${VIRTIOFSD_REVISION}" && \
+    git checkout --detach FETCH_HEAD && \
+    test "$(git rev-parse HEAD)" = "${VIRTIOFSD_REVISION}" && \
+    cargo build --release --locked
+
 FROM ${FIRECRACKER_BUILD_IMAGE} AS firecracker-runtime-true
 ARG FIRECRACKER_RELEASE
 ARG FIRECRACKER_AMD64_SHA256
@@ -182,6 +172,9 @@ RUN set -eux; \
       /firecracker/opt/firecracker/; \
     cp -a "${bundle}/licenses/." /firecracker/opt/firecracker/licenses/
 
+COPY --from=virtiofsd-builder /src/virtiofsd/target/release/virtiofsd /firecracker/usr/local/bin/virtiofsd
+COPY --from=virtiofsd-builder /src/virtiofsd/LICENSE-APACHE /firecracker/opt/firecracker/licenses/virtiofsd-LICENSE-APACHE
+COPY --from=virtiofsd-builder /src/virtiofsd/LICENSE-BSD-3-Clause /firecracker/opt/firecracker/licenses/virtiofsd-LICENSE-BSD-3-Clause
 COPY --from=sandboxd-builder /src/sandboxd/output/firecracker-agent /initrd/init
 RUN set -eux; \
     chmod 0755 /initrd/init; \
@@ -223,25 +216,22 @@ RUN mkdir -p /runc/usr/local/bin
 
 FROM runc-runtime-${AKERNEL_ENABLE_RUNC} AS runc-runtime
 
-FROM ${DISTILL_FS_BUILD_IMAGE} AS distill-fs-builder
-ENV DEBIAN_FRONTEND=noninteractive \
-    CARGO_NET_GIT_FETCH_WITH_CLI=true
+FROM ubuntu:24.04 AS distill-fs-runtime
+ARG TARGETARCH
+ARG DISTILL_FS_RELEASE
+ARG DISTILL_FS_AMD64_URL
+ARG DISTILL_FS_AMD64_SHA256
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        ca-certificates \
-        cmake \
-        g++ \
-        gcc \
-        git \
-        make \
-        perl \
-        pkg-config && \
+    apt-get install -y --no-install-recommends ca-certificates curl jq binutils && \
     rm -rf /var/lib/apt/lists/*
-WORKDIR /src/distill-fs
-COPY ./src/distill-fs/ ./
-RUN cargo build --locked --release --bin distill_fs
+COPY ./builder/scripts/install-distill-fs.sh /install-distill-fs.sh
+RUN sh /install-distill-fs.sh "$DISTILL_FS_RELEASE" \
+    "$DISTILL_FS_AMD64_URL" "$DISTILL_FS_AMD64_SHA256" /distill-fs
 
 FROM ${AKERNEL_NODE_BASE_IMAGE}
+# Let PID 1 systemd avoid remounting shared host filesystems during shutdown.
+ENV container=oci
+
 ARG AKERNEL_ENABLE_KATA
 ARG AKERNEL_ENABLE_RUNC
 ARG AKERNEL_ENABLE_FIRECRACKER
@@ -251,10 +241,12 @@ ARG AKERNEL_REVISION
 ARG OPEN_YR_VERSION
 ARG OPEN_YR_CORE_WHEEL_URL
 ARG OPEN_YR_CORE_WHEEL_SHA256
-ARG OPEN_YR_CORE_AMD64_URL
-ARG OPEN_YR_CORE_ARM64_URL
+ARG OPEN_YR_RELEASE_BASE_URL
 ARG OPEN_YR_CORE_AMD64_SHA256
 ARG OPEN_YR_CORE_ARM64_SHA256
+ARG OPEN_YR_DATA_PLANE_RELEASE_BASE_URL
+ARG OPEN_YR_DATA_PLANE_AMD64_SHA256
+ARG OPEN_YR_DATA_PLANE_ARM64_SHA256
 ARG GVISOR_RELEASE
 ARG RUNC_VERSION
 ARG FIRECRACKER_RELEASE
@@ -276,7 +268,9 @@ RUN apt-get update && \
         iptables \
         jq \
         kmod \
+        libcap-ng0 \
         libgcc-s1 \
+        libseccomp2 \
         logrotate \
         mount \
         openssl \
@@ -328,21 +322,21 @@ ENV YR_INSTALLATION_DIR=/home/yuanrong
 
 # Install the complete, language-runtime-free openYuanRong control plane from
 # its checksum-pinned core wheel. A URL and checksum pair may override the
-# selected artifact when validating another build.
+# release asset when validating an unreleased daily build.
 RUN set -eux; \
     case "${TARGETARCH:-}" in \
-      amd64) wheel_arch=x86_64; default_core_url="${OPEN_YR_CORE_AMD64_URL}"; release_sha="${OPEN_YR_CORE_AMD64_SHA256}" ;; \
-      arm64) wheel_arch=aarch64; default_core_url="${OPEN_YR_CORE_ARM64_URL}"; release_sha="${OPEN_YR_CORE_ARM64_SHA256}" ;; \
+      amd64) wheel_arch=x86_64; wheel_platform=amd64; release_sha="${OPEN_YR_CORE_AMD64_SHA256}" ;; \
+      arm64) wheel_arch=aarch64; wheel_platform=arm64; release_sha="${OPEN_YR_CORE_ARM64_SHA256}" ;; \
       "") \
         case "$(uname -m)" in \
-          x86_64) wheel_arch=x86_64; default_core_url="${OPEN_YR_CORE_AMD64_URL}"; release_sha="${OPEN_YR_CORE_AMD64_SHA256}" ;; \
-          aarch64) wheel_arch=aarch64; default_core_url="${OPEN_YR_CORE_ARM64_URL}"; release_sha="${OPEN_YR_CORE_ARM64_SHA256}" ;; \
+          x86_64) wheel_arch=x86_64; wheel_platform=amd64; release_sha="${OPEN_YR_CORE_AMD64_SHA256}" ;; \
+          aarch64) wheel_arch=aarch64; wheel_platform=arm64; release_sha="${OPEN_YR_CORE_ARM64_SHA256}" ;; \
           *) echo "unsupported openYuanRong target architecture: $(uname -m)" >&2; exit 1 ;; \
         esac ;; \
       *) echo "unsupported openYuanRong target architecture: ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
     wheel_name="openyuanrong_core-${OPEN_YR_VERSION}-py3-none-manylinux_2_31_${wheel_arch}.whl"; \
-    wheel_url="${default_core_url}"; \
+    wheel_url="${OPEN_YR_RELEASE_BASE_URL}/${OPEN_YR_VERSION}/linux/${wheel_platform}/${wheel_name}"; \
     wheel_sha="${release_sha}"; \
     if [ -n "${OPEN_YR_CORE_WHEEL_URL}" ]; then \
       test -n "${OPEN_YR_CORE_WHEEL_SHA256}"; \
@@ -370,14 +364,35 @@ RUN set -eux; \
     rm -rf "${target}" "${wheel}"; \
     ln -sfn "${YR_INSTALLATION_DIR}/functionsystem/bin/yr" /usr/bin/yr
 
+# Install the matching data-plane release, including Edge, Node Proxy and Forward.
+RUN set -eux; \
+    case "${TARGETARCH:-$(uname -m)}" in \
+      amd64|x86_64) wheel_arch=x86_64; wheel_sha="${OPEN_YR_DATA_PLANE_AMD64_SHA256}" ;; \
+      arm64|aarch64) wheel_arch=aarch64; wheel_sha="${OPEN_YR_DATA_PLANE_ARM64_SHA256}" ;; \
+      *) echo "unsupported data-plane target architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    wheel_name="openyuanrong_data_plane-${OPEN_YR_VERSION}-py3-none-manylinux_2_17_${wheel_arch}.whl"; \
+    wheel="/tmp/${wheel_name}"; \
+    target=/tmp/openyuanrong-data-plane; \
+    curl -fSL --retry 10 --retry-delay 2 --retry-all-errors \
+      "${OPEN_YR_DATA_PLANE_RELEASE_BASE_URL}/${OPEN_YR_VERSION}/${wheel_name}" -o "${wheel}"; \
+    echo "${wheel_sha}  ${wheel}" | sha256sum -c -; \
+    python3 -m pip install --break-system-packages --no-cache-dir --no-deps \
+      --target "${target}" "${wheel}"; \
+    for binary in yr-edge-frontend yr-node-proxy yr-data-plane-forward; do \
+      test -x "${target}/yr/data_plane/bin/${binary}"; \
+    done; \
+    cp -a "${target}/yr/data_plane" "${YR_INSTALLATION_DIR}/"; \
+    rm -rf "${target}" "${wheel}"
+
 COPY --from=runtime-image /yr-runtime-rootfs.img ${YR_INSTALLATION_DIR}/yr-runtime-rootfs.img
 
-COPY --from=data-plane-builder /output/ ${YR_INSTALLATION_DIR}/data_plane/
 COPY --from=gvisor-runtime /gvisor/runsc /usr/local/bin/runsc
 COPY --from=sandboxd-builder /src/sandboxd/output/sandboxd /usr/local/bin/sandboxd
 COPY --from=sandboxd-builder /src/sandboxd/output/sbox /usr/local/bin/sbox
 COPY --from=sandboxd-builder /src/sandboxd/output/sandbox-logger /usr/local/bin/sandbox-logger
-COPY --from=distill-fs-builder /src/distill-fs/target/release/distill_fs /usr/local/bin/distill_fs
+COPY --from=distill-fs-runtime /distill-fs/bin/distill_fs /usr/local/bin/distill_fs
+COPY --from=distill-fs-runtime /distill-fs/share/distill-fs/ /usr/local/share/distill-fs/
 COPY --from=kata-runtime /kata/opt/kata /opt/kata
 COPY --from=runc-runtime /runc/usr/local/bin/ /usr/local/bin/
 COPY --from=firecracker-runtime /firecracker/ /

@@ -1,0 +1,71 @@
+name: Verify Python distributions
+description: Build and test SDK distributions with their declared dependencies.
+
+inputs:
+  source-directory:
+    description: Path to the SDK project (requires Python 3.12).
+    required: true
+
+outputs:
+  dist-directory:
+    description: Absolute path to the verified wheel and source distribution.
+    value: ${{ steps.build.outputs.dist-directory }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install packaging tools
+      shell: bash
+      run: python -m pip install 'build>=1.2,<2' 'twine>=5,<7'
+
+    - name: Build distributions
+      id: build
+      shell: bash
+      env:
+        SOURCE_DIRECTORY: ${{ inputs.source-directory }}
+      run: |
+        dist_directory="$(mktemp -d "${RUNNER_TEMP}/akernel-dist.XXXXXX")"
+        python -m build --outdir "${dist_directory}" "${SOURCE_DIRECTORY}"
+        test "$(find "${dist_directory}" -maxdepth 1 -name '*.whl' | wc -l)" -eq 1
+        test "$(find "${dist_directory}" -maxdepth 1 -name '*.tar.gz' | wc -l)" -eq 1
+        python -m twine check "${dist_directory}"/*
+        echo "dist-directory=${dist_directory}" >> "${GITHUB_OUTPUT}"
+
+    - name: Test installed distributions
+      shell: bash
+      env:
+        SOURCE_DIRECTORY: ${{ inputs.source-directory }}
+        DIST_DIRECTORY: ${{ steps.build.outputs.dist-directory }}
+      run: |
+        EXPECTED_VERSION="$(python - <<'PY'
+        import os
+        import pathlib
+        import tomllib
+
+        path = pathlib.Path(os.environ["SOURCE_DIRECTORY"]) / "pyproject.toml"
+        with path.open("rb") as stream:
+            print(tomllib.load(stream)["project"]["version"])
+        PY
+        )"
+        export EXPECTED_VERSION
+
+        for artifact in "${DIST_DIRECTORY}"/*.whl "${DIST_DIRECTORY}"/*.tar.gz; do
+          test_env="$(mktemp -d "${RUNNER_TEMP}/akernel-install.XXXXXX")"
+          python -m venv "${test_env}"
+          "${test_env}/bin/python" -m pip install "${artifact}"
+          "${test_env}/bin/python" -m pip check
+          "${test_env}/bin/python" -I - <<'PY'
+        import os
+        from importlib.metadata import distribution, version
+
+        import akernel_sdk
+
+        assert version("akernel-sdk") == os.environ["EXPECTED_VERSION"]
+        assert any(
+            entry.name == "ak" and entry.value == "akernel_sdk.cli:main"
+            for entry in distribution("akernel-sdk").entry_points
+        )
+        assert akernel_sdk.__name__ == "akernel_sdk"
+        PY
+          "${test_env}/bin/ak" --help
+        done

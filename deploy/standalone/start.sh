@@ -355,6 +355,7 @@ start_node_container() {
         --privileged \
         --net bridge \
         --restart always \
+        -e container=oci \
         -e AKS_LOCAL_MODE="true" \
         -e YR_RRT_CONTROL_SOCKET_PATH="/run/akernel" \
         -e YR_IMAGE_PROCESS_CONFIG="${YR_IMAGE_PROCESS_CONFIG}" \

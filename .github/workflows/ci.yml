@@ -10,8 +10,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Supersede PR checks, but keep a build for every push to main.
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   sdk-unit-tests:
@@ -71,6 +72,27 @@ jobs:
         run: |
           make sdk-check
 
+  sdk-distributions:
+    name: Python SDK distributions
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: sdk/python/pyproject.toml
+
+      - name: Build and verify distributions
+        uses: ./.github/actions/python-distributions
+        with:
+          source-directory: sdk/python
+
   deployment-script-syntax:
     name: Deployment script syntax
     runs-on: ubuntu-latest
@@ -91,8 +113,16 @@ jobs:
 
   standalone-e2e:
     name: Standalone E2E
+    needs:
+      - sdk-unit-tests
+      - sdk-quality
+      - sdk-distributions
+      - deployment-script-syntax
     runs-on: ubuntu-22.04
-    timeout-minutes: 45
+    timeout-minutes: 60
+    outputs:
+      image-id: ${{ steps.export-image.outputs.image-id }}
+      artifact-id: ${{ steps.upload-image.outputs.artifact-id }}
 
     steps:
       - name: Check out repository
@@ -102,7 +132,7 @@ jobs:
 
       - name: Initialize build submodules
         run: |
-          git submodule update --init src/sandboxd src/distill-fs
+          git submodule update --init src/sandboxd
 
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
@@ -125,18 +155,50 @@ jobs:
           sudo sysctl -w net.bridge.bridge-nf-call-iptables=1
 
       - name: Build all-in-one image
+        env:
+          AKERNEL_ENABLE_KATA: "false"
+          AKERNEL_ENABLE_FIRECRACKER: "false"
+          AKERNEL_ENABLE_RUNC: "false"
         run: |
-          AKERNEL_ENABLE_KATA=false \
-            make build \
-              IMAGE_REPOSITORY=akernel-ci/all-in-one \
-              IMAGE_TAG="${GITHUB_SHA}" \
-              RUNTIME_PROFILE=rrt
+          make build \
+            IMAGE_REPOSITORY=akernel-ci/all-in-one \
+            IMAGE_TAG="${GITHUB_SHA}" \
+            RUNTIME_PROFILE=rrt
+
+      - name: Verify systemd container identity in the image
+        run: |
+          docker image inspect "akernel-ci/all-in-one:${GITHUB_SHA}" \
+            --format '{{json .Config.Env}}' | \
+            python -c 'import json, sys; assert "container=oci" in json.load(sys.stdin)'
+
+      - name: Verify gVisor-only runtime payload
+        run: |
+          docker run --rm --entrypoint /bin/bash \
+            "akernel-ci/all-in-one:${GITHUB_SHA}" -euc '
+              test -x /usr/local/bin/runsc
+              test ! -e /usr/local/bin/containerd-shim-kata-v2
+              test ! -e /opt/kata/runtime-rs/bin/containerd-shim-kata-v2
+              test ! -e /usr/local/bin/firecracker
+              test ! -e /usr/local/bin/virtiofsd
+              test ! -e /opt/firecracker/vmlinux
+              test ! -e /opt/firecracker/initrd.img
+              test ! -e /usr/local/bin/runc
+              test ! -e /usr/local/bin/runc-shim
+            '
 
       - name: Start standalone AKernel
         run: |
           IMAGE="akernel-ci/all-in-one:${GITHUB_SHA}" \
             AKERNEL_NAT_BACKEND=iptables \
             ./deploy/standalone/start.sh
+
+      - name: Verify PID 1 detects its container
+        run: |
+          docker exec akernel-node bash -euo pipefail -c '
+            tr "\0" "\n" < /proc/1/environ | grep -x "container=oci"
+            test "$(cat /run/systemd/container)" = oci
+            systemd-detect-virt --container
+          '
 
       - name: Run SDK end-to-end examples
         run: |
@@ -163,7 +225,13 @@ jobs:
           )
           for example in "${examples[@]}"; do
             echo "=== Running ${example} ==="
-            timeout 120s python "sdk/python/examples/${example}"
+            example_timeout=120
+            if [[ "${example}" == "dockerfile_launch.py" ]]; then
+              # This example creates fresh sandboxes across nine sections.
+              example_timeout=600
+            fi
+            timeout --kill-after=30s "${example_timeout}s" \
+              python -u "sdk/python/examples/${example}"
           done
 
       - name: Run runsc checkpoint reload E2E
@@ -196,6 +264,18 @@ jobs:
             echo "=== akernel-node: service journal ==="
             docker exec akernel-node journalctl --no-pager -n 500 \
               -u sandboxd.service -u yuanrong.service || true
+            docker exec akernel-node bash -c '
+              shopt -s nullglob
+              for logfile in \
+                /home/akernel/logs/sandboxd/sandboxd*.log \
+                /home/yuanrong/logs/*function_master*.log \
+                /home/yuanrong/logs/*function_proxy*.log \
+                /home/yuanrong/logs/*function_agent*.log \
+                /home/akernel/sandboxd/image_manager/daemons/*/daemon.log; do
+                echo "=== ${logfile} ==="
+                tail -n 300 "${logfile}"
+              done
+            ' || true
           fi
 
       - name: Stop standalone AKernel
@@ -206,3 +286,104 @@ jobs:
           else
             docker rm -f akernel-node >/dev/null 2>&1 || true
           fi
+
+      - name: Export tested all-in-one image
+        id: export-image
+        if: >-
+          github.repository == 'inclusionAI/AKernel' &&
+          github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          source_image="akernel-ci/all-in-one:${GITHUB_SHA}"
+          image_id="$(docker image inspect "${source_image}" --format '{{.Id}}')"
+          echo "image-id=${image_id}" >> "${GITHUB_OUTPUT}"
+          docker save "${source_image}" | gzip -1 > "${RUNNER_TEMP}/all-in-one.tar.gz"
+
+      - name: Upload tested image for publication
+        id: upload-image
+        if: >-
+          github.repository == 'inclusionAI/AKernel' &&
+          github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tested-all-in-one-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/all-in-one.tar.gz
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+  publish-dockerhub:
+    name: Publish to Docker Hub
+    needs: standalone-e2e
+    if: >-
+      github.repository == 'inclusionAI/AKernel' &&
+      github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    concurrency:
+      # Retain the previous workflow's lock key while older runs finish.
+      group: ci-standalone-${{ github.ref }}
+      cancel-in-progress: false
+      queue: max
+
+    steps:
+      - name: Check whether main still needs this image
+        id: current-main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          main_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)"
+          if [[ "${main_sha}" == "${GITHUB_SHA}" ]]; then
+            echo "publish=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "Skipped latest: main has advanced to ${main_sha}." \
+              >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
+      - name: Download tested image
+        if: steps.current-main.outputs.publish == 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.standalone-e2e.outputs.artifact-id }}
+          path: ${{ runner.temp }}
+          merge-multiple: true
+
+      - name: Load and verify tested image
+        if: steps.current-main.outputs.publish == 'true'
+        env:
+          EXPECTED_IMAGE_ID: ${{ needs.standalone-e2e.outputs.image-id }}
+        run: |
+          docker load --input "${RUNNER_TEMP}/all-in-one.tar.gz"
+          actual_image_id="$(docker image inspect "akernel-ci/all-in-one:${GITHUB_SHA}" \
+            --format '{{.Id}}')"
+          test -n "${EXPECTED_IMAGE_ID}"
+          test "${actual_image_id}" = "${EXPECTED_IMAGE_ID}"
+
+      - name: Log in to Docker Hub
+        if: steps.current-main.outputs.publish == 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Publish tested all-in-one image
+        if: steps.current-main.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE_REPOSITORY: akerneldev/all-in-one
+        run: |
+          # Jobs can queue out of commit order, and old runs can be rerun.
+          # Check main before any push while holding the job lock. Publish
+          # only latest; superseded commits must not create registry tags.
+          main_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)"
+          if [[ "${main_sha}" != "${GITHUB_SHA}" ]]; then
+            echo "Skipped latest: main has advanced to ${main_sha}." \
+              >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+
+          source_image="akernel-ci/all-in-one:${GITHUB_SHA}"
+          docker tag "${source_image}" "${IMAGE_REPOSITORY}:latest"
+          docker push "${IMAGE_REPOSITORY}:latest"
+          echo "Published ${IMAGE_REPOSITORY}:latest from ${GITHUB_SHA}" \
+            >> "${GITHUB_STEP_SUMMARY}"

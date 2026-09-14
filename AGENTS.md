@@ -48,8 +48,11 @@ tunnels. The project overview and deployment quick start are in
 The open-source AKernel repository contains the SDK, deployment configuration,
 build tooling, and examples. Node runtime components such as `sandboxd` and
 `distill-fs` are maintained in their own upstream repositories and pinned as
-Git submodules. The all-in-one build compiles those revisions and packages the
-runtime payloads described in the Build section below.
+Git submodules. The all-in-one build compiles sandboxd and downloads the
+checksum-pinned static distill-fs release recorded in
+`builder/distill-fs-versions.env`. The distill-fs submodule is an optional
+source reference, not a build input. See the Build section below for runtime
+payloads.
 
 ## Common Commands
 
@@ -123,13 +126,11 @@ runtimes and `openyuanrong_sdk`. `builder/node.Dockerfile` then compiles the
 node components and produces the AKernel all-in-one image using the selected
 runtime image and its matching service configuration.
 
-The image also builds Edge, Node Proxy and the forwarding helper from a
-checksum-pinned YuanRong source archive with its Cargo lockfile; their binaries
-are installed under `data_plane/bin` for the Go CLI. The default Core wheel
-and data-plane source are pinned to the matching YuanRong `2b54c26885c6`
-build so the Core package includes Node Proxy address
-registration and Edge process scripts. The RRT binary and sandbox SDK retain
-their matching `0.10.2rc2` command protocol.
+The image installs Edge, Node Proxy and the forwarding helper from the
+checksum-pinned data-plane wheel under `data_plane/bin` for the Go CLI.
+Core, data plane, RRT and the sandbox SDK use YuanRong release `0.10.3rc1`.
+The Core package includes Node Proxy address registration and Edge process
+scripts; the data-plane wheel supplies their matching executables.
 
 The control-plane and RRT release version is independent of the optional
 actor-based `openyuanrong_sdk` installed in the Python runtime profile. This
@@ -137,12 +138,18 @@ actor backend is deprecated and retained only for compatibility with existing
 applications. Keep it on its explicitly pinned legacy version; do not advance
 it with the default `openyuanrong-sandbox` backend or use it for new features.
 
-Initialize submodules with `git submodule update --init --recursive` before
+Initialize sandboxd with `git submodule update --init src/sandboxd` before
 building. The all-in-one image builds the sandboxd binaries, including
-`firecracker-agent`, and `distill_fs`; installs checksum-pinned gVisor and Kata
+`firecracker-agent`; installs checksum-pinned static distill-fs, gVisor, and Kata
 artifacts; installs the Firecracker VMM and guest kernel; and constructs the
 matching guest-agent initrd. Runc remains build-time optional, and
 `AKERNEL_ENABLE_FIRECRACKER=false` excludes the Firecracker payload.
+
+AKernel builds virtiofsd 1.14.0 from the pinned source commit and release
+Cargo.lock in `builder/node.Dockerfile`. Keep its shared-library dependencies
+and licenses packaged with the Firecracker payload. Both standalone and Helm
+enable read-only virtio-fs by default; disabling the Firecracker image payload
+also excludes virtiofsd.
 
 The sandboxd submodule's runtime manifest is the source of truth for the
 gVisor and Firecracker releases used by both sandboxd E2E and AKernel
@@ -151,14 +158,24 @@ pins it rather than overriding manifest fields from the AKernel build. Keep
 sandboxd's pooled-TAP contract and the matching gVisor compatibility patches
 validated together when upgrading.
 
-The submodule gitlinks are the single source of truth for the sandboxd and
-distill-fs revisions included in a clean release. `make build` always compiles
-the local submodule worktrees, so developers may check out a different commit
-or edit either directory and rebuild without pushing first. Each component
-maintains and embeds its own semantic version: sandboxd uses
-`version/VERSION`, while distill-fs uses the package version in `Cargo.toml`.
-AKernel does not inject parent-repository version metadata into component
-compilation.
+The sandboxd gitlink fixes the source revision compiled by `make build`.
+AKernel's `builder/distill-fs-versions.env` fixes the distill-fs release URL
+and SHA-256. `make build` compiles the local sandboxd worktree and consumes the
+static distill-fs release through `builder/scripts/install-distill-fs.sh`; editing
+`src/distill-fs` no longer affects the image. The installer verifies the archive,
+provenance, version, binary hash, and static ELF contract, and packages its
+licenses and manifest under `/usr/local/share/distill-fs`.
+
+Publish and verify a distill-fs release before updating the AKernel manifest
+pin. This dependency does not require a sandboxd source or gitlink change.
+Never use a guessed checksum or silently fall back to a source build.
+Missing or invalid release pins prevent builds. `make versions` reports the
+release tag and archive digest without requiring the distill-fs submodule.
+
+Each component embeds its own semantic version: sandboxd uses
+`version/VERSION`, while distill-fs uses its release package version in
+`Cargo.toml`. AKernel does not inject parent-repository version metadata into
+component compilation.
 
 To test an unreleased openYuanRong core wheel without rebuilding YuanRong,
 provide both `OPEN_YR_CORE_WHEEL_URL` and `OPEN_YR_CORE_WHEEL_SHA256` to
@@ -177,7 +194,8 @@ make versions
 
 The final image uses standard OCI labels for the AKernel version and revision.
 Component semantic versions are reported by their binaries, and their exact
-source revisions are traceable through the AKernel commit's submodule gitlinks.
+source revisions are traceable through the sandboxd gitlink and the pinned
+distill-fs release's packaged manifest.
 
 ## Deploy
 
@@ -195,8 +213,18 @@ The monitor chart provisions data-plane and process-resource dashboards. See
 through Edge, and metric interpretation. The image startup helper must respect
 an explicit `YR_DATA_PLANE_EDGE_FRONTEND_PROXY_ROUTES_FILE` mounted by Helm.
 
+The all-in-one image and node launchers declare lowercase `container=oci`
+for PID 1 systemd. Preserve this in the final image, Helm node environment,
+and standalone launcher: without container detection, privileged systemd
+shutdown can remount shared host filesystems read-only. See
+[`deploy/README.md#systemd-container-identity`](./deploy/README.md#systemd-container-identity)
+for deployment implications.
+
 Aliyun's aggregate Pod PID budget is configurable independently of the
 per-sandbox limit; see `deploy/terraform/aliyun/README.md#pod-pid-budget`.
+Aliyun and Huawei default AKernel node pools also configure host PID/thread
+ceilings and container scope TasksMax. Keep this separate from extra and
+Dragonfly pools, and verify running Pod ancestors after existing-node migration.
 
 For guided cloud deployment:
 
@@ -217,16 +245,23 @@ scheduling with a no-resource error when no eligible node exists. Do not treat
 a configured runtime as an advertised runtime.
 
 Firecracker supports commands, files, PTYs, network policies, published ports,
-reverse tunnels, read-only EROFS image roots and mounts, explicit `storage_mb`
-quotas, and recovery across sandboxd restarts. Its root and filesystem image
-mounts must be local or image-provider-backed regular EROFS files. It rejects
-OCI/Nydus directory roots, directory mounts, writable live host binds, NVIDIA
-GPUs, and nested KVM rather than weakening their semantics.
+reverse tunnels, EROFS roots and mounts, OCI/Nydus directory roots and read-only
+host directory mounts through virtio-fs, explicit `storage_mb` quotas, and
+recovery across sandboxd restarts. OCI image mounts, writable live host binds,
+NVIDIA GPUs, and nested KVM remain unsupported.
 
 Do not add Firecracker-specific directory conversion, image caching, or
-artifact reference counting to sandboxd or its image manager. Build EROFS
-before sandbox creation and distribute it through the existing local or S3
-imagefile paths. The bundled default runtime root already follows this model.
+artifact reference counting to sandboxd or its image manager. Consume OCI/Nydus
+directories directly from the image manager through read-only virtio-fs.
+Explicit local/S3 imagefile roots and mounts must already be EROFS. The bundled
+default runtime root also remains EROFS; sandbox writes use a private ext4 disk.
+
+The bundled Firecracker writable disk policy is `AsyncDirect` with `Writeback`.
+Validate io_uring and `STATX_DIOALIGN` on the target host and filestore; use an
+explicit `Async` or `Sync` policy on incompatible hosts, never silent fallback.
+Keep standalone and Helm defaults synchronized. Drain before upgrading the
+runtime stack: checkpoint compatibility includes VMM, kernel, initrd, and
+virtiofsd digests, and restores retain the saved writable I/O engine.
 
 Runc is excluded from default image builds and from the default advertised
 runtime set. Guided cloud profiles use `make config ENABLE_RUNC=true`; this
@@ -504,6 +539,45 @@ are not part of the default test suite.
 
 ## Release
 
+The CI workflow builds the public Linux/amd64 all-in-one image with only
+gVisor runsc and the `rrt` runtime profile. It explicitly sets
+`AKERNEL_ENABLE_KATA=false`, `AKERNEL_ENABLE_FIRECRACKER=false`, and
+`AKERNEL_ENABLE_RUNC=false`, excluding VM payloads and virtiofsd. Source-build
+defaults still include Kata and Firecracker for operators who need them.
+After SDK checks, distribution validation, deployment syntax checks, and
+standalone runsc E2E pass, pushes to `main` in `inclusionAI/AKernel` publish
+that tested image only as `akerneldev/all-in-one:latest`. PRs and forks never
+publish. Check that the commit is still the current `main` head before any
+push; superseded commits and reruns of older commits skip publication
+entirely. Do not publish per-commit SHA tags or other historical image tags.
+The job checks the image contains runsc and excludes Kata, Firecracker,
+virtiofsd, and runc before starting standalone E2E.
+
+CI runs examples with unbuffered Python output. Ordinary examples have a
+120-second limit; `dockerfile_launch.py` gets 600 seconds for its nine
+sections. Its core startup script uses the Ubuntu base image's shell and
+does not install packages. Keep its RUN, context-transfer, and startup checks
+independent of external package mirrors.
+
+Configure the repository Actions variable `DOCKERHUB_USERNAME` and secret
+`DOCKERHUB_TOKEN` with Docker Hub credentials that can push to
+`akerneldev/all-in-one`. Keep credentials out of source and logs. Main CI runs
+are not canceled by subsequent pushes. After E2E and teardown succeed on
+upstream main, the standalone job exports the tested image as a compressed
+Actions artifact retained for one day. The separate `publish-dockerhub` job
+downloads that exact artifact by ID, loads it, and verifies its image ID
+against the E2E job output before publishing. PRs and forks skip image
+transfer and publication. Do not rebuild the image in the publishing job.
+
+The publishing job serializes publication using `queue: max` (up to 100
+pending jobs), so a slow or rerun job cannot overwrite a newer published
+`latest`. Keep its existing lock key to coordinate with older workflow runs.
+Check main before downloading and again immediately before pushing while
+holding this lock. Do not remove the main-head check or the publication lock.
+A failed check or push leaves the run failed. Rerun the failed publishing job
+while the artifact is available; after it expires, rerun all jobs to rebuild
+and retest the image.
+
 Python SDK releases use stable `vX.Y.Z` tags or release-candidate
 `vX.Y.ZrcN` tags. The tag version must match the version in
 `sdk/python/pyproject.toml`, and the tagged commit must be part of `main`.
@@ -512,6 +586,11 @@ Publishing a GitHub Release runs
 the wheel and source distribution, and publishes them through the PyPI trusted
 publisher configured for the `pypi` GitHub environment. Do not add a PyPI
 password or API token to the repository.
+
+PR CI and publishing share `.github/actions/python-distributions`, which
+builds the wheel and source distribution and installs each in a separate clean
+environment with its declared dependencies. Keep dependency validation,
+isolated imports, version checks, and CLI smoke tests in this shared action.
 
 ## Test
 
@@ -554,6 +633,13 @@ python sdk/python/benchmarks/sandbox_pressure.py \
 python sdk/python/benchmarks/sandbox_pressure.py \
   --xpu gpu:a10:1 --storage-mb 256 --processes 1 --threads 1
 ```
+
+Set `AKERNEL_TEST_IMAGE=ubuntu:24.04` with `AKERNEL_TEST_RUNTIME=firecracker`
+to run integration and reload coverage against an OCI/Nydus image root. This
+also verifies that two sandboxes using the same image have private writes.
+Test both an ordinary OCI image and a Nydus image resolved through the deployed
+image manager. The pinned distill-fs supports RAFS v5; use
+`nydusify convert --fs-version 5` when preparing Nydus test images.
 
 ## Maintenance Rules
 

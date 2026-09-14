@@ -102,6 +102,10 @@ spec:
         - name: NODE_PROXY_ALLOWED_EDGE_CIDRS
           value: {{ required "dataPlane.nodeProxy.allowedEdgeCIDRs is required" .Values.dataPlane.nodeProxy.allowedEdgeCIDRs | quote }}
         {{- end }}
+
+        # Required for systemd shutdown safety, including with older images.
+        - name: container
+          value: "oci"
         - name: AKERNEL_ROLE
           value: "node"
         - name: RUNSC_AKERNEL
