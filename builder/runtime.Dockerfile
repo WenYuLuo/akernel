@@ -9,14 +9,14 @@ ARG PYTHON_311_VERSION=3.11.13
 ARG PYTHON_312_VERSION=3.12.11
 ARG PYTHON_313_VERSION=3.13.5
 ARG PYTHON_314_VERSION=3.14.6
-ARG OPEN_YR_VERSION=0.10.2rc4
+ARG OPEN_YR_VERSION=0.10.2rc6
 ARG OPEN_YR_LEGACY_SDK_VERSION=0.9.9
 
 FROM ${AKERNEL_RUNTIME_BASE_IMAGE} AS rrt-download
 
 ARG OPEN_YR_VERSION
-ARG RRT_RUNTIME_URL=https://openyuanrong.obs.cn-southwest-2.myhuaweicloud.com/release/${OPEN_YR_VERSION}/linux/amd64/rrt-runtime-amd64
-ARG RRT_RUNTIME_SHA256=38844a96e7b641e1200afd907fa25611dd5afbae77c763bd812191cb7e6348bf
+ARG RRT_RUNTIME_URL=https://github.com/openYuanrong-mirror/yuanrong/releases/download/${OPEN_YR_VERSION}/rrt-runtime-amd64
+ARG RRT_RUNTIME_SHA256=62113fca0ce0a56adf6906c653da562985a723efd7981dc10c8f0f1083c78a89
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates curl && \

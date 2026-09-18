@@ -113,7 +113,8 @@ if [  "x${AKS_LOCAL_MODE}" == "xtrue" ]; then
         --snapshot_storage_mode local_only \
         --checkpoint_dir "${CHECKPOINT_DIR}" \
         --enable_sandbox_router true \
-        --enable_direct_routing false
+        --enable_direct_routing false \
+        --advertise_frontend_proxy_create true
 else
     /usr/bin/yr start \
         --ip_address "${YR_NODE_IP}" \
@@ -149,6 +150,7 @@ else
         --log_expiration_max_file_count 50 \
         --function_proxy_merge_process_enable true \
         --enable_direct_routing false \
+        --advertise_frontend_proxy_create false \
         --force_low_reliability_instance true \
         --snapshot_storage_mode local_only \
         --checkpoint_dir "${CHECKPOINT_DIR}" \

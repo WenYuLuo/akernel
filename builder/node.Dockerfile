@@ -9,12 +9,12 @@ ARG AKERNEL_ENABLE_KATA=true
 ARG AKERNEL_ENABLE_RUNC=false
 ARG AKERNEL_ENABLE_FIRECRACKER=true
 ARG SANDBOXD_BUILD_IMAGE=golang:1.25.5-bookworm
-ARG OPEN_YR_VERSION=0.10.2rc4
+ARG OPEN_YR_VERSION=0.10.2rc6
 ARG OPEN_YR_CORE_WHEEL_URL=
 ARG OPEN_YR_CORE_WHEEL_SHA256=
-ARG OPEN_YR_RELEASE_BASE_URL=https://openyuanrong.obs.cn-southwest-2.myhuaweicloud.com/release
-ARG OPEN_YR_CORE_AMD64_SHA256=94d44bd0def2bb18f87ae15cc4c054baf6685b2d5618049bcd1e6228bdbae028
-ARG OPEN_YR_CORE_ARM64_SHA256=51847a27825d6aa7e9a37e96c7ec7d3b7baf58eb5749d6db95b713d4d89d6f59
+ARG OPEN_YR_RELEASE_BASE_URL=https://github.com/openYuanrong-mirror/yuanrong/releases/download
+ARG OPEN_YR_CORE_AMD64_SHA256=4dda061daf1628b03af559dd114571998490b9dad826cb3e2dee9326a86aa4f7
+ARG OPEN_YR_CORE_ARM64_SHA256=bb83a66368168111bbd88af71f9fe009c9aef0ea0b87b38d3f47277f0f678f58
 ARG GVISOR_DOWNLOAD_IMAGE=ubuntu:24.04
 ARG GVISOR_RELEASE
 ARG GVISOR_AMD64_URL
@@ -330,7 +330,7 @@ RUN set -eux; \
       *) echo "unsupported openYuanRong target architecture: ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
     wheel_name="openyuanrong_core-${OPEN_YR_VERSION}-py3-none-manylinux_2_31_${wheel_arch}.whl"; \
-    wheel_url="${OPEN_YR_RELEASE_BASE_URL}/${OPEN_YR_VERSION}/linux/${wheel_platform}/${wheel_name}"; \
+    wheel_url="${OPEN_YR_RELEASE_BASE_URL}/${OPEN_YR_VERSION}/${wheel_name}"; \
     wheel_sha="${release_sha}"; \
     if [ -n "${OPEN_YR_CORE_WHEEL_URL}" ]; then \
       test -n "${OPEN_YR_CORE_WHEEL_SHA256}"; \

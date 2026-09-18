@@ -68,6 +68,20 @@ if [ ! -x "${YR_BIN}" ]; then
     exit 1
 fi
 
+case "${AKERNEL_ROLE:-master}" in
+    master)
+        advertise_frontend_proxy_create_default=true
+        ;;
+    frontend)
+        advertise_frontend_proxy_create_default=true
+        ;;
+    *)
+        echo "unsupported AKERNEL_ROLE for master entrypoint: ${AKERNEL_ROLE}" >&2
+        exit 1
+        ;;
+esac
+ADVERTISE_FRONTEND_PROXY_CREATE="${ADVERTISE_FRONTEND_PROXY_CREATE:-${advertise_frontend_proxy_create_default}}"
+
 exec "${YR_BIN}" start --master --block true \
     -e -c 0 -m 8000 -s 4096 -n $HOSTNAME \
     -d $DEPLOY_PATH \
@@ -110,5 +124,6 @@ exec "${YR_BIN}" start --master --block true \
     --iam_local_listen_port 31113 \
     --iam_local_ip 127.0.0.1 \
     --enable_direct_routing false \
+    --advertise_frontend_proxy_create "${ADVERTISE_FRONTEND_PROXY_CREATE}" \
     --enable_sandbox_router true \
     ${META_SERVICE_ADDRESS:+--meta_service_address $META_SERVICE_ADDRESS}
