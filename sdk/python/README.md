@@ -646,7 +646,9 @@ for node in resources():
 
 Accelerators appear under keys such as `GPU/l20`. Capacity is the total card
 count and allocatable is the currently free count. `ak resources` renders the
-same information as, for example, `gpu/l20 1/4`.
+same information as, for example, `gpu/l20 1/4`. Its status column renders only
+normal nodes as `OK`; unavailable states remain explicit as `EVICTING`,
+`RECOVERING`, or `TO_BE_DELETED`.
 
 Use a context manager or call `kill()` in a `finally` block. The SDK does not
 delete sandboxes during garbage collection or interpreter exit. Cleanup failures

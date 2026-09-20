@@ -143,6 +143,32 @@ def _fmt_xpu(capacity: dict[str, float], allocatable: dict[str, float]) -> str:
     return ", ".join(values) or "-"
 
 
+_NODE_STATUS_NAMES = {
+    0: "OK",
+    1: "EVICTING",
+    2: "RECOVERING",
+    3: "TO_BE_DELETED",
+}
+
+
+def _fmt_node_status(value: object) -> str:
+    """Render YuanRong resource-unit states without hiding unavailable nodes."""
+
+    if isinstance(value, bool):
+        return str(value)
+    if isinstance(value, int):
+        return _NODE_STATUS_NAMES.get(value, str(value))
+    if isinstance(value, str):
+        text = value.strip()
+        normalized = text.upper().replace("-", "_")
+        if normalized == "NORMAL":
+            return "OK"
+        if normalized in _NODE_STATUS_NAMES.values():
+            return normalized
+        return text or "-"
+    return "-" if value is None else str(value)
+
+
 def handle_resources(debug: bool = False):
     """Query cluster resource information and display in table format."""
     try:
@@ -194,8 +220,10 @@ def handle_resources(debug: bool = False):
     rows = []
     for u in units:
         nid = u.get("id", "-")
-        status_val = u.get("status", 0)
-        st = "OK" if status_val == 0 else str(status_val)
+        # Protobuf JSON omits the default enum value. YuanRong defines
+        # NORMAL as zero, so an absent status is a normal node rather than an
+        # unknown state.
+        st = _fmt_node_status(u.get("status", 0))
 
         capacity = _extract_resources(u.get("capacity", {}))
         allocatable = _extract_resources(u.get("allocatable", {}))
