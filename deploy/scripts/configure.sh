@@ -31,6 +31,7 @@ image_tag_override=""
 install_monitor_override=""
 install_dragonfly_override=""
 enable_runc_override=""
+schedule_placement_policy_override=""
 grafana_public_access_override=""
 grafana_admin_password_override=""
 iam_seed_hex_override=""
@@ -121,6 +122,10 @@ while [[ $# -gt 0 ]]; do
       enable_runc_override="$2"
       shift 2
       ;;
+    --schedule-placement-policy)
+      schedule_placement_policy_override="$2"
+      shift 2
+      ;;
     --grafana-public-access)
       grafana_public_access_override="$2"
       shift 2
@@ -183,6 +188,19 @@ normalize_bool() {
   esac
 }
 
+normalize_schedule_placement_policy() {
+  local policy
+  policy="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  case "${policy}" in
+    binpack | spread)
+      printf '%s' "${policy}"
+      ;;
+    *)
+      die "invalid schedule placement policy: $1 (expected binpack or spread)"
+      ;;
+  esac
+}
+
 default_tag="$(git -C "${AKERNEL_REPO_ROOT}" rev-parse --short HEAD)-$(date +%Y%m%d%H%M%S)"
 default_cluster_name="akernel"
 if [[ "${env_name}" != "default" ]]; then
@@ -221,6 +239,9 @@ set_or_prompt image_tag "All-in-one image tag" "${default_tag}" "${image_tag_ove
 set_or_prompt install_monitor "Install monitor chart (true/false)" "true" "${install_monitor_override}"
 set_or_prompt install_dragonfly "Install Dragonfly and dedicated node pools (true/false)" "false" "${install_dragonfly_override}"
 set_or_prompt enable_runc "Enable the optional runc runtime (true/false)" "false" "${enable_runc_override}"
+set_or_prompt schedule_placement_policy \
+  "YuanRong schedule placement policy (binpack/spread)" "spread" \
+  "${schedule_placement_policy_override}"
 set_or_prompt grafana_public_access "Expose Grafana LoadBalancer (true/false)" "true" "${grafana_public_access_override}"
 set_or_prompt grafana_admin_password \
   "Grafana admin password (empty to generate)" "" \
@@ -231,6 +252,7 @@ fi
 install_monitor="$(normalize_bool "${install_monitor}")"
 install_dragonfly="$(normalize_bool "${install_dragonfly}")"
 enable_runc="$(normalize_bool "${enable_runc}")"
+schedule_placement_policy="$(normalize_schedule_placement_policy "${schedule_placement_policy}")"
 grafana_public_access="$(normalize_bool "${grafana_public_access}")"
 
 dir="$(state_dir "${env_name}")"
@@ -352,6 +374,7 @@ grafana_admin_password = "${grafana_admin_password}"
 
 install_dragonfly = ${install_dragonfly}
 enable_runc       = ${enable_runc}
+schedule_placement_policy = "${schedule_placement_policy}"
 EOF
     ;;
   huaweicloud)
@@ -406,6 +429,7 @@ grafana_admin_password = "${grafana_admin_password}"
 
 install_dragonfly = ${install_dragonfly}
 enable_runc       = ${enable_runc}
+schedule_placement_policy = "${schedule_placement_policy}"
 EOF
     ;;
 esac
@@ -427,6 +451,7 @@ CORE_NAMESPACE=akernel
 MONITOR_NAMESPACE=akernel-monitor
 INSTALL_DRAGONFLY=${install_dragonfly}
 AKERNEL_ENABLE_RUNC=${enable_runc}
+SCHEDULE_PLACEMENT_POLICY=${schedule_placement_policy}
 EOF
 
 chmod 600 "${tfvars_file}" "${config_file}"

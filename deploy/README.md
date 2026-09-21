@@ -241,6 +241,33 @@ image:
 Each component can still override `master.image`, `frontend.image`, or
 `node.image` when a split-image deployment is required.
 
+### Sandbox placement policy
+
+YuanRong's native default is `binpack`, but AKernel explicitly defaults to
+`spread` so new sandboxes are distributed across eligible nodes. To compact
+placements onto fewer nodes instead, set the core chart value:
+
+```yaml
+core:
+  master:
+    schedulePlacementPolicy: binpack
+```
+
+When installing the core chart directly, omit the `core` wrapper. Terraform
+deployments use `schedule_placement_policy = "binpack"`. Guided profiles accept
+the same choice with:
+
+```bash
+make config SCHEDULE_PLACEMENT_POLICY=binpack
+```
+
+Only `binpack` and `spread` are accepted. Changing the policy requires the
+master and node workloads to restart. The policy is passed to the master
+scheduler; node proxies advertise frontend create only for `spread`, while
+`binpack` keeps creation on the frontend. It affects subsequent placements and
+does not move running sandboxes. Standalone always enables local frontend
+create and does not expose a cluster placement setting.
+
 ### Public Traefik entrypoints
 
 For cloud deployments, use Traefik with two public entrypoints:

@@ -7,6 +7,19 @@ ulimit -n 32768
 export YR_RUNTIME_BACKEND=sandboxd
 export YR_IMAGE_PROCESS_CONFIG="${YR_IMAGE_PROCESS_CONFIG:-/run/akernel/yr-image-process.json}"
 
+case "${SCHEDULE_PLACEMENT_POLICY:-spread}" in
+    spread)
+        ADVERTISE_FRONTEND_PROXY_CREATE=true
+        ;;
+    binpack)
+        ADVERTISE_FRONTEND_PROXY_CREATE=false
+        ;;
+    *)
+        echo "SCHEDULE_PLACEMENT_POLICY must be binpack or spread" >&2
+        exit 1
+        ;;
+esac
+
 resolve_node_ip() {
     local default_device
     local node_ip
@@ -150,7 +163,7 @@ else
         --log_expiration_max_file_count 50 \
         --function_proxy_merge_process_enable true \
         --enable_direct_routing false \
-        --advertise_frontend_proxy_create false \
+        --advertise_frontend_proxy_create "${ADVERTISE_FRONTEND_PROXY_CREATE}" \
         --force_low_reliability_instance true \
         --snapshot_storage_mode local_only \
         --checkpoint_dir "${CHECKPOINT_DIR}" \

@@ -102,6 +102,7 @@ locals {
     etcd_image_tag                 = var.etcd_image_tag
     master_image_repository        = var.master_image_repository
     master_image_tag               = var.master_image_tag
+    schedule_placement_policy      = var.schedule_placement_policy
     node_image_repository          = var.node_image_repository
     node_image_tag                 = var.node_image_tag
     traefik_image_repository       = var.traefik_image_repository

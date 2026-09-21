@@ -34,6 +34,7 @@ etcd:
 
 master:
   replicas: ${master_replicas}
+  schedulePlacementPolicy: "${schedule_placement_policy}"
   image:
     repository: "${master_image_repository}"
     tag: "${master_image_tag}"

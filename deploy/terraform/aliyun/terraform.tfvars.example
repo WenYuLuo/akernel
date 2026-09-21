@@ -176,6 +176,9 @@ node_secret_create = true
 # matching AKERNEL_ENABLE_RUNC=true profile setting.
 enable_runc = false
 
+# AKernel defaults YuanRong placement to "spread"; use "binpack" to compact.
+schedule_placement_policy = "spread"
+
 # --- Monitor ---
 install_monitor        = true
 monitor_namespace      = "akernel-monitor"
