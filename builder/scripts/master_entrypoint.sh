@@ -81,12 +81,22 @@ case "${AKERNEL_ROLE:-master}" in
         ;;
 esac
 ADVERTISE_FRONTEND_PROXY_CREATE="${ADVERTISE_FRONTEND_PROXY_CREATE:-${advertise_frontend_proxy_create_default}}"
+SCHEDULE_PLACEMENT_POLICY="${SCHEDULE_PLACEMENT_POLICY:-spread}"
+case "${SCHEDULE_PLACEMENT_POLICY}" in
+    binpack|spread)
+        ;;
+    *)
+        echo "SCHEDULE_PLACEMENT_POLICY must be binpack or spread" >&2
+        exit 1
+        ;;
+esac
 
 exec "${YR_BIN}" start --master --block true \
     -e -c 0 -m 8000 -s 4096 -n $HOSTNAME \
     -d $DEPLOY_PATH \
     --fs_health_check_retry_interval 1 \
     --schedule_relaxed 20 \
+    --schedule_placement_policy "${SCHEDULE_PLACEMENT_POLICY}" \
     --enable_faas_frontend ${ENABLE_FAAS_FRONTEND:-true} \
     --enable_function_scheduler ${ENABLE_FUNCTION_SCHEDULER:-false} \
     --enable_meta_service ${ENABLE_META_SERVICE:-true} \

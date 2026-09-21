@@ -1,3 +1,7 @@
+{{- $schedulePlacementPolicy := .Values.master.schedulePlacementPolicy | default "spread" -}}
+{{- if not (has $schedulePlacementPolicy (list "binpack" "spread")) -}}
+{{- fail "master.schedulePlacementPolicy must be binpack or spread" -}}
+{{- end -}}
 {{- if .Values.kruise.enabled }}
 apiVersion: apps.kruise.io/v1alpha1
 {{- else }}
@@ -79,6 +83,8 @@ spec:
           env:
             - name: AKERNEL_ROLE
               value: "master"
+            - name: SCHEDULE_PLACEMENT_POLICY
+              value: {{ $schedulePlacementPolicy | quote }}
             {{- if .Values.frontend.enabled }}
             - name: ENABLE_FAAS_FRONTEND
               value: "false"

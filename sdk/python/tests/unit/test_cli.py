@@ -22,6 +22,25 @@ from akernel_sdk._addresses import Endpoint
 
 
 class CliTest(unittest.TestCase):
+    def test_node_status_only_reports_normal_as_ok(self):
+        expected = {
+            0: "OK",
+            1: "EVICTING",
+            2: "RECOVERING",
+            3: "TO_BE_DELETED",
+            9: "9",
+            "normal": "OK",
+            "evicting": "EVICTING",
+            "recovering": "RECOVERING",
+            "to-be-deleted": "TO_BE_DELETED",
+            "future-state": "future-state",
+            None: "-",
+        }
+
+        for status, rendered in expected.items():
+            with self.subTest(status=status):
+                self.assertEqual(cli._fmt_node_status(status), rendered)
+
     def test_resources_display_xpu_allocatable_and_capacity(self):
         output = io.StringIO()
         response = {
@@ -29,6 +48,7 @@ class CliTest(unittest.TestCase):
                 "fragment": {
                     "node-1": {
                         "id": "node-1",
+                        "status": 1,
                         "capacity": {
                             "resources": {
                                 "CPU": {"scalar": {"value": 4000}},
@@ -63,7 +83,22 @@ class CliTest(unittest.TestCase):
                                 },
                             }
                         },
-                    }
+                    },
+                    "node-2": {
+                        "id": "node-2",
+                        "capacity": {
+                            "resources": {
+                                "CPU": {"scalar": {"value": 2000}},
+                                "Memory": {"scalar": {"value": 4096}},
+                            }
+                        },
+                        "allocatable": {
+                            "resources": {
+                                "CPU": {"scalar": {"value": 2000}},
+                                "Memory": {"scalar": {"value": 4096}},
+                            }
+                        },
+                    },
                 }
             }
         }
@@ -74,6 +109,8 @@ class CliTest(unittest.TestCase):
             cli.handle_resources()
 
         self.assertIn("XPU", output.getvalue())
+        self.assertIn("EVICTING", output.getvalue())
+        self.assertIn("OK", output.getvalue())
         self.assertIn("gpu/l20 1/2", output.getvalue())
 
     def test_delete_uses_frontend_actor_api(self):

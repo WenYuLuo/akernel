@@ -337,6 +337,17 @@ variable "sandboxd_nat_backend" {
   default     = "iptables"
 }
 
+variable "schedule_placement_policy" {
+  type        = string
+  description = "YuanRong Unit scheduler placement policy. AKernel defaults to spread; use binpack for compact placement."
+  default     = "spread"
+
+  validation {
+    condition     = contains(["binpack", "spread"], var.schedule_placement_policy)
+    error_message = "schedule_placement_policy must be binpack or spread."
+  }
+}
+
 variable "enable_runc" {
   type        = bool
   description = "Request the optional runc runtime; the selected node image must be built with AKERNEL_ENABLE_RUNC=true."

@@ -1,3 +1,7 @@
+{{- $schedulePlacementPolicy := .Values.master.schedulePlacementPolicy | default "spread" -}}
+{{- if not (has $schedulePlacementPolicy (list "binpack" "spread")) -}}
+{{- fail "master.schedulePlacementPolicy must be binpack or spread" -}}
+{{- end -}}
 {{- if .Values.kruise.enabled }}
 apiVersion: apps.kruise.io/v1alpha1
 {{- else }}
@@ -87,6 +91,8 @@ spec:
           value: "/run/akernel"
         - name: YR_IMAGE_PROCESS_CONFIG
           value: {{ .Values.yuanrong.imageProcessConfig | default "/run/akernel/yr-image-process.json" | quote }}
+        - name: SCHEDULE_PLACEMENT_POLICY
+          value: {{ $schedulePlacementPolicy | quote }}
         - name: ETCD_ADDRESS
           value: {{ get $nodeEtcd "host" | default (printf "akernel-etcd.%s.svc.cluster.local" .Release.Namespace) | quote }}
         - name: ETCD_PORT
