@@ -128,6 +128,15 @@ export AKERNEL_SERVER_ADDRESS="<your-akernel-server-address>"
 export AKERNEL_TOKEN="<your-akernel-token>"
 ```
 
+For standalone deployment, read the generated key with
+`cat deploy/standalone/data/token`. For Terraform-managed Kubernetes, run
+`make token ENV=<env>` or `make print-env ENV=<env>` to read the current deployed
+key and obtain SDK exports. Direct Helm deployments can read `admin-key` from
+the `akernel-adx-tls` Secret. Keys are generated once and reused; see the
+[deployment guide](./deploy/README.md#read-and-rotate-the-administrator-key) and
+[standalone guide](./deploy/standalone/README.md#read-and-rotate-the-administrator-key)
+for retrieval and rotation.
+
 Use the SDK to create and interact with a sandbox:
 
 ```python

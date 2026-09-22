@@ -108,3 +108,32 @@ contained only `edge-public.pem` and `edge-public.key`:
 This image overlays the updated ADX control and gateway binaries on the reviewed
 checkpoint image. The formal #71 artifact pin still needs replacement with a
 release containing both changes. Custom OCI and live Kubernetes were not tested.
+
+## Deployment-owned keys and administrator rotation (2026-09-22)
+
+`start.sh` now creates the key before starting the container. The key is written
+atomically with mode 0600 and reused; `data/token` points to the current file.
+The independent certificate helper was removed. Public TLS initialization is
+part of the existing service script and does not create API keys.
+
+The validation started with a fresh data directory using the updated Master:
+
+- gVisor: 6 passed, 1 OCI case skipped (51.381 seconds).
+- Firecracker: 6 passed, 1 OCI case skipped (73.229 seconds).
+- After atomic key-file replacement and service restart, `data/token` read the
+  new key; the public resources API accepted it with HTTP 200 and rejected the
+  old key with HTTP 401. A second restart preserved both results.
+- Deployment checks: 22 tests passed; shell syntax checks passed. The mocked
+  Kubernetes retrieval test changed the Secret and verified `make token`'s
+  helper read the replacement and refreshed its protected output file.
+- ADX real Redis storage: 26 passed; RPC: 20 passed, including Master restart
+  with the unchanged key followed by replacement and old-key rejection.
+- Image: `akernel-adx-validation:admin-key`.
+- Image ID: `sha256:5f151ac9ed048174972e3025ecd75dc8e6e20e54b564d983079aaf8a2b4522ae`.
+- Remote log: `/var/log/akernel-admin-key-e2e.log`.
+- Local log: `out/pr/admin-key/e2e.log`.
+
+The image overlays task-built ADX binaries and AKernel startup scripts. It is
+not the formal #71 package. Its replacement remains necessary before normal
+packaged deployment. This round did not exercise live Kubernetes, custom OCI,
+Redis crash recovery or cache expiry with an uninterrupted ingress process.

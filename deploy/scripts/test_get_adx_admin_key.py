@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import base64
 import os
 from pathlib import Path
 import shutil
@@ -49,7 +50,7 @@ esac
             kubectl.write_text(
                 """#!/usr/bin/env bash
 [[ "$*" == *"-n test-ns get secret akernel-adx-tls"* ]] || exit 3
-printf '%s' 'YWR4LXRlc3QtYWRtaW4ta2V5'
+printf '%s' "$FAKE_SECRET"
 """
             )
             terraform.chmod(0o755)
@@ -60,6 +61,7 @@ printf '%s' 'YWR4LXRlc3QtYWRtaW4ta2V5'
                 os.environ,
                 PATH=f"{binaries}:{os.environ['PATH']}",
                 FAKE_KUBECONFIG=str(kubeconfig),
+                FAKE_SECRET="YWR4LXRlc3QtYWRtaW4ta2V5",
             )
             result = subprocess.run(
                 [
@@ -81,6 +83,10 @@ printf '%s' 'YWR4LXRlc3QtYWRtaW4ta2V5'
             self.assertEqual(result.stdout, "export AKERNEL_TOKEN=adx-test-admin-key\n")
             self.assertEqual(output.read_text(), "adx-test-admin-key\n")
             self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o600)
+            environment["FAKE_SECRET"] = base64.b64encode(b"rotated-admin-key").decode()
+            refreshed = subprocess.run([scripts / "get-adx-admin-key.sh", "--vendor", "aliyun", "--env", "test", "--write-file", output, "--print-export"], check=True, capture_output=True, text=True, env=environment)
+            self.assertEqual(refreshed.stdout, "export AKERNEL_TOKEN=rotated-admin-key\n")
+            self.assertEqual(output.read_text(), "rotated-admin-key\n")
 
 
 if __name__ == "__main__":

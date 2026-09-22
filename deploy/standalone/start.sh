@@ -526,6 +526,47 @@ show_status() {
     echo "  SDK token:     ${TOKEN_FILE}"
 }
 
+# Bootstrap credentials belong to deployment state, not certificate generation.
+configure_auth() {
+    python3 - "${DATA_DIR}" "${TOKEN_FILE}" <<'PYKEY'
+import os
+from pathlib import Path
+import secrets
+import sys
+import tempfile
+
+root, token = map(Path, sys.argv[1:])
+key = root / "adx/secrets/admin-key"
+key.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+if not key.exists():
+    value = token.read_text().strip() if token.is_file() else secrets.token_hex(32)
+    if not 32 <= len(value.encode()) <= 512:
+        raise SystemExit("deployment token must contain 32..512 bytes")
+    fd, temporary = tempfile.mkstemp(prefix=".admin-key-", dir=key.parent)
+    try:
+        with os.fdopen(fd, "w") as stream:
+            stream.write(value)
+            stream.flush()
+            os.fsync(stream.fileno())
+        try:
+            os.link(temporary, key)
+        except FileExistsError:
+            pass  # Another initializer already published the deployment key.
+    finally:
+        os.unlink(temporary)
+if not 32 <= len(key.read_text().strip().encode()) <= 512:
+    raise SystemExit("deployment admin-key must contain 32..512 bytes")
+os.chmod(key, 0o600)
+if not token.is_symlink() or token.resolve() != key.resolve():
+    link = token.with_name(".token-" + secrets.token_hex(8))
+    try:
+        link.symlink_to(os.path.relpath(key, token.parent))
+        os.replace(link, token)
+    finally:
+        link.unlink(missing_ok=True)
+PYKEY
+}
+
 main() {
     check_prerequisites
     cleanup_existing
@@ -534,15 +575,7 @@ main() {
     configure_gpu
     configure_network
     prepare_host_network_modules
-    # Keep the established token path, including a token from an earlier setup.
-    if [[ -s "${TOKEN_FILE}" && ! -L "${TOKEN_FILE}" ]]; then
-        if [[ ! -s "${DATA_DIR}/adx/secrets/admin-key" ]]; then
-            install -d -m 0700 "${DATA_DIR}/adx/secrets"
-            install -m 0600 "${TOKEN_FILE}" "${DATA_DIR}/adx/secrets/admin-key"
-        fi
-    elif [[ ! -e "${TOKEN_FILE}" && ! -L "${TOKEN_FILE}" ]]; then
-        ln -s adx/secrets/admin-key "${TOKEN_FILE}"
-    fi
+    configure_auth
     start_node_container
     wait_for_ready
     CONTROL_URL="https://${AKERNEL_ENDPOINT_HOST}:${AKERNEL_CONTROL_PORT}"

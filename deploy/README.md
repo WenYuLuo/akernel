@@ -234,6 +234,35 @@ RPC and worker forwarding use network mode without component certificates;
 keep these listeners within the deployment network. Node sessions, capsule
 ownership, tenant permissions and user API keys are still checked.
 
+### Read and rotate the administrator key
+
+Terraform-managed deployments use `make token ENV=<env>` or
+`make print-env ENV=<env>`. Each call reads the current Secret. For a directly
+installed Helm chart, retrieve it with:
+
+```bash
+export AKERNEL_TOKEN="$(kubectl -n akernel get secret akernel-adx-tls -o jsonpath='{.data.admin-key}' | base64 -d)"
+```
+
+Generate a replacement without changing the public HTTPS certificate, then
+restart the control Deployment so Master reads the mounted `key_file` again:
+
+```bash
+python3 -c 'import json,secrets; print(json.dumps({"stringData":{"admin-key":secrets.token_hex(32)}}))' \
+  | kubectl -n akernel patch secret akernel-adx-tls --type merge --patch-file /dev/stdin
+kubectl -n akernel rollout restart deployment/akernel-adx-control
+kubectl -n akernel rollout status deployment/akernel-adx-control
+```
+
+Read the new key again using the command above (or `make token`) and update SDK
+processes. The updated ADX Master atomically replaces its administrator key set
+and persistently revokes removed keys. Tenant keys are preserved. Old keys
+cannot be reused, even after restart. Existing ingress caches remain bounded by
+the configured authentication TTL (10 seconds here); in-flight requests and
+established streams are not canceled by rotation. Keep Redis data during rotation.
+This requires an ADX release containing administrator reconciliation; #71 does
+not contain it. The rollout procedure has not been validated on a live cluster.
+
 ### Install with managed Redis
 
 Managed mode is the default. It creates one Redis StatefulSet with AOF enabled,

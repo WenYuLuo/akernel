@@ -5,7 +5,6 @@ Wants=network-online.target sandboxd.service
 
 [Service]
 Type=simple
-ExecStartPre=/usr/local/bin/ensure-adx-certs
 ExecStart=/usr/local/bin/adx-service run
 ExecStop=/usr/local/bin/adx-service stop
 Restart=on-failure

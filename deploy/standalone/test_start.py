@@ -15,6 +15,36 @@ SCRIPT = Path(__file__).with_name("start.sh")
 
 
 class StartScriptTest(unittest.TestCase):
+    def test_deployment_generates_reuses_and_exposes_current_key(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            env = dict(os.environ, TEST_DATA=str(root))
+            command = f'source {SCRIPT}; DATA_DIR="$TEST_DATA"; TOKEN_FILE="$DATA_DIR/token"; configure_auth'
+            def initialize():
+                return subprocess.run(["bash", "-c", command], env=env, check=True, capture_output=True)
+            initialize()
+            key = root / "adx/secrets/admin-key"
+            token = root / "token"
+            original = key.read_text().strip()
+            self.assertRegex(original, r"^[0-9a-f]{64}$")
+            self.assertEqual(key.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(token.read_text().strip(), original)
+            initialize()
+            self.assertEqual(key.read_text().strip(), original)
+            rotated = "b" * 64
+            key.write_text(rotated)
+            initialize()
+            self.assertEqual(token.read_text(), rotated)
+
+    def test_deployment_keeps_existing_token(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "token").write_text("existing-token-" + "a" * 40)
+            subprocess.run(["bash", "-c", f'source {SCRIPT}; DATA_DIR="$TEST_DATA"; TOKEN_FILE="$DATA_DIR/token"; configure_auth'], env=dict(os.environ, TEST_DATA=str(root)), check=True, capture_output=True)
+            self.assertTrue((root / "token").is_symlink())
+            self.assertEqual((root / "token").read_text(), "existing-token-" + "a" * 40)
+
+
     def test_node_publishes_distinct_control_and_data_ports(self) -> None:
         script = SCRIPT.read_text(encoding="utf-8")
         self.assertIn(

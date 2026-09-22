@@ -215,8 +215,10 @@ export AKERNEL_SERVER_ADDRESS="127.0.0.1"
 export AKERNEL_TOKEN="$(cat data/token)"
 ```
 
-The public HTTPS certificate and API key are generated once under `data/adx/`
-and reused on restart. Internal components use network mode without mTLS;
+Before starting the container, `start.sh` generates the API key once at
+`data/adx/secrets/admin-key` (mode 0600) and makes `data/token` point to it.
+An existing deployment token is retained. The service startup separately
+initializes the public HTTPS certificate. Both are reused on restart. Internal components use network mode without mTLS;
 these listeners remain within the standalone container network. SDK address
 and token settings are unchanged.
 
@@ -225,6 +227,40 @@ This configuration requires the ADX internal-network-mode update; the current
 `data/token` points to the deployment token. Keep the data directory private.
 For custom host port mappings, use the additional gateway override printed by
 `start.sh`; the default deployment does not require it.
+
+### Read and rotate the administrator key
+
+Run these commands from `deploy/standalone/`:
+
+```bash
+cat data/token
+export AKERNEL_TOKEN="$(cat data/token)"
+```
+
+To rotate the administrator key, keep the data directory and Redis data, stop
+the deployment, replace the key atomically and restart with the same image:
+
+```bash
+./stop.sh
+(umask 077; python3 -c 'import secrets; print(secrets.token_hex(32))' > data/adx/secrets/.admin-key-new)
+mv data/adx/secrets/.admin-key-new data/adx/secrets/admin-key
+IMAGE="<your-current-image>" ./start.sh
+export AKERNEL_TOKEN="$(cat data/token)"
+```
+
+Master reads `key_file` at startup and atomically reconciles the configured
+administrator keys. Removed keys are revoked and cannot be reused; tenant keys
+are preserved. Do not restore a revoked old key as a rollback. SDK processes
+must reload `AKERNEL_TOKEN`. Existing ingress authentication caches can accept
+the old key until their TTL expires (10 seconds in this deployment); requests
+already in flight also remain subject to their RPC deadlines. Rotation does not
+terminate already established streams.
+
+For a staged transition, configure both old and new administrator key files in
+Master's `bootstrap_credentials`, restart Master, update clients, then remove
+the old entry and restart again. At least one valid administrator key must remain.
+These rotation semantics require the updated ADX package; the #71 pin predates
+the implementation.
 
 ### Container Image Version
 
