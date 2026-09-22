@@ -132,7 +132,8 @@ data:
           report_interval_seconds: {{ .Values.adx.node.reportIntervalSeconds }}
           rpc_timeout_seconds: 30
           rrt_port: 50090
-          rrt_env: {}
+          rrt_env:
+            ADX_RRT_CONTROL_SOCKET_PATH: /run/akernel
           checkpoint_dir: /home/akernel/adx/checkpoints
           degradation_journal: /home/akernel/adx/degraded/results.sqlite
           metrics_listen: 0.0.0.0:19091

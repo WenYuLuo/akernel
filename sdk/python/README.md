@@ -440,7 +440,10 @@ rollback explicitly. It returns `False` whenever the rollback is not completed,
 including when no usable local anonymous checkpoint exists, the sandbox is
 already closed, or the backend reports an operational failure. A successful
 reload preserves `sandbox.id` and the existing commands, filesystem, and PTY
-facades.
+facades. The ADX adapter also confirms the data route with a read-only process
+listing before reporting success. A temporary route conflict is retried within
+a 10-second window; it never reissues the rollback. Other errors, explicit
+non-retryable errors, or an expired wait return `False`.
 
 Recovery points are local and follow the source sandbox lifecycle. They are
 created by sandbox workloads through RRT's internal `POST /checkpoint`

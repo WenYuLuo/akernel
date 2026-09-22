@@ -17,6 +17,8 @@ import unittest
 from types import MappingProxyType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from adx_sandbox._transport import SandboxHTTPError
+
 from akernel_sdk._addresses import Endpoint
 from akernel_sdk._backends import adx
 from akernel_sdk._backends.base import BackendConfig, SandboxSpec
@@ -60,6 +62,45 @@ class AdxBackendTest(unittest.TestCase):
             gateway_endpoint=Endpoint("gateway.example", 8443, "https", True),
             token="secret",
         )
+
+    def test_reload_waits_for_new_data_route_without_repeating_reload(self):
+        backend = adx.AdxBackend(self.config)
+        native = MagicMock(id="default-worker")
+        with patch.object(adx.adx_sandbox, "Sandbox", return_value=native):
+            session = backend.create(_spec())
+        native.commands.list.reset_mock()
+        native.commands.list.side_effect = [
+            SandboxHTTPError(409, {}, "stale route"), []
+        ]
+        native.reload.return_value = True
+        self.assertTrue(session.reload())
+        native.reload.assert_called_once_with()
+        self.assertEqual(native.commands.list.call_count, 2)
+
+    def test_reload_route_conflict_wait_is_bounded(self):
+        backend = adx.AdxBackend(self.config)
+        native = MagicMock(id="default-worker")
+        with patch.object(adx.adx_sandbox, "Sandbox", return_value=native):
+            session = backend.create(_spec())
+        native.commands.list.reset_mock()
+        native.commands.list.side_effect = SandboxHTTPError(409, {}, "stale route")
+        native.reload.return_value = True
+        with patch.object(adx.time, "monotonic", side_effect=[0, 10]):
+            self.assertFalse(session.reload())
+        native.reload.assert_called_once_with()
+        native.commands.list.assert_called_once_with()
+
+    def test_reload_does_not_retry_terminal_route_errors(self):
+        backend = adx.AdxBackend(self.config)
+        native = MagicMock(id="default-worker")
+        with patch.object(adx.adx_sandbox, "Sandbox", return_value=native):
+            session = backend.create(_spec())
+        native.commands.list.reset_mock()
+        native.commands.list.side_effect = SandboxHTTPError(403, {}, "forbidden")
+        native.reload.return_value = True
+        self.assertFalse(session.reload())
+        native.reload.assert_called_once_with()
+        native.commands.list.assert_called_once_with()
 
     def test_connection_is_explicit_and_does_not_mutate_environment(self):
         with patch.dict(os.environ, {}, clear=True):

@@ -51,7 +51,8 @@ services:
       report_interval_seconds: 5
       rpc_timeout_seconds: 30
       rrt_port: 50090
-      rrt_env: {}
+      rrt_env:
+        ADX_RRT_CONTROL_SOCKET_PATH: /run/akernel
       checkpoint_dir: /home/akernel/adx/checkpoints
       degradation_journal: /home/akernel/adx/degraded/results.sqlite
       metrics_listen: 127.0.0.1:19091

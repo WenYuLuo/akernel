@@ -68,11 +68,18 @@ default.
 
 Sandbox checkpoints for runsc and Firecracker use ADX's local-only
 snapshot mode. Checkpoint state is kept under the persistent
-`/home/akernel/checkpoints` data mount. Workloads trigger an anonymous recovery
+`/home/akernel/adx/checkpoints` data mount. Workloads trigger an anonymous recovery
 point through `POST /checkpoint` on `/run/akernel/rrt.sock`, and the SDK can
 reload the same logical sandbox from the latest usable point. Recovery points
 follow the source sandbox lifecycle; they are not exposed as reusable SDK
 objects.
+
+The ADX workload checkpoint bridge requires both the updated RRT and Node Manager.
+The current Buildkite #71 artifact pin predates that bridge. The source changes
+were verified with an overlay validation image; see
+[checkpoint validation](checkpoint-validation.md) for results and the remaining
+release update.
+
 
 `start.sh` loads the host `tun` module and verifies `/dev/net/tun` before
 starting the pooled-TAP runtimes. Runc retains its separate veth network path.

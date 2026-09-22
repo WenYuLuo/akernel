@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Mapping
 from typing import Any
 
@@ -323,7 +324,23 @@ class _Session:
                 "sandbox reload. Upgrade it to a version with failover support."
             )
         try:
-            return bool(reload_sandbox())
+            if not reload_sandbox():
+                return False
+            # The lifecycle commit can precede Edge applying the new route.
+            # Probe read-only data traffic; never repeat the rollback itself.
+            deadline = time.monotonic() + 10
+            while True:
+                try:
+                    self._sandbox.commands.list()
+                    return True
+                except adx_sandbox.SandboxError as error:
+                    if (
+                        getattr(error, "status_code", None) != 409
+                        or getattr(error, "retry", None) == "never"
+                        or time.monotonic() >= deadline
+                    ):
+                        raise
+                    time.sleep(0.1)
         except Exception:
             return False
 
