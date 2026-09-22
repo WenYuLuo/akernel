@@ -199,6 +199,19 @@ shutdown can remount shared host filesystems read-only. See
 [`deploy/README.md#systemd-container-identity`](./deploy/README.md#systemd-container-identity)
 for deployment implications.
 
+ADX's systemd launcher imports the selected ADX configuration, Redis address,
+and node identity from the container PID 1 environment. Explicit systemd service
+environment overrides take precedence. Preserve this handoff when changing
+node deployment: otherwise the service can fall back to standalone configuration
+even though the Pod declares a node configuration.
+
+The managed Kubernetes Redis uses its own Helm-generated authentication Secret,
+preserved by live lookup during upgrades. Its NetworkPolicy is additional
+isolation and requires CNI enforcement. Control health probes cover both Master
+and Edge. Generated control supervisor state is container-local, while Redis
+persists authoritative state; do not retain PID-named rendered configuration
+across control container restarts.
+
 Aliyun's aggregate Pod PID budget is configurable independently of the
 per-sandbox limit; see `deploy/terraform/aliyun/README.md#pod-pid-budget`.
 Aliyun and Huawei default AKernel node pools also configure host PID/thread

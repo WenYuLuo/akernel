@@ -266,7 +266,20 @@ not contain it. The rollout procedure has not been validated on a live cluster.
 ### Install with managed Redis
 
 Managed mode is the default. It creates one Redis StatefulSet with AOF enabled,
-`appendfsync=everysec`, and a persistent volume. A minimal values file is:
+`appendfsync=everysec`, and a persistent volume. Helm generates an independent
+64-character Redis password in `akernel-adx-redis-auth` and reuses it on upgrades
+through a live Secret lookup. Use `helm install/upgrade` against the cluster;
+offline `helm template` cannot recover an existing password. Control and node
+Pods receive the password through Secret references. Redis requires authentication
+for Pod connections. An ingress NetworkPolicy also limits port 6379 to the control
+and node Pods in the same namespace when the CNI enforces NetworkPolicy. Redis
+is exposed only by a ClusterIP Service. Control readiness and liveness check
+both the Master listener and Edge health endpoint, so an exited Master cannot
+leave the control Pod marked healthy. Generated control configuration and local
+supervisor state use the container filesystem and reset on container restart;
+the authoritative cluster state remains in Redis. Control log files are also
+container-local and should be collected before restarting for diagnosis.
+A minimal values file is:
 
 ```yaml
 core:
@@ -319,7 +332,8 @@ core:
         urlKey: redis-url
 ```
 
-External mode omits the bundled Redis Service, StatefulSet, and PVC. The URL
+External mode omits the bundled Redis Service, StatefulSet, PVC, authentication
+Secret and NetworkPolicy. The URL
 must use the `redis://` scheme accepted by the current ADX release.
 
 ### Sandbox placement policy

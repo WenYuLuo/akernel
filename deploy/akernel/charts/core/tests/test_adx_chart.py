@@ -153,6 +153,54 @@ class AdxChartTest(unittest.TestCase):
         claims = redis["spec"]["volumeClaimTemplates"]
         self.assertEqual(claims[0]["metadata"]["name"], "data")
 
+    def test_managed_redis_accepts_only_control_and_node_pods(self) -> None:
+        redis = self.resource("StatefulSet", "akernel-adx-redis")
+        args = redis["spec"]["template"]["spec"]["containers"][0]["args"]
+        self.assertIn("--protected-mode", args)
+        self.assertEqual(args[args.index("--protected-mode") + 1], "no")
+        policy = self.resource("NetworkPolicy", "akernel-adx-redis")
+        self.assertEqual(policy["spec"]["podSelector"]["matchLabels"], {"app": "akernel-adx-redis"})
+        rule = policy["spec"]["ingress"][0]
+        self.assertEqual(rule["ports"], [{"protocol": "TCP", "port": 6379}])
+        self.assertEqual(
+            rule["from"],
+            [{"podSelector": {"matchExpressions": [
+                {"key": "app", "operator": "In", "values": ["akernel-adx-control", "node"]}
+            ]}}],
+        )
+
+    def test_managed_redis_requires_a_separate_secret(self) -> None:
+        import base64
+
+        secret = self.resource("Secret", "akernel-adx-redis-auth")
+        password = base64.b64decode(secret["data"]["password"]).decode()
+        self.assertRegex(password, r"^[A-Za-z0-9]{64}$")
+        redis = self.resource("StatefulSet", "akernel-adx-redis")["spec"]["template"]["spec"]["containers"][0]
+        self.assertIn("--requirepass", " ".join(redis["command"]))
+        self.assertEqual(redis["env"][0]["valueFrom"]["secretKeyRef"],
+                         {"name": "akernel-adx-redis-auth", "key": "password"})
+        for kind, name in (("Deployment", "akernel-adx-control"), ("DaemonSet", "akernel-node")):
+            env = self.resource(kind, name)["spec"]["template"]["spec"]["containers"][0]["env"]
+            auth = next(i for i, item in enumerate(env) if item["name"] == "ADX_REDIS_PASSWORD")
+            url = next(i for i, item in enumerate(env) if item["name"] == "ADX_REDIS_URL")
+            self.assertLess(auth, url)
+            self.assertEqual(env[auth]["valueFrom"]["secretKeyRef"],
+                             {"name": "akernel-adx-redis-auth", "key": "password"})
+            self.assertIn(":$(ADX_REDIS_PASSWORD)@", env[url]["value"])
+
+    def test_control_probes_cover_master_and_edge(self) -> None:
+        control = self.resource("Deployment", "akernel-adx-control")
+        container = control["spec"]["template"]["spec"]["containers"][0]
+        for probe in ("readinessProbe", "livenessProbe"):
+            command = " ".join(container[probe]["exec"]["command"])
+            self.assertIn("/dev/tcp/127.0.0.1/19000", command)
+            self.assertIn("http://127.0.0.1:18080/healthz", command)
+
+    def test_control_generated_state_is_reset_on_container_restart(self) -> None:
+        pod = self.resource("Deployment", "akernel-adx-control")["spec"]["template"]["spec"]
+        mounts = pod["containers"][0]["volumeMounts"]
+        self.assertNotIn("/var/lib/adx", [item["mountPath"] for item in mounts])
+
     def test_external_redis_uses_a_secret_and_omits_managed_redis(self) -> None:
         result = subprocess.run(
             [

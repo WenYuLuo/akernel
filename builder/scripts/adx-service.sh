@@ -6,6 +6,23 @@
 
 set -euo pipefail
 
+load_container_environment() {
+  local source="${1:-/proc/1/environ}" entry name
+  [[ -r "${source}" ]] || return 0
+  # System services do not automatically inherit the container PID 1 environment.
+  # Keep explicit service overrides and import only the ADX deployment contract.
+  while IFS= read -r -d '' entry; do
+    case "${entry}" in
+      AKERNEL_ADX_CONFIG=*|AKERNEL_ADX_MANAGED_CREDENTIALS=*|AKERNEL_ADX_STATE_DIR=*|ADX_REDIS_URL=*|NODE_NAME=*|INSTANCE_IP=*)
+        name="${entry%%=*}"
+        if ! declare -p "${name}" >/dev/null 2>&1; then
+          export "${entry}"
+        fi
+        ;;
+    esac
+  done <"${source}"
+}
+
 ensure_public_tls() (
   set -euo pipefail
   state_dir="$1"
@@ -27,6 +44,7 @@ ensure_public_tls() (
 )
 
 main() {
+  load_container_environment
   action="${1:?ADX service action is required}"
   config="${AKERNEL_ADX_CONFIG:-/etc/akernel/adx-standalone.yaml}"
 

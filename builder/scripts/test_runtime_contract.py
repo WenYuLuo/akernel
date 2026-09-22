@@ -12,6 +12,24 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class RuntimeContractTest(unittest.TestCase):
+    def test_node_service_inherits_deployment_configuration(self) -> None:
+        unit = (ROOT / "builder/systemd_services/adx.service").read_text()
+        inherited = {
+            name
+            for line in unit.splitlines()
+            if line.startswith("PassEnvironment=")
+            for name in line.split("=", 1)[1].split()
+        }
+        required = {
+            "AKERNEL_ADX_CONFIG",
+            "AKERNEL_ADX_MANAGED_CREDENTIALS",
+            "AKERNEL_ADX_STATE_DIR",
+            "ADX_REDIS_URL",
+            "NODE_NAME",
+            "INSTANCE_IP",
+        }
+        self.assertFalse(required - inherited, required - inherited)
+
     def test_sdk_metadata_has_no_actor_runtime_dependency(self) -> None:
         metadata = tomllib.loads(
             (ROOT / "sdk/python/pyproject.toml").read_text(encoding="utf-8")

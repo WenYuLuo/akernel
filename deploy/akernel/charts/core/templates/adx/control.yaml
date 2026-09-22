@@ -54,9 +54,16 @@ spec:
             - /etc/akernel/adx-control.yaml
             - run
           env:
+            {{- if eq .Values.adx.redis.mode "managed" }}
+            - name: ADX_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: akernel-adx-redis-auth
+                  key: password
+            {{- end }}
             - name: ADX_REDIS_URL
               {{- if eq .Values.adx.redis.mode "managed" }}
-              value: redis://akernel-adx-redis.{{ .Release.Namespace }}.svc.cluster.local:6379/
+              value: redis://:$(ADX_REDIS_PASSWORD)@akernel-adx-redis.{{ .Release.Namespace }}.svc.cluster.local:6379/
               {{- else }}
               valueFrom:
                 secretKeyRef:
@@ -75,15 +82,21 @@ spec:
             - name: master-metrics
               containerPort: 19090
           readinessProbe:
-            httpGet:
-              path: /healthz
-              port: health
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - 'exec 3<>/dev/tcp/127.0.0.1/19000; curl --fail --silent --max-time 2 http://127.0.0.1:18080/healthz >/dev/null'
+            timeoutSeconds: 3
             periodSeconds: 5
-            failureThreshold: 12
+            failureThreshold: 2
           livenessProbe:
-            httpGet:
-              path: /healthz
-              port: health
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - 'exec 3<>/dev/tcp/127.0.0.1/19000; curl --fail --silent --max-time 2 http://127.0.0.1:18080/healthz >/dev/null'
+            timeoutSeconds: 3
             initialDelaySeconds: 15
             periodSeconds: 10
           resources:
@@ -96,8 +109,6 @@ spec:
             - name: credentials
               mountPath: /etc/adx
               readOnly: true
-            - name: state
-              mountPath: /var/lib/adx
       volumes:
         - name: config
           configMap:
@@ -110,5 +121,3 @@ spec:
               - {key: public.pem, path: tls/public.pem}
               - {key: public.key, path: tls/public.key}
               - {key: admin-key, path: secrets/admin-key}
-        - name: state
-          emptyDir: {}

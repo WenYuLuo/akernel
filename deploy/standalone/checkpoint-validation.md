@@ -137,3 +137,37 @@ The image overlays task-built ADX binaries and AKernel startup scripts. It is
 not the formal #71 package. Its replacement remains necessary before normal
 packaged deployment. This round did not exercise live Kubernetes, custom OCI,
 Redis crash recovery or cache expiry with an uninterrupted ingress process.
+
+
+## Kubernetes follow-up (2026-09-22)
+
+The ADX overlay was published as a single-platform linux/amd64 registry manifest
+and deployed to the four-worker Kubernetes environment. The accepted digest is
+`sha256:d4ac9c13759c2b637aaa18b1c7123709abd458a292b4de14b150f83fcc4f81b5`.
+It includes AKernel `d245088` with the systemd environment handoff fix and ADX
+`9ba34e6`. The formal ADX package lock is still unchanged; this does not prove a
+clean build from that lock. Traefik was disabled and SDK traffic used the direct
+Edge HTTPS control / HTTP data listeners through internal Service port forwarding.
+
+- All six control, node and Redis containers matched the published digest.
+- Chart contract: 15 tests passed. Systemd contract: 7 runtime and 2 service tests
+  passed; deployment script checks and `git diff --check` passed.
+- The final runsc SDK suite passed 6 cases, with 1 custom OCI case skipped,
+  in 81.151 seconds. Command, filesystem, PTY, workload checkpoint, reload and
+  reverse tunnel were covered. Missing and invalid API keys returned HTTP 401.
+- All four nodes advertised allocatable resources.
+- Redis rejected unauthenticated commands. Its independent password was retained
+  across a Helm upgrade. The CNI did not enforce the additional NetworkPolicy;
+  that policy is not accepted as the sole access boundary on this environment.
+- A Control container restart within the same Pod recovered Master and Edge.
+  Generated supervisor state no longer persists across container restarts, which
+  avoids collisions with PID-named rendered configuration directories.
+- The other existing namespace's Deployment and DaemonSet specifications were
+  unchanged. The old etcd PVC was retained.
+
+Evidence: `out/cn-north-4-upgrade/REPORT.md`, `control-restart.log`,
+`redis-auth-rejection.log`, and `sdk-e2e-final.log` in that directory.
+This run does not cover cluster Firecracker, custom OCI or public load-balancer
+access. Platform-owned sandbox egress denies for cluster CIDRs remain unimplemented;
+user-configured network policy and Redis authentication do not establish that
+sandbox isolation contract.

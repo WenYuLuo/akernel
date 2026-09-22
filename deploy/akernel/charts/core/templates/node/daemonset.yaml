@@ -85,9 +85,16 @@ spec:
           value: /etc/akernel/adx-node.yaml
         - name: AKERNEL_ADX_MANAGED_CREDENTIALS
           value: external
+        {{- if eq .Values.adx.redis.mode "managed" }}
+        - name: ADX_REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: akernel-adx-redis-auth
+              key: password
+        {{- end }}
         - name: ADX_REDIS_URL
           {{- if eq .Values.adx.redis.mode "managed" }}
-          value: redis://akernel-adx-redis.{{ .Release.Namespace }}.svc.cluster.local:6379/
+          value: redis://:$(ADX_REDIS_PASSWORD)@akernel-adx-redis.{{ .Release.Namespace }}.svc.cluster.local:6379/
           {{- else }}
           valueFrom:
             secretKeyRef:
