@@ -11,20 +11,14 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_DIR="${SCRIPT_DIR}/config"
 DATA_DIR="${SCRIPT_DIR}/data"
-FRONTEND_PORT="8888"
-ETCD_PORT="${ETCD_PORT:-2379}"
-ETCD_PEER_PORT="${ETCD_PEER_PORT:-2378}"
 NODE_CONTAINER_NAME="akernel-node"
 TRAEFIK_CONTAINER_NAME="akernel-traefik"
 IMAGE="${IMAGE:-akerneldev/all-in-one:latest}"
 TRAEFIK_IMAGE="${TRAEFIK_IMAGE:-traefik:v3.6.8}"
-IAM_SEED_FILE="${DATA_DIR}/iam-seed"
-TOKEN_FILE="${DATA_DIR}/token"
+TOKEN_FILE="${DATA_DIR}/adx/secrets/admin-key"
 SANDBOXD_CONFIG_FILE="${DATA_DIR}/sandboxd/config.toml"
 AKERNEL_NAT_BACKEND="${AKERNEL_NAT_BACKEND:-iptables}"
 AKERNEL_ENABLE_RUNC="${AKERNEL_ENABLE_RUNC:-false}"
-YR_IMAGE_PROCESS_CONFIG="${YR_IMAGE_PROCESS_CONFIG:-/run/akernel/yr-image-process.json}"
-LITEBUS_DATA_KEY=""
 
 # Container runtime command (docker or pouch)
 DOCKER_CMD=""
@@ -48,6 +42,28 @@ log_warn() {
 
 log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Probe the authenticated ADX edge without exposing the API key in the curl
+# command line. curl reads its header from stdin, so the key does not appear in
+# process listings or normal command logs.
+probe_adx_health() {
+    local url="$1"
+    local token
+
+    if [[ ! -s "${TOKEN_FILE}" ]]; then
+        return 1
+    fi
+    token="$(< "${TOKEN_FILE}")"
+    printf 'header = "X-Auth: %s"\n' "${token}" \
+        | curl --noproxy '*' -fkSs --config - "${url}" > /dev/null
+}
+
+probe_node_health() {
+    local url="$1"
+
+    "${DOCKER_PREFIX[@]}" "${DOCKER_CMD}" exec "${NODE_CONTAINER_NAME}" \
+        curl --noproxy '*' -fSs "${url}" > /dev/null
 }
 
 # Check prerequisites
@@ -91,11 +107,6 @@ check_prerequisites() {
         exit 1
     fi
 
-    if ! command -v python3 &> /dev/null; then
-        log_error "python3 is required to generate standalone credentials"
-        exit 1
-    fi
-
     case "${AKERNEL_ENABLE_RUNC}" in
         true|false)
             ;;
@@ -136,27 +147,6 @@ check_prerequisites() {
     mkdir -p "${DATA_DIR}/sandboxd/config" "${DATA_DIR}/sandboxd/image_manager"
 
     log_info "All config files found"
-}
-
-configure_auth() {
-    if [[ ! -s "${IAM_SEED_FILE}" ]]; then
-        python3 -c 'import secrets; print(secrets.token_hex(32).upper())' \
-            > "${IAM_SEED_FILE}"
-        chmod 0600 "${IAM_SEED_FILE}"
-        log_info "Generated a deployment-specific IAM seed"
-    fi
-
-    LITEBUS_DATA_KEY="$(tr -d '[:space:]' < "${IAM_SEED_FILE}")"
-    if [[ ! "${LITEBUS_DATA_KEY}" =~ ^[0-9A-Fa-f]+$ ]] || \
-       (( ${#LITEBUS_DATA_KEY} % 2 != 0 )); then
-        log_error "${IAM_SEED_FILE} must contain an even-length hexadecimal seed"
-        exit 1
-    fi
-
-    "${SCRIPT_DIR}/../scripts/generate-token.py" \
-        --seed-file "${IAM_SEED_FILE}" \
-        --ttl "${STANDALONE_TOKEN_TTL:-24h}" \
-        --write-file "${TOKEN_FILE}" > /dev/null
 }
 
 # Stop and remove existing container
@@ -353,9 +343,6 @@ prepare_host_network_modules() {
 # from the gateway enters this network namespace through PREROUTING.
 start_node_container() {
     log_info "Starting container: ${NODE_CONTAINER_NAME}"
-    # FunctionMaster's HTTP provider publishes the per-sandbox routes required
-    # by reverse tunnels; the legacy etcd mode cannot publish those routes.
-
     "${DOCKER_PREFIX[@]}" ${DOCKER_CMD} run -d \
         --name "${NODE_CONTAINER_NAME}" \
         --privileged \
@@ -363,13 +350,6 @@ start_node_container() {
         --restart always \
         -e container=oci \
         -e AKS_LOCAL_MODE="true" \
-        -e YR_RRT_CONTROL_SOCKET_PATH="/run/akernel" \
-        -e YR_IMAGE_PROCESS_CONFIG="${YR_IMAGE_PROCESS_CONFIG}" \
-        -e TRAEFIK_MODE="http" \
-        -e TRAEFIK_HTTP_ENTRYPOINT="web" \
-        -e TRAEFIK_ENABLE_TLS="false" \
-        -e ETCD_PORT="${ETCD_PORT}" \
-        -e ETCD_PEER_PORT="${ETCD_PEER_PORT}" \
         -e NODE_NAME="$(hostname)" \
         -e POD_NAME=akernel-node-local \
         -e POD_NAMESPACE=default \
@@ -397,7 +377,7 @@ wait_for_ready() {
     local delay=2
 
     for i in $(seq 1 $retries); do
-        if "${DOCKER_PREFIX[@]}" ${DOCKER_CMD} exec "${NODE_CONTAINER_NAME}" systemctl is-system-running &> /dev/null; then
+        if probe_node_health http://127.0.0.1:18080/healthz; then
             log_info "AKernel container is ready"
             return 0
         fi
@@ -424,36 +404,28 @@ write_traefik_config() {
     cat > "${traefik_dir}/dynamic.yml" <<EOF
 http:
   routers:
-    akernel-frontend:
+    akernel-edge:
       entryPoints:
         - websecure
-      rule: "PathPrefix(\`/terminal\`) || PathPrefix(\`/api/instances\`) || PathPrefix(\`/api/jobs\`) || PathPrefix(\`/functions\`) || PathPrefix(\`/api-docs\`) || PathPrefix(\`/admin/v1/functions\`) || PathPrefix(\`/serverless/v1/functions\`) || PathPrefix(\`/serverless/v1/stream\`) || PathPrefix(\`/serverless/v1/componentshealth\`) || PathPrefix(\`/serverless/v1/posix\`) || PathPrefix(\`/serverless/v2\`) || PathPrefix(\`/frontend/v1/instance\`) || PathPrefix(\`/datasystem/v1\`) || PathPrefix(\`/app/v1\`) || PathPrefix(\`/client/v1/lease\`) || PathPrefix(\`/invocations\`) || PathPrefix(\`/global-scheduler\`) || Path(\`/healthz\`)"
-      service: akernel-frontend
-      tls: {}
-    sandbox-router:
-      entryPoints:
-        - websecure
-      rule: "PathPrefix(\`/api/sandbox\`) || PathPrefix(\`/direct/\`) || Path(\`/direct\`)"
-      priority: 100
-      service: akernel-frontend
+      rule: "PathPrefix(\`/\`)"
+      service: akernel-edge
       tls: {}
 
   services:
-    akernel-frontend:
+    akernel-edge:
       loadBalancer:
-        serversTransport: akernel-frontend
+        serversTransport: akernel-edge
         servers:
-          - url: "https://${node_ip}:${FRONTEND_PORT}"
+          - url: "https://${node_ip}:8443"
 
   serversTransports:
-    akernel-frontend:
+    akernel-edge:
       insecureSkipVerify: true
       disableHTTP2: true
 EOF
 }
 
 start_traefik_container() {
-    local provider_endpoint="$1"
     local dynamic_config="${DATA_DIR}/traefik/dynamic.yml"
 
     log_info "Starting container: ${TRAEFIK_CONTAINER_NAME}"
@@ -466,8 +438,6 @@ start_traefik_container() {
         --entryPoints.web.address=:80 \
         --entryPoints.websecure.address=:443 \
         --providers.file.filename=/etc/traefik/dynamic.yml \
-        --providers.http.endpoint="${provider_endpoint}" \
-        --providers.http.pollInterval=1s \
         --log.level=INFO \
         --accessLog=true \
         --accessLog.format=json \
@@ -481,7 +451,7 @@ wait_for_gateway() {
 
     log_info "Waiting for Traefik at ${traefik_ip}"
     for i in $(seq 1 ${retries}); do
-        if curl --noproxy '*' -fkSs "https://${traefik_ip}/healthz" > /dev/null; then
+        if probe_adx_health "https://${traefik_ip}/api/sandbox/v1/resources"; then
             log_info "Traefik gateway is ready"
             return 0
         fi
@@ -523,35 +493,37 @@ show_status() {
     echo "  SDK token:     ${TOKEN_FILE}"
 }
 
-# Main
-check_prerequisites
-cleanup_existing
-configure_auth
-ensure_image "${IMAGE}"
-ensure_image "${TRAEFIK_IMAGE}"
-configure_container_proxy
-configure_gpu
-configure_network
-prepare_host_network_modules
-start_node_container
-wait_for_ready
-NODE_IP="$(container_ip "${NODE_CONTAINER_NAME}")"
-if [[ -z "${NODE_IP}" ]]; then
-    log_error "Could not determine the AKernel container IP"
-    exit 1
-fi
-write_traefik_config "${NODE_IP}"
-TRAEFIK_PROVIDER_ENDPOINT="http://${NODE_IP}:22770/global-scheduler/traefik/config"
-log_info "Using FunctionMaster route provider: ${TRAEFIK_PROVIDER_ENDPOINT}"
-start_traefik_container "${TRAEFIK_PROVIDER_ENDPOINT}"
-TRAEFIK_IP="$(container_ip "${TRAEFIK_CONTAINER_NAME}")"
-if [[ -z "${TRAEFIK_IP}" ]]; then
-    log_error "Could not determine the Traefik container IP"
-    exit 1
-fi
-wait_for_gateway "${TRAEFIK_IP}"
-show_status "${NODE_IP}" "${TRAEFIK_IP}"
+main() {
+    check_prerequisites
+    cleanup_existing
+    ensure_image "${IMAGE}"
+    ensure_image "${TRAEFIK_IMAGE}"
+    configure_container_proxy
+    configure_gpu
+    configure_network
+    prepare_host_network_modules
+    start_node_container
+    wait_for_ready
+    NODE_IP="$(container_ip "${NODE_CONTAINER_NAME}")"
+    if [[ -z "${NODE_IP}" ]]; then
+        log_error "Could not determine the AKernel container IP"
+        exit 1
+    fi
+    write_traefik_config "${NODE_IP}"
+    start_traefik_container
+    TRAEFIK_IP="$(container_ip "${TRAEFIK_CONTAINER_NAME}")"
+    if [[ -z "${TRAEFIK_IP}" ]]; then
+        log_error "Could not determine the Traefik container IP"
+        exit 1
+    fi
+    wait_for_gateway "${TRAEFIK_IP}"
+    show_status "${NODE_IP}" "${TRAEFIK_IP}"
 
-log_info "AKernel started successfully in standalone mode"
-log_info "Set AKERNEL_SERVER_ADDRESS=${TRAEFIK_IP}"
-log_info "Set AKERNEL_TOKEN=\$(cat ${TOKEN_FILE})"
+    log_info "AKernel started successfully in standalone mode"
+    log_info "Set AKERNEL_SERVER_ADDRESS=https://${TRAEFIK_IP}"
+    log_info "Set AKERNEL_TOKEN=\$(cat ${TOKEN_FILE})"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+fi

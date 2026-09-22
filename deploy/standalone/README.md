@@ -4,13 +4,14 @@ This directory contains scripts and configurations for running AKernel in
 standalone mode using Docker or Pouch, without Kubernetes. The deployment uses
 two containers on the default container bridge:
 
-- `akernel-node` runs the AKernel all-in-one image.
+- `akernel-node` runs sandboxd plus the ADX Redis, Master, Node Manager, API
+  Server, Edge, and Node Proxy processes from the AKernel all-in-one image.
 - `akernel-traefik` runs the official Traefik image as the external gateway.
 
 Keeping the gateway in a separate network namespace allows sandboxd's normal
-`PREROUTING` rules to handle gateway traffic. The all-in-one frontend sends
-traffic from the node network namespace, so the standalone sandboxd config
-also enables its local-output DNAT support.
+`PREROUTING` rules to handle gateway traffic. Traefik forwards HTTPS requests
+to the embedded ADX Edge; Edge uses the Master route stream and forwards
+instance traffic to the embedded Node Proxy.
 
 The default runtime is gVisor `runsc`. The bundled image also contains Kata
 Containers and Firecracker. Both `Sandbox(runtime="kata")` and
@@ -65,7 +66,7 @@ rather than tmpfs. Without `storage_mb`, runsc retains its configured
 memory-backed overlay while Firecracker uses its configured sparse ext4
 default.
 
-Sandbox checkpoints for runsc and Firecracker use YuanRong's local-only
+Sandbox checkpoints for runsc and Firecracker use ADX's local-only
 snapshot mode. Checkpoint state is kept under the persistent
 `/home/akernel/checkpoints` data mount. Workloads trigger an anonymous recovery
 point through `POST /checkpoint` on `/run/akernel/rrt.sock`, and the SDK can
@@ -94,10 +95,9 @@ does not override firewall policy. A custom host-network deployment whose
 `FORWARD` policy is `DROP` must allow traffic to and from `sandbox0` with
 bridge- and sandbox-CIDR-scoped rules.
 
-AKernel passes YuanRong the IPv4 address of the default-route interface so the
-later creation of `sandbox0` cannot change the advertised node address. Set
-`AKERNEL_NODE_IP` only when a multi-homed deployment requires an explicit
-override.
+ADX standalone publishes loopback control-plane addresses because all roles
+share the node container. Sandbox traffic still uses the sandbox bridge and
+Node Proxy binding.
 
 The standalone configuration enables per-sandbox network ACLs. With the
 default iptables backend, `start.sh` loads IPv6 filter-table, `br_netfilter`,
@@ -173,14 +173,12 @@ This will:
 - Use `akerneldev/all-in-one:latest` if `IMAGE` is not set, reusing a local
   copy when present and otherwise pulling it from Docker Hub
 - Start the privileged AKernel all-in-one container
-- Start an independent Traefik container for the HTTPS API and HTTP sandbox
-  port-forwarding gateway
-- Configure Traefik to poll FunctionMaster's HTTP provider for per-sandbox
-  tunnel routes, including custom tunnel ports
-- Generate a deployment-specific IAM signing seed and a 24-hour SDK token
+- Start an independent Traefik container for the HTTPS API and sandbox gateway
+- Configure Traefik to forward all requests to the ADX Edge
+- Generate distinct internal mTLS identities and an administrator API key
 - Generate a sandboxd config using `AKERNEL_NAT_BACKEND` (`iptables` by
   default)
-- Print the Traefik container IP to use as `AKERNEL_SERVER_ADDRESS`
+- Print the Traefik container IP and API-key path used by the SDK
 
 No host ports are published. On Linux, the host accesses Traefik directly
 through its Docker bridge IP.
@@ -213,9 +211,9 @@ sudo docker exec akernel-node systemctl status
 
 ### SDK Connection
 
-Traefik listens on port 443 for the AKernel API and port 80 for sandbox port
-forwarding. These ports are not published on the host. Use the Traefik
-container IP printed by `start.sh`, or retrieve it later:
+Traefik listens on port 443 and forwards both control and sandbox traffic to
+ADX Edge. The port is not published on the host. Use the Traefik container IP
+printed by `start.sh`, or retrieve it later:
 
 ```bash
 TRAEFIK_IP=$(docker inspect \
@@ -226,18 +224,16 @@ TRAEFIK_IP=$(docker inspect \
 Set the SDK environment:
 
 ```bash
-export AKERNEL_SERVER_ADDRESS="${TRAEFIK_IP}"
-export AKERNEL_TOKEN="$(cat data/token)"
+export AKERNEL_SERVER_ADDRESS="https://${TRAEFIK_IP}"
+export AKERNEL_TOKEN="$(cat data/adx/secrets/admin-key)"
 ```
 
-The signing seed is stored in `data/iam-seed` and reused while that standalone
-data directory exists. Delete the data directory to create a new deployment
-identity. Set `STANDALONE_TOKEN_TTL` when starting AKernel to choose a different
-token lifetime, for example `STANDALONE_TOKEN_TTL=7d ./start.sh`.
+The administrator API key and component certificates are generated once under
+`data/adx/` and reused while that standalone data directory exists. Keep this
+directory private. Tenant keys can be created later through the ADX admin API.
 
-When `AKERNEL_SERVER_ADDRESS` contains only an IP address, the SDK uses HTTPS
-port 443 for the API and HTTP port 80 for sandbox port forwarding. No separate
-`AKERNEL_GATEWAY_ADDRESS` is required.
+Without `AKERNEL_GATEWAY_ADDRESS`, the SDK uses the same HTTPS Edge address for
+API, commands, files, reverse tunnels, and port forwarding.
 
 ### Container Image Version
 

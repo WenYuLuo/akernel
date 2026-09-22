@@ -2,7 +2,7 @@
 
 ## Overview
 
-**AKernel** (**A**gent **Kernel**) is a distributed kernel that combines the performance of [AFaaS](https://www.usenix.org/conference/osdi25/presentation/chai-xiaohu) with the architecture of [openYuanrong](https://docs.openyuanrong.org/en/latest/index.html), enabling **true "datacenter use"** — treating the entire datacenter as a programmable extension of your AI Agent.
+**AKernel** (**A**gent **Kernel**) is a distributed kernel that combines the performance of [AFaaS](https://www.usenix.org/conference/osdi25/presentation/chai-xiaohu) with the Agent DX control and data plane, enabling **true "datacenter use"** — treating the entire datacenter as a programmable extension of your AI Agent.
 
 Traditional infrastructure tools (IaC, Kubernetes-native platforms, multi-cloud Terraform, and vendor-specific CDKs) are designed for provisioning infrastructure, not operating it. They fall short for AI agents, RL training, and data pipelines that require runtime elasticity, dynamic workflows, and programmatic access to datacenter capabilities.
 
@@ -99,18 +99,23 @@ make config VENDOR=aliyun \
   IMAGE_REPOSITORY=registry.example.com/akernel/all-in-one \
   IMAGE_TAG=your-release-tag
 docker login registry.example.com
-make build
+make build ADX_RELEASE_ARCHIVE=/absolute/path/to/adx-release.tar.gz
 make push
 make deploy
 ```
+
+The ADX release archive is verified against
+[`builder/adx-release.lock.json`](./builder/adx-release.lock.json). AKernel uses
+its control-plane binaries, Python SDK wheel, and `rrt-runtime`; AKernel still
+builds sandboxd and the runtime rootfs from its own pinned sources.
 
 See the [Deployment Guide](./deploy/README.md) for prerequisites, cloud-specific configuration, deployment verification, and cluster cleanup, and the [Build Guide](./CLAUDE.md) for development details.
 
 
 ### Create a Sandbox
 
-Install the Python SDK. The default installation includes the
-`openyuanrong-sandbox` backend:
+Install the Python SDK. The default installation includes the `adx-sandbox`
+backend:
 
 ```bash
 # PyPI
@@ -119,15 +124,12 @@ python -m pip install akernel-sdk
 # Source
 python -m pip install ./sdk/python
 
-# Also install the deprecated actor compatibility backend
+# Optional legacy actor compatibility backend
 python -m pip install "akernel-sdk[openyuanrong-sdk]"
 ```
 
-The actor-based `openyuanrong-sdk` backend is deprecated and retained only for
-compatibility with existing applications. New applications should use the
-default `openyuanrong-sandbox` backend. When the actor extra is installed,
-both backend packages are present and `openyuanrong-sandbox` remains the
-automatic default. Set
+New applications use the ADX backend automatically. The actor-based
+`openyuanrong-sdk` backend remains available only for transition testing. Set
 `AKERNEL_BACKEND=openyuanrong-sdk` before importing `akernel_sdk` to select
 the actor backend:
 

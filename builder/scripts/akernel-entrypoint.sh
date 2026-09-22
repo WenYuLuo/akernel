@@ -35,7 +35,8 @@ case "${role}" in
         exec /usr/sbin/init "$@"
         ;;
     standalone)
-        /usr/local/bin/ensure-component-cert
+        systemctl disable yuanrong.service >/dev/null 2>&1 || true
+        systemctl enable adx.service >/dev/null
         exec /usr/sbin/init "$@"
         ;;
     *)

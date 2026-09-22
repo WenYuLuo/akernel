@@ -359,7 +359,9 @@ RUN set -eux; \
     rm -rf "${target}" "${wheel}"; \
     ln -sfn "${YR_INSTALLATION_DIR}/functionsystem/bin/yr" /usr/bin/yr
 
-COPY --from=runtime-image /yr-runtime-rootfs.img ${YR_INSTALLATION_DIR}/yr-runtime-rootfs.img
+COPY --from=runtime-image /yr-runtime-rootfs.img /opt/akernel/runtime/akernel-runtime-rootfs.img
+RUN ln -sfn /opt/akernel/runtime/akernel-runtime-rootfs.img \
+      ${YR_INSTALLATION_DIR}/yr-runtime-rootfs.img
 
 # ADX provides the control and data plane processes. AKernel keeps building
 # sandboxd and the runtime rootfs from its own pinned sources; only the exact
@@ -391,7 +393,9 @@ RUN if [ "${AKERNEL_ENABLE_KATA}" = "true" ]; then \
 
 COPY ./builder/scripts/akernel-entrypoint.sh /usr/local/bin/akernel-entrypoint
 COPY ./builder/scripts/ensure-component-cert.sh /usr/local/bin/ensure-component-cert
+COPY ./builder/scripts/ensure-adx-certs.sh /usr/local/bin/ensure-adx-certs
 COPY ./builder/scripts/sandboxd_network_prepare.sh /usr/local/bin/sandboxd-network-prepare
+COPY ./builder/config/adx-standalone.yaml /etc/akernel/adx-standalone.yaml
 RUN chmod 0755 \
         /usr/local/bin/runsc \
         /usr/local/bin/sandboxd \
@@ -400,6 +404,7 @@ RUN chmod 0755 \
         /usr/local/bin/distill_fs \
         /usr/local/bin/akernel-entrypoint \
         /usr/local/bin/ensure-component-cert \
+        /usr/local/bin/ensure-adx-certs \
         /usr/local/bin/sandboxd-network-prepare
 RUN if [ "${AKERNEL_ENABLE_KATA}" = "true" ]; then chmod 0755 /usr/local/bin/containerd-shim-kata-v2; fi
 RUN if [ "${AKERNEL_ENABLE_RUNC}" = "true" ]; then \

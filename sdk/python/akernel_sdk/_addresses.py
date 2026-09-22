@@ -16,8 +16,6 @@
 
 The public SDK accepts a compact ``AKERNEL_SERVER_ADDRESS`` value:
 
-* ``host:port``: shared-port mode.  Frontend API and exec WebSocket use the
-  explicit port with TLS; public port-forward URLs use it with plain HTTP.
 * ``host:port``: shared-port mode.  Frontend API, exec WebSocket, and public
   port-forward URLs all use the explicit port with TLS by default.
 
@@ -120,10 +118,9 @@ def api_endpoint_from_env() -> Endpoint:
 def gateway_endpoint_from_env() -> Endpoint:
     """Return the public port-forwarding gateway endpoint.
 
-    An explicit gateway override is parsed as plain HTTP by default because
-    standalone exposes Traefik's web entrypoint without TLS.  Without an
-    explicit gateway, host-only server addresses use public 80, while
-    host:port server addresses reuse the API port with plain HTTP.
+    An explicit gateway override without a scheme remains plain HTTP for
+    custom topologies. Without an override, ADX exposes API and instance
+    traffic through the same TLS Edge endpoint.
     """
     override = _gateway_override_raw()
     if override:
@@ -133,20 +130,7 @@ def gateway_endpoint_from_env() -> Endpoint:
             default_scheme="http",
         )
 
-    server = api_endpoint_from_env()
-    if server.explicit_port:
-        return Endpoint(
-            host=server.host,
-            port=server.port,
-            scheme="http",
-            explicit_port=True,
-        )
-    return Endpoint(
-        host=server.host,
-        port=DEFAULT_PUBLIC_PORT,
-        scheme="http",
-        explicit_port=False,
-    )
+    return api_endpoint_from_env()
 
 
 def exec_endpoint_from_env() -> Endpoint:

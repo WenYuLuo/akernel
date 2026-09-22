@@ -1,0 +1,19 @@
+[Unit]
+Description=Agent DX control and data plane
+After=network-online.target sandboxd.service
+Wants=network-online.target sandboxd.service
+
+[Service]
+Type=simple
+ExecStartPre=/usr/local/bin/ensure-adx-certs
+ExecStart=/opt/adx/current/bin/adxctl --config /etc/akernel/adx-standalone.yaml run
+ExecStop=/opt/adx/current/bin/adxctl --config /etc/akernel/adx-standalone.yaml stop
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=120
+KillMode=control-group
+Delegate=yes
+TasksMax=infinity
+
+[Install]
+WantedBy=multi-user.target
