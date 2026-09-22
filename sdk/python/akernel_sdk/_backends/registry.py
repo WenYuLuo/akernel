@@ -27,13 +27,20 @@ from .._addresses import api_endpoint_from_env, gateway_endpoint_from_env
 from .base import Backend, BackendConfig
 from .errors import BackendNotInstalledError, InvalidBackendError
 
+ADX: Final = "adx"
 OPENYUANRONG_SANDBOX: Final = "openyuanrong-sandbox"
 OPENYUANRONG_SDK: Final = "openyuanrong-sdk"
-SUPPORTED_BACKENDS: Final = (OPENYUANRONG_SANDBOX, OPENYUANRONG_SDK)
+SUPPORTED_BACKENDS: Final = (ADX, OPENYUANRONG_SANDBOX, OPENYUANRONG_SDK)
 
 _MODULES: Final = {
+    ADX: "akernel_sdk._backends.adx",
     OPENYUANRONG_SANDBOX: "akernel_sdk._backends.openyuanrong_sandbox",
     OPENYUANRONG_SDK: "akernel_sdk._backends.openyuanrong_sdk",
+}
+_DISTRIBUTIONS: Final = {
+    ADX: "adx-sandbox",
+    OPENYUANRONG_SANDBOX: "openyuanrong-sandbox",
+    OPENYUANRONG_SDK: "openyuanrong-sdk",
 }
 
 
@@ -56,7 +63,7 @@ def _select_backend() -> str | None:
             )
         return configured
     for candidate in SUPPORTED_BACKENDS:
-        if _is_installed(candidate):
+        if _is_installed(_DISTRIBUTIONS[candidate]):
             return candidate
     return None
 
@@ -80,7 +87,7 @@ def _not_installed_error(backend: str | None) -> BackendNotInstalledError:
             "The actor backend is also available with:\n"
             "  pip install 'akernel-sdk[openyuanrong-sdk]'"
         )
-    if backend == OPENYUANRONG_SANDBOX:
+    if backend in (ADX, OPENYUANRONG_SANDBOX):
         command = "pip install akernel-sdk"
     else:
         command = f"pip install 'akernel-sdk[{backend}]'"
@@ -112,7 +119,9 @@ def load_backend() -> Backend:
         if _loaded_backend is not None:
             return _loaded_backend
         backend_name = _selected_backend
-        if backend_name is None or not _is_installed(backend_name):
+        if backend_name is None or not _is_installed(
+            _DISTRIBUTIONS[backend_name]
+        ):
             raise _not_installed_error(backend_name)
         module = importlib.import_module(_MODULES[backend_name])
         backend = module.create_backend(_config_from_env())

@@ -91,18 +91,18 @@ class RegistryTest(unittest.TestCase):
             patch.dict(os.environ, {}, clear=True),
             patch.object(registry, "_is_installed", return_value=True) as installed,
         ):
-            self.assertEqual(registry._select_backend(), "openyuanrong-sandbox")
-        installed.assert_called_once_with("openyuanrong-sandbox")
+            self.assertEqual(registry._select_backend(), "adx")
+        installed.assert_called_once_with("adx-sandbox")
 
     def test_invalid_explicit_backend_fails_during_selection(self):
         with (
             patch.dict(os.environ, {"AKERNEL_BACKEND": "sandbox"}, clear=True),
-            self.assertRaisesRegex(InvalidBackendError, "openyuanrong-sandbox"),
+            self.assertRaisesRegex(InvalidBackendError, "adx"),
         ):
             registry._select_backend()
 
     def test_missing_default_backend_recommends_plain_install(self):
-        error = registry._not_installed_error("openyuanrong-sandbox")
+        error = registry._not_installed_error("adx")
         self.assertIsInstance(error, BackendNotInstalledError)
         self.assertIn("pip install akernel-sdk", str(error))
         self.assertNotIn("[openyuanrong-sandbox]", str(error))
