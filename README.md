@@ -134,6 +134,7 @@ Configure the AKernel environment:
 
 ```bash
 export AKERNEL_SERVER_ADDRESS="<your-akernel-server-address>"
+export AKERNEL_GATEWAY_ADDRESS="http://<your-akernel-server-address>"
 export AKERNEL_TOKEN="<your-akernel-token>"
 ```
 

@@ -4,12 +4,11 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import subprocess
 import unittest
+from pathlib import Path
 
 import yaml
-
 
 CHART = Path(__file__).resolve().parents[1]
 
@@ -68,7 +67,8 @@ class AdxChartTest(unittest.TestCase):
         self.assertEqual(env["AKERNEL_ADX_CONFIG"], "/etc/akernel/adx-node.yaml")
 
         volumes = {
-            item["name"]: item for item in daemonset["spec"]["template"]["spec"]["volumes"]
+            item["name"]: item
+            for item in daemonset["spec"]["template"]["spec"]["volumes"]
         }
         credentials = volumes["adx-credentials"]["secret"]
         self.assertEqual(credentials["secretName"], "adx-test-tls")
@@ -77,10 +77,48 @@ class AdxChartTest(unittest.TestCase):
             {"ca.pem", "master.der", "api-server.der", "node.pem", "node.key"},
         )
 
-    def test_gateway_is_the_only_public_control_entry(self) -> None:
+    def test_gateway_keeps_control_and_data_ports_separate(self) -> None:
         dynamic = self.resource("ConfigMap", "traefik-dynamic")["data"]["config.yml"]
         self.assertIn('url: "https://akernel-adx-control:8443"', dynamic)
+        self.assertIn('url: "http://akernel-adx-control:8080"', dynamic)
+        self.assertIn("- websecure", dynamic)
+        self.assertIn("- web", dynamic)
         self.assertNotIn("akernel-frontend:8888", dynamic)
+
+        service = self.resource("Service", "akernel-adx-control")
+        ports = {port["name"]: port["port"] for port in service["spec"]["ports"]}
+        self.assertEqual(ports["edge-control"], 8443)
+        self.assertEqual(ports["edge-data"], 8080)
+
+    def test_adx_keeps_both_ports_when_legacy_single_entry_is_disabled(self) -> None:
+        result = subprocess.run(
+            [
+                "helm",
+                "template",
+                "akernel",
+                str(CHART),
+                "--namespace",
+                "akernel-system",
+                "--set",
+                "adx.tls.existingSecret=adx-test-tls",
+                "--set",
+                "traefik.enabled=true",
+                "--set",
+                "traefik.enableWebEntrypoint=false",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        resources = [item for item in yaml.safe_load_all(result.stdout) if item]
+        traefik = next(
+            item
+            for item in resources
+            if item["kind"] == "Service" and item["metadata"]["name"] == "traefik"
+        )
+        ports = {port["name"] for port in traefik["spec"]["ports"]}
+        self.assertIn("websecure", ports)
+        self.assertIn("web", ports)
 
     def test_redis_is_single_member_aof_with_persistent_storage(self) -> None:
         redis = self.resource("StatefulSet", "akernel-adx-redis")
@@ -121,7 +159,9 @@ class AdxChartTest(unittest.TestCase):
         node = next(item for item in resources if item["kind"] == "DaemonSet")
         for workload in (control, node):
             environment = workload["spec"]["template"]["spec"]["containers"][0]["env"]
-            redis = next(item for item in environment if item["name"] == "ADX_REDIS_URL")
+            redis = next(
+                item for item in environment if item["name"] == "ADX_REDIS_URL"
+            )
             self.assertEqual(
                 redis["valueFrom"]["secretKeyRef"],
                 {"name": "external-redis", "key": "redis-url"},
@@ -137,6 +177,7 @@ class AdxChartTest(unittest.TestCase):
                 "--set",
                 "adx.redis.mode=external",
             ],
+            check=False,
             capture_output=True,
             text=True,
         )
@@ -158,6 +199,7 @@ class AdxChartTest(unittest.TestCase):
                 "--set",
                 "adx.control.replicas=2",
             ],
+            check=False,
             capture_output=True,
             text=True,
         )

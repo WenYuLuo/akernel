@@ -76,6 +76,7 @@ data:
         env:
           ADX_DATA_PLANE_EDGE_FRONTEND_CONTROL_PLANE_ROUTES: exact:/,exact:/healthz,prefix:/api/instances,prefix:/api/sandbox,prefix:/api/admin/v1/keys
           ADX_DATA_PLANE_EDGE_FRONTEND_TLS_BIND: 0.0.0.0:8443
+          ADX_DATA_PLANE_EDGE_FRONTEND_PLAIN_BIND: 0.0.0.0:8080
           ADX_DATA_PLANE_EDGE_FRONTEND_HEALTH_BIND: 0.0.0.0:18080
           ADX_DATA_PLANE_EDGE_FRONTEND_TLS_CERT: /etc/adx/tls/public.pem
           ADX_DATA_PLANE_EDGE_FRONTEND_TLS_KEY: /etc/adx/tls/public.key

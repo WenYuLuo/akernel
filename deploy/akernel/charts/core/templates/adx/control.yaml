@@ -14,9 +14,12 @@ spec:
     - name: master
       port: 19000
       targetPort: master
-    - name: edge
+    - name: edge-control
       port: 8443
-      targetPort: edge
+      targetPort: edge-control
+    - name: edge-data
+      port: 8080
+      targetPort: edge-data
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -64,8 +67,10 @@ spec:
           ports:
             - name: master
               containerPort: 19000
-            - name: edge
+            - name: edge-control
               containerPort: 8443
+            - name: edge-data
+              containerPort: 8080
             - name: health
               containerPort: 18080
             - name: master-metrics

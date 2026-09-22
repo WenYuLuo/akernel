@@ -28,7 +28,7 @@ def endpoint_tuple(endpoint):
 
 
 class AddressConfigTest(unittest.TestCase):
-    def test_host_only_uses_the_shared_https_edge(self):
+    def test_host_only_uses_separate_control_and_data_ports(self):
         with patch.dict(os.environ, {"AKERNEL_SERVER_ADDRESS": "10.0.0.1"}, clear=True):
             self.assertEqual(
                 endpoint_tuple(api_endpoint_from_env()),
@@ -40,17 +40,20 @@ class AddressConfigTest(unittest.TestCase):
             )
             self.assertEqual(
                 endpoint_tuple(gateway_endpoint_from_env()),
-                ("https", "10.0.0.1", 443, True),
+                ("http", "10.0.0.1", 80, False),
             )
 
-    def test_explicit_server_port_uses_the_shared_https_edge(self):
+    def test_explicit_server_port_does_not_replace_the_data_port(self):
         with patch.dict(
             os.environ, {"AKERNEL_SERVER_ADDRESS": "10.0.0.1:8888"}, clear=True
         ):
             expected = ("https", "10.0.0.1", 8888, True)
             self.assertEqual(endpoint_tuple(api_endpoint_from_env()), expected)
             self.assertEqual(endpoint_tuple(exec_endpoint_from_env()), expected)
-            self.assertEqual(endpoint_tuple(gateway_endpoint_from_env()), expected)
+            self.assertEqual(
+                endpoint_tuple(gateway_endpoint_from_env()),
+                ("http", "10.0.0.1", 80, False),
+            )
 
     def test_gateway_override_only_affects_public_gateway(self):
         with patch.dict(

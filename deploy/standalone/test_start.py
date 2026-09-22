@@ -5,17 +5,37 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import subprocess
 import tempfile
 import textwrap
 import unittest
-
+from pathlib import Path
 
 SCRIPT = Path(__file__).with_name("start.sh")
 
 
 class StartScriptTest(unittest.TestCase):
+    def test_gateway_config_keeps_control_and_data_ports_separate(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            command = (
+                f"source {SCRIPT!s}; "
+                f"DATA_DIR={directory!s}; "
+                "write_traefik_config 10.0.0.2"
+            )
+            subprocess.run(
+                ["bash", "-c", command],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            config = (Path(directory) / "traefik/dynamic.yml").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn("- websecure", config)
+            self.assertIn("- web", config)
+            self.assertIn('url: "https://10.0.0.2:8443"', config)
+            self.assertIn('url: "http://10.0.0.2:8080"', config)
+
     def test_health_probe_reads_token_from_curl_stdin(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -85,7 +105,7 @@ class StartScriptTest(unittest.TestCase):
             fake_docker = root / "docker"
             captured = root / "docker-args"
             fake_docker.write_text(
-                "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$CAPTURED_DOCKER_ARGS\"\n",
+                '#!/bin/sh\nprintf \'%s\\n\' "$@" > "$CAPTURED_DOCKER_ARGS"\n',
                 encoding="utf-8",
             )
             fake_docker.chmod(0o755)

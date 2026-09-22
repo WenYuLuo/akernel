@@ -196,19 +196,16 @@ Use the Traefik LoadBalancer host or IP directly with the SDK:
 
 ```bash
 export AKERNEL_SERVER_ADDRESS=<traefik-load-balancer-ip>
+export AKERNEL_GATEWAY_ADDRESS=http://<traefik-load-balancer-ip>
 ```
 
 `traefik_tls_enabled` is only for mounting a custom default certificate. It is
 not required for the `websecure` router on port 443; Traefik serves its default
 certificate when the variable is `false`.
 
-To use the legacy single-entrypoint mode, set
-`traefik_enable_web_entrypoint=false` and configure `traefik_tcp_port`. In that
-mode SDK clients must include the port explicitly:
-
-```bash
-export AKERNEL_SERVER_ADDRESS=<traefik-load-balancer-ip>:<port>
-```
+`traefik_enable_web_entrypoint=false` selects the legacy single-entrypoint mode
+only when the legacy control plane is deployed. ADX deployments always expose
+the separate `websecure` control and `web` data ports.
 
 Enable OSS auth injection for AKernel node secret:
 

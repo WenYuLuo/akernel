@@ -344,12 +344,14 @@ core:
       web: 80
 ```
 
-`websecure` forwards the Sandbox API, command and file traffic, port forwarding,
-and reverse tunnels to ADX Edge over HTTPS. Configure the SDK with the
-LoadBalancer address and the bootstrap administrator API key:
+`websecure` forwards authenticated Sandbox API, command and file traffic to the
+ADX Edge TLS listener. `web` forwards instance data to the separate Edge plain
+listener. Configure both SDK addresses with the LoadBalancer address and use
+the bootstrap administrator API key for the control endpoint:
 
 ```bash
 export AKERNEL_SERVER_ADDRESS=<traefik-load-balancer-ip>
+export AKERNEL_GATEWAY_ADDRESS=http://<traefik-load-balancer-ip>
 export AKERNEL_TOKEN="$(kubectl -n akernel get secret akernel-adx-tls \
   -o jsonpath='{.data.admin-key}' | base64 -d)"
 ```

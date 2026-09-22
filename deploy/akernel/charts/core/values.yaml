@@ -584,9 +584,9 @@ traefik:
   enabled: false
   mode: "http"
   enableTLS: false
-  # When enabled, creates a separate "web" entrypoint (no TLS) on its own port
-  # for port forwarding traffic, while the ADX Edge API stays on "websecure"
-  # with TLS.
+  # Legacy control-plane deployments may disable the separate web entrypoint.
+  # ADX always exposes websecure for control traffic and web for instance data,
+  # regardless of this compatibility setting.
   enableWebEntrypoint: true
   # Transport options for the frontend (akernel-master) backend.
   frontendTransport:

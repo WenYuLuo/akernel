@@ -57,10 +57,11 @@ Address behavior is deterministic:
 
 - A host or IP without a port uses HTTPS/WSS on 443 for the frontend and HTTP
   on 80 for public sandbox port URLs.
-- `host:port` uses that port as a shared HTTPS/WSS endpoint.
+- `host:port` changes only the HTTPS/WSS control endpoint; the public sandbox
+  gateway remains HTTP port 80 unless explicitly overridden.
 - `AKERNEL_GATEWAY_ADDRESS` overrides only the port-forwarding and reverse
-  tunnel gateway for standalone or custom topologies. An override without a
-  scheme uses HTTP/WS. Exec and file transfer continue to use
+  tunnel data endpoint for nonstandard ports or TLS gateways. An override
+  without a scheme uses HTTP/WS. Exec and file transfer continue to use
   `AKERNEL_SERVER_ADDRESS`.
 
 The actor-based Python backend is not included. To test the earlier REST

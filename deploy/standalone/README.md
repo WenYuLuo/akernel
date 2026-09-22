@@ -211,9 +211,10 @@ sudo docker exec akernel-node systemctl status
 
 ### SDK Connection
 
-Traefik listens on port 443 and forwards both control and sandbox traffic to
-ADX Edge. The port is not published on the host. Use the Traefik container IP
-printed by `start.sh`, or retrieve it later:
+Traefik exposes two ADX Edge listeners: port 443/TLS for authenticated control,
+command and file traffic, and port 80/plain HTTP for instance data such as
+public port forwarding. These ports are not published on the host. Use the
+Traefik container IP printed by `start.sh`, or retrieve it later:
 
 ```bash
 TRAEFIK_IP=$(docker inspect \
@@ -225,6 +226,7 @@ Set the SDK environment:
 
 ```bash
 export AKERNEL_SERVER_ADDRESS="https://${TRAEFIK_IP}"
+export AKERNEL_GATEWAY_ADDRESS="http://${TRAEFIK_IP}"
 export AKERNEL_TOKEN="$(cat data/adx/secrets/admin-key)"
 ```
 
@@ -232,8 +234,9 @@ The administrator API key and component certificates are generated once under
 `data/adx/` and reused while that standalone data directory exists. Keep this
 directory private. Tenant keys can be created later through the ADX admin API.
 
-Without `AKERNEL_GATEWAY_ADDRESS`, the SDK uses the same HTTPS Edge address for
-API, commands, files, reverse tunnels, and port forwarding.
+The two listeners belong to the same Edge process in this profile. A deployment
+may run API Server and Edge in one process or separate processes without
+collapsing their public control and data ports.
 
 ### Container Image Version
 

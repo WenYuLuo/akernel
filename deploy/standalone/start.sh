@@ -404,19 +404,28 @@ write_traefik_config() {
     cat > "${traefik_dir}/dynamic.yml" <<EOF
 http:
   routers:
-    akernel-edge:
+    akernel-control:
       entryPoints:
         - websecure
-      rule: "PathPrefix(\`/\`)"
-      service: akernel-edge
+      rule: "Path(\`/\`) || Path(\`/healthz\`) || PathPrefix(\`/api/instances\`) || PathPrefix(\`/api/sandbox\`) || PathPrefix(\`/api/admin/v1/keys\`)"
+      service: akernel-control
       tls: {}
+    akernel-data:
+      entryPoints:
+        - web
+      rule: "PathPrefix(\`/\`)"
+      service: akernel-data
 
   services:
-    akernel-edge:
+    akernel-control:
       loadBalancer:
         serversTransport: akernel-edge
         servers:
           - url: "https://${node_ip}:8443"
+    akernel-data:
+      loadBalancer:
+        servers:
+          - url: "http://${node_ip}:8080"
 
   serversTransports:
     akernel-edge:
@@ -521,6 +530,7 @@ main() {
 
     log_info "AKernel started successfully in standalone mode"
     log_info "Set AKERNEL_SERVER_ADDRESS=https://${TRAEFIK_IP}"
+    log_info "Set AKERNEL_GATEWAY_ADDRESS=http://${TRAEFIK_IP}"
     log_info "Set AKERNEL_TOKEN=\$(cat ${TOKEN_FILE})"
 }
 

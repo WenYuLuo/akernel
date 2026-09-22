@@ -7,7 +7,7 @@ metadata:
 data:
   traefik.yml: |
     entryPoints:
-      {{- if .Values.traefik.enableWebEntrypoint }}
+      {{- if or .Values.adx.enabled .Values.traefik.enableWebEntrypoint }}
       websecure:
         address: ":{{ .Values.traefik.ports.websecure }}"
       web:
@@ -81,18 +81,27 @@ data:
     http:
       {{- if .Values.adx.enabled }}
       routers:
-        adx:
+        adx-control:
           entryPoints:
             - websecure
-          rule: "PathPrefix(`/`)"
+          rule: "Path(`/`) || Path(`/healthz`) || PathPrefix(`/api/instances`) || PathPrefix(`/api/sandbox`) || PathPrefix(`/api/admin/v1/keys`)"
           service: akernel-adx-control
           tls: {}
+        adx-data:
+          entryPoints:
+            - web
+          rule: "PathPrefix(`/`)"
+          service: akernel-adx-data
       services:
         akernel-adx-control:
           loadBalancer:
             serversTransport: adx-transport
             servers:
               - url: "https://akernel-adx-control:8443"
+        akernel-adx-data:
+          loadBalancer:
+            servers:
+              - url: "http://akernel-adx-control:8080"
       serversTransports:
         adx-transport:
           insecureSkipVerify: true

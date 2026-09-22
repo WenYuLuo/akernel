@@ -550,19 +550,19 @@ variable "traefik_tcp_port" {
 
 variable "traefik_enable_web_entrypoint" {
   type        = bool
-  description = "Enable dual entrypoints: 'websecure' (TLS, frontend API) on traefik_websecure_port and 'web' (plain HTTP, port forwarding) on traefik_web_port. When false, falls back to legacy single-entrypoint mode using traefik_tcp_port."
+  description = "Enable dual entrypoints for the legacy control plane. ADX always exposes 'websecure' for control traffic and 'web' for instance data."
   default     = true
 }
 
 variable "traefik_web_port" {
   type        = number
-  description = "Port for Traefik 'web' (plain HTTP) entrypoint. Only used when traefik_enable_web_entrypoint=true."
+  description = "Port for Traefik 'web' (plain HTTP) data entrypoint. ADX always uses it."
   default     = 80
 }
 
 variable "traefik_websecure_port" {
   type        = number
-  description = "Port for Traefik 'websecure' (TLS) entrypoint. Only used when traefik_enable_web_entrypoint=true."
+  description = "Port for Traefik 'websecure' (TLS) control entrypoint. ADX always uses it."
   default     = 443
 }
 

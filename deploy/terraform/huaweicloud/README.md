@@ -79,10 +79,11 @@ Traefik is exposed through a public ELB with two entrypoints:
 - `websecure:443` serves the authenticated ADX Edge API and exec websocket.
 - `web:80` serves sandbox port-forwarding traffic.
 
-The SDK therefore needs only the Traefik ELB address:
+Configure the SDK with both logical entrypoints on the Traefik ELB:
 
 ```bash
 export AKERNEL_SERVER_ADDRESS=<traefik-elb-address>
+export AKERNEL_GATEWAY_ADDRESS=http://<traefik-elb-address>
 ```
 
 Grafana uses a separate public ELB when monitoring and public Grafana access

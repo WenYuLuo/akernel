@@ -401,23 +401,26 @@ Required environment:
 
 ```bash
 export AKERNEL_SERVER_ADDRESS="<server_address>"
+export AKERNEL_GATEWAY_ADDRESS="http://<gateway_address>"
 export AKERNEL_TOKEN="<your_token>"
 ```
 
-When the public Traefik dual-entrypoint mode is enabled, a host/IP-only
-`AKERNEL_SERVER_ADDRESS` uses HTTPS/WSS on 443 for the ADX Edge API and exec
-websocket, and HTTP on 80 for sandbox port URLs. For standalone deployments,
-use the Traefik container IP printed by `deploy/standalone/start.sh`:
+ADX always keeps two public listeners: HTTPS/WSS control traffic on 443 and
+plain HTTP/WS instance data on 80. API Server and Edge may share a process, but
+their public ports remain distinct. For standalone deployments, use the
+Traefik container IP printed by `deploy/standalone/start.sh`:
 
 ```bash
 export AKERNEL_SERVER_ADDRESS=<traefik-container-ip>
+export AKERNEL_GATEWAY_ADDRESS=http://<traefik-container-ip>
 ```
 
-No separate `AKERNEL_GATEWAY_ADDRESS` is required for the default standalone
-layout. When a custom topology sets it, the override applies only to public
-sandbox port URLs and reverse tunnels; exec and file transfer continue to use
-`AKERNEL_SERVER_ADDRESS`. Standalone uses `akerneldev/all-in-one:latest` by
-default; pass `IMAGE` to test a locally built or differently tagged image.
+The SDK can derive the standard port-80 gateway from a host-only control
+address, while deployment tools print both variables explicitly. A custom
+`AKERNEL_GATEWAY_ADDRESS` applies only to public sandbox port URLs and reverse
+tunnels; exec and file transfer continue to use `AKERNEL_SERVER_ADDRESS`.
+Standalone uses `akerneldev/all-in-one:latest` by default; pass `IMAGE` to test
+a locally built or differently tagged image.
 
 Standalone GPU testing additionally requires NVIDIA Container Toolkit on the
 host and `AKERNEL_ENABLE_GPU=true`. sandboxd uses the read-only cgroup

@@ -16,8 +16,9 @@
 
 The public SDK accepts a compact ``AKERNEL_SERVER_ADDRESS`` value:
 
-* ``host:port``: shared-port mode.  Frontend API, exec WebSocket, and public
-  port-forward URLs all use the explicit port with TLS by default.
+* ``host[:port]``: control-plane address. Frontend API and exec WebSocket use
+  TLS on the explicit port or 443, while public port-forward URLs use plain
+  HTTP on port 80 by default.
 
 ``AKERNEL_GATEWAY_ADDRESS`` remains an explicit override for standalone or
 custom network topologies.  When it is set without a scheme, it is treated as a
@@ -118,9 +119,9 @@ def api_endpoint_from_env() -> Endpoint:
 def gateway_endpoint_from_env() -> Endpoint:
     """Return the public port-forwarding gateway endpoint.
 
-    An explicit gateway override without a scheme remains plain HTTP for
-    custom topologies. Without an override, ADX exposes API and instance
-    traffic through the same TLS Edge endpoint.
+    An explicit gateway override selects a custom data-plane endpoint. Without
+    an override, ADX keeps the control and data listeners on the same host but
+    derives the data endpoint as plain HTTP port 80.
     """
     override = _gateway_override_raw()
     if override:
@@ -130,7 +131,13 @@ def gateway_endpoint_from_env() -> Endpoint:
             default_scheme="http",
         )
 
-    return api_endpoint_from_env()
+    server = api_endpoint_from_env()
+    return Endpoint(
+        host=server.host,
+        port=DEFAULT_PUBLIC_PORT,
+        scheme="http",
+        explicit_port=False,
+    )
 
 
 def exec_endpoint_from_env() -> Endpoint:

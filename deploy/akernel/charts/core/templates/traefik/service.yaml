@@ -17,7 +17,7 @@ spec:
   loadBalancerIP: {{ .Values.traefik.service.loadBalancerIP | quote }}
   {{- end }}
   ports:
-    {{- if .Values.traefik.enableWebEntrypoint }}
+    {{- if or .Values.adx.enabled .Values.traefik.enableWebEntrypoint }}
     - name: websecure
       port: {{ .Values.traefik.ports.websecure }}
       targetPort: websecure
