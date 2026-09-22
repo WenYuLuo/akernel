@@ -22,6 +22,7 @@ AKERNEL_CONTROL_PORT="${AKERNEL_CONTROL_PORT:-443}"
 AKERNEL_DATA_BIND="${AKERNEL_DATA_BIND:-0.0.0.0}"
 AKERNEL_DATA_PORT="${AKERNEL_DATA_PORT:-80}"
 AKERNEL_ENDPOINT_HOST="${AKERNEL_ENDPOINT_HOST:-127.0.0.1}"
+AKERNEL_CHUNK_DB_SIZE="${AKERNEL_CHUNK_DB_SIZE:-}"
 
 # Container runtime command (docker or pouch)
 DOCKER_CMD=""
@@ -325,6 +326,20 @@ configure_network() {
         fi
         sed_args+=(
             -e 's|^[[:space:]]*# AKERNEL_RUNTIME_RUNC[[:space:]]*$|runc="/usr/local/bin/runc"|'
+        )
+    fi
+    if [[ -n "${AKERNEL_CHUNK_DB_SIZE}" ]]; then
+        if [[ ! "${AKERNEL_CHUNK_DB_SIZE}" =~ ^[0-9]+(B|KiB|MiB|GiB|TiB)?$ ]]; then
+            log_error "AKERNEL_CHUNK_DB_SIZE must be whole bytes or an integer with B/KiB/MiB/GiB/TiB"
+            exit 1
+        fi
+        if ! grep -q '^[[:space:]]*# AKERNEL_CHUNK_DB_SIZE[[:space:]]*$' \
+            "${CONFIG_DIR}/sandboxd_config.toml"; then
+            log_error "AKERNEL_CHUNK_DB_SIZE requires the # AKERNEL_CHUNK_DB_SIZE marker in sandboxd_config.toml"
+            exit 1
+        fi
+        sed_args+=(
+            -e "s|^[[:space:]]*# AKERNEL_CHUNK_DB_SIZE[[:space:]]*$|chunk_db_size=\"${AKERNEL_CHUNK_DB_SIZE}\"|"
         )
     fi
     sed "${sed_args[@]}" "${CONFIG_DIR}/sandboxd_config.toml" > "${config_tmp}"
