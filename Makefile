@@ -10,7 +10,7 @@ IMAGE_TAG ?=
 IMAGE_REPOSITORY ?=
 OPEN_YR_CORE_WHEEL_URL ?=
 OPEN_YR_CORE_WHEEL_SHA256 ?=
-ADX_RELEASE_ARCHIVE ?=
+ADX_RELEASE_ARCHIVE ?= out/buildkite/adx-release.tar.gz
 FORCE ?= 0
 NON_INTERACTIVE ?= 0
 REGION ?=
@@ -53,6 +53,7 @@ help:
 	@echo "  make build AKERNEL_ENABLE_FIRECRACKER=false Exclude Firecracker"
 	@echo "  make build AKERNEL_ENABLE_RUNC=true Include the optional runc payload"
 	@echo "  make build ADX_RELEASE_ARCHIVE=... Consume the pinned ADX release"
+	@echo "  make adx-release                    Fetch and verify the pinned ADX release"
 	@echo "  make versions                       Show locally selected component versions"
 	@echo "  make push                          Push the configured all-in-one image"
 	@echo "  make plan                          Terraform plan"
@@ -96,15 +97,20 @@ config:
 	if [[ -n "$(IAM_SEED_HEX)" ]]; then args+=(--iam-seed-hex "$(IAM_SEED_HEX)"); fi; \
 	./deploy/scripts/configure.sh "$${args[@]}"
 
+.PHONY: adx-release
+adx-release:
+	@python3 builder/scripts/fetch_adx_release.py \
+		--output "$(ADX_RELEASE_ARCHIVE)"
+
 .PHONY: build
-build:
+build: adx-release
 	@args=(--env "$(ENV)"); \
 	if [[ -n "$(IMAGE_REPOSITORY)" ]]; then args+=(--repository "$(IMAGE_REPOSITORY)"); fi; \
 	if [[ -n "$(IMAGE_TAG)" ]]; then args+=(--tag "$(IMAGE_TAG)"); fi; \
 	if [[ -n "$(RUNTIME_PROFILE)" ]]; then args+=(--runtime-profile "$(RUNTIME_PROFILE)"); fi; \
 	if [[ -n "$(OPEN_YR_CORE_WHEEL_URL)" ]]; then args+=(--open-yr-core-wheel-url "$(OPEN_YR_CORE_WHEEL_URL)"); fi; \
 	if [[ -n "$(OPEN_YR_CORE_WHEEL_SHA256)" ]]; then args+=(--open-yr-core-wheel-sha256 "$(OPEN_YR_CORE_WHEEL_SHA256)"); fi; \
-	if [[ -n "$(ADX_RELEASE_ARCHIVE)" ]]; then args+=(--adx-release "$(ADX_RELEASE_ARCHIVE)"); fi; \
+	args+=(--adx-release "$(ADX_RELEASE_ARCHIVE)"); \
 	./deploy/scripts/build-image.sh "$${args[@]}"
 
 .PHONY: versions
