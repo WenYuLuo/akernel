@@ -4,11 +4,11 @@
 sandboxes. Applications use one stable API for commands, files, interactive
 PTYs, port forwarding, and reverse tunnels.
 
-It supports two backends:
+ADX is the default backend. One REST compatibility backend remains available:
 
-- `openyuanrong-sandbox` (default), using a RESTful API and Rust runtime.
-- `openyuanrong-sdk` (deprecated compatibility backend), using YuanRong actors
-  and a Python runtime.
+- `adx` (default), using the Agent DX Sandbox API.
+- `openyuanrong-sandbox` (optional compatibility extra), using the earlier
+  RESTful Sandbox API.
 
 ## Navigation
 
@@ -63,14 +63,12 @@ Address behavior is deterministic:
   scheme uses HTTP/WS. Exec and file transfer continue to use
   `AKERNEL_SERVER_ADDRESS`.
 
-The actor-based `openyuanrong-sdk` backend is deprecated and retained only for
-compatibility with existing applications. New applications should use
-`openyuanrong-sandbox`. If compatibility requires the actor backend, install
-and select it before importing `akernel_sdk`:
+The actor-based Python backend is not included. To test the earlier REST
+compatibility backend, install and select it before importing `akernel_sdk`:
 
 ```bash
-pip install "akernel-sdk[openyuanrong-sdk]"
-export AKERNEL_BACKEND=openyuanrong-sdk
+pip install "akernel-sdk[openyuanrong-sandbox]"
+export AKERNEL_BACKEND=openyuanrong-sandbox
 ```
 
 ## Create a sandbox
@@ -461,8 +459,7 @@ AKERNEL_TEST_RUNTIME=runsc python examples/failover_reload.py
 ```
 
 See [`examples/failover_reload.py`](./examples/failover_reload.py) for the
-internal trigger used during integration. The actor-based
-`openyuanrong-sdk` backend does not support failover or reload.
+internal trigger used during integration.
 
 ## Reverse tunnels
 

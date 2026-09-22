@@ -14,7 +14,6 @@ repository=""
 tag=""
 env_name=""
 runtime_image=""
-runtime_profile="${RUNTIME_PROFILE:-rrt}"
 runtime_versions_file="${ROOT}/src/sandboxd/third_party/runtime-versions.env"
 if [[ ! -f "${runtime_versions_file}" ]]; then
   die "missing runtime version manifest: ${runtime_versions_file}"
@@ -82,10 +81,6 @@ while [[ $# -gt 0 ]]; do
       runtime_image="$2"
       shift 2
       ;;
-    --runtime-profile)
-      runtime_profile="$2"
-      shift 2
-      ;;
     --open-yr-core-wheel-url)
       open_yr_core_wheel_url="$2"
       shift 2
@@ -107,11 +102,6 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
-
-case "${runtime_profile}" in
-  rrt|python) ;;
-  *) die "unsupported runtime profile: ${runtime_profile}; expected rrt or python" ;;
-esac
 
 case "${AKERNEL_ENABLE_KATA:-true}" in
   true|false) ;;
@@ -188,10 +178,10 @@ trap cleanup_adx_release_stage EXIT
 python3 "${AKERNEL_REPO_ROOT}/builder/scripts/stage_adx_release.py" \
   "${adx_release_archive}" "${adx_release_stage}/package"
 
-info "building ${runtime_image} with runtime profile ${runtime_profile}"
+info "building ${runtime_image} with the RRT runtime profile"
 docker build \
   -f builder/runtime.Dockerfile \
-  --target "runtime-${runtime_profile}" \
+  --target runtime-rrt \
   --build-context "adx_release=${adx_release_stage}/package" \
   -t "${runtime_image}" \
   .
@@ -202,7 +192,6 @@ node_build_args=(
   --build-arg "DISTILL_FS_AMD64_URL=${DISTILL_FS_AMD64_URL}"
   --build-arg "DISTILL_FS_AMD64_SHA256=${DISTILL_FS_AMD64_SHA256}"
   --build-arg "AKERNEL_RUNTIME_IMAGE=${runtime_image}"
-  --build-arg "AKERNEL_RUNTIME_PROFILE=${runtime_profile}"
   --build-arg "AKERNEL_ENABLE_KATA=${AKERNEL_ENABLE_KATA:-true}"
   --build-arg "AKERNEL_ENABLE_RUNC=${AKERNEL_ENABLE_RUNC:-false}"
   --build-arg "AKERNEL_ENABLE_FIRECRACKER=${AKERNEL_ENABLE_FIRECRACKER:-true}"

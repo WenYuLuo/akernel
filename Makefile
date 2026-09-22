@@ -48,7 +48,6 @@ help:
 	@echo "  make config ENABLE_RUNC=true       Build and register the optional runc runtime"
 	@echo "  make config SCHEDULE_PLACEMENT_POLICY=binpack Use compact scheduling"
 	@echo "  make build IMAGE_TAG=<tag>          Build the all-in-one image"
-	@echo "  make build RUNTIME_PROFILE=python   Include optional Python runtimes"
 	@echo "  make build AKERNEL_ENABLE_KATA=false Exclude the optional Kata payload"
 	@echo "  make build AKERNEL_ENABLE_FIRECRACKER=false Exclude Firecracker"
 	@echo "  make build AKERNEL_ENABLE_RUNC=true Include the optional runc payload"
@@ -107,7 +106,6 @@ build: adx-release
 	@args=(--env "$(ENV)"); \
 	if [[ -n "$(IMAGE_REPOSITORY)" ]]; then args+=(--repository "$(IMAGE_REPOSITORY)"); fi; \
 	if [[ -n "$(IMAGE_TAG)" ]]; then args+=(--tag "$(IMAGE_TAG)"); fi; \
-	if [[ -n "$(RUNTIME_PROFILE)" ]]; then args+=(--runtime-profile "$(RUNTIME_PROFILE)"); fi; \
 	if [[ -n "$(OPEN_YR_CORE_WHEEL_URL)" ]]; then args+=(--open-yr-core-wheel-url "$(OPEN_YR_CORE_WHEEL_URL)"); fi; \
 	if [[ -n "$(OPEN_YR_CORE_WHEEL_SHA256)" ]]; then args+=(--open-yr-core-wheel-sha256 "$(OPEN_YR_CORE_WHEEL_SHA256)"); fi; \
 	args+=(--adx-release "$(ADX_RELEASE_ARCHIVE)"); \

@@ -29,18 +29,15 @@ from .errors import BackendNotInstalledError, InvalidBackendError
 
 ADX: Final = "adx"
 OPENYUANRONG_SANDBOX: Final = "openyuanrong-sandbox"
-OPENYUANRONG_SDK: Final = "openyuanrong-sdk"
-SUPPORTED_BACKENDS: Final = (ADX, OPENYUANRONG_SANDBOX, OPENYUANRONG_SDK)
+SUPPORTED_BACKENDS: Final = (ADX, OPENYUANRONG_SANDBOX)
 
 _MODULES: Final = {
     ADX: "akernel_sdk._backends.adx",
     OPENYUANRONG_SANDBOX: "akernel_sdk._backends.openyuanrong_sandbox",
-    OPENYUANRONG_SDK: "akernel_sdk._backends.openyuanrong_sdk",
 }
 _DISTRIBUTIONS: Final = {
     ADX: "adx-sandbox",
     OPENYUANRONG_SANDBOX: "openyuanrong-sandbox",
-    OPENYUANRONG_SDK: "openyuanrong-sdk",
 }
 
 
@@ -83,17 +80,14 @@ def _not_installed_error(backend: str | None) -> BackendNotInstalledError:
     if backend is None:
         return BackendNotInstalledError(
             "The default AKernel backend is not installed. Reinstall with:\n"
-            "  pip install akernel-sdk\n"
-            "The actor backend is also available with:\n"
-            "  pip install 'akernel-sdk[openyuanrong-sdk]'"
+            "  pip install akernel-sdk"
         )
-    if backend in (ADX, OPENYUANRONG_SANDBOX):
+    if backend == ADX:
         command = "pip install akernel-sdk"
     else:
         command = f"pip install 'akernel-sdk[{backend}]'"
     return BackendNotInstalledError(
-        f"Backend {backend!r} is not installed. Install it with:\n"
-        f"  {command}"
+        f"Backend {backend!r} is not installed. Install it with:\n  {command}"
     )
 
 
@@ -119,9 +113,7 @@ def load_backend() -> Backend:
         if _loaded_backend is not None:
             return _loaded_backend
         backend_name = _selected_backend
-        if backend_name is None or not _is_installed(
-            _DISTRIBUTIONS[backend_name]
-        ):
+        if backend_name is None or not _is_installed(_DISTRIBUTIONS[backend_name]):
             raise _not_installed_error(backend_name)
         module = importlib.import_module(_MODULES[backend_name])
         backend = module.create_backend(_config_from_env())

@@ -18,11 +18,7 @@ from types import MappingProxyType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from akernel_sdk._addresses import Endpoint
-from akernel_sdk._backends import (
-    openyuanrong_sandbox,
-    openyuanrong_sdk,
-    registry,
-)
+from akernel_sdk._backends import openyuanrong_sandbox, registry
 from akernel_sdk._backends.base import BackendConfig, SandboxSpec
 from akernel_sdk._backends.errors import (
     BackendNotInstalledError,
@@ -78,13 +74,24 @@ class RegistryTest(unittest.TestCase):
         with (
             patch.dict(
                 os.environ,
-                {"AKERNEL_BACKEND": "openyuanrong-sdk"},
+                {"AKERNEL_BACKEND": "openyuanrong-sandbox"},
                 clear=True,
             ),
             patch.object(registry, "_is_installed") as installed,
         ):
-            self.assertEqual(registry._select_backend(), "openyuanrong-sdk")
+            self.assertEqual(registry._select_backend(), "openyuanrong-sandbox")
         installed.assert_not_called()
+
+    def test_removed_actor_backend_is_rejected(self):
+        with (
+            patch.dict(
+                os.environ,
+                {"AKERNEL_BACKEND": "openyuanrong-sdk"},
+                clear=True,
+            ),
+            self.assertRaisesRegex(InvalidBackendError, "unsupported"),
+        ):
+            registry._select_backend()
 
     def test_sandbox_has_auto_detection_priority(self):
         with (
@@ -107,9 +114,9 @@ class RegistryTest(unittest.TestCase):
         self.assertIn("pip install akernel-sdk", str(error))
         self.assertNotIn("[openyuanrong-sandbox]", str(error))
 
-    def test_missing_actor_backend_recommends_named_extra(self):
-        error = registry._not_installed_error("openyuanrong-sdk")
-        self.assertIn("akernel-sdk[openyuanrong-sdk]", str(error))
+    def test_missing_compatibility_backend_recommends_named_extra(self):
+        error = registry._not_installed_error("openyuanrong-sandbox")
+        self.assertIn("akernel-sdk[openyuanrong-sandbox]", str(error))
 
     def test_loaded_backend_close_is_registered_for_process_exit(self):
         backend = MagicMock()
@@ -118,7 +125,11 @@ class RegistryTest(unittest.TestCase):
         )
         with (
             patch.object(registry, "_loaded_backend", None),
-            patch.object(registry, "_selected_backend", "openyuanrong-sdk"),
+            patch.object(
+                registry,
+                "_selected_backend",
+                "openyuanrong-sandbox",
+            ),
             patch.object(registry, "_is_installed", return_value=True),
             patch.object(
                 registry.importlib,
@@ -661,175 +672,6 @@ class OpenYuanRongSandboxBackendTest(unittest.TestCase):
         )
         self.assertEqual(native_policy.to_dict(), policy.to_dict())
         self.assertIsNone(native.update_network_policy.call_args_list[1].args[0])
-
-
-class OpenYuanRongSdkBackendTest(unittest.TestCase):
-    def setUp(self):
-        self.config = BackendConfig(
-            api_endpoint=Endpoint("api.example", 443, "https", True),
-            gateway_endpoint=Endpoint("gateway.example", 80, "http", True),
-            token="secret",
-        )
-        initialized = patch.object(openyuanrong_sdk._impl, "ensure_initialized")
-        initialized.start()
-        self.addCleanup(initialized.stop)
-        self.backend = openyuanrong_sdk.OpenYuanRongSdkBackend(self.config)
-
-    def test_physical_id_failure_rolls_back_created_actor(self):
-        instance = MagicMock()
-        physical_id_error = RuntimeError("physical ID unavailable")
-        with (
-            patch.object(
-                openyuanrong_sdk._impl,
-                "build_options",
-                return_value=MagicMock(),
-            ),
-            patch.object(
-                openyuanrong_sdk._impl,
-                "create_instance",
-                return_value=instance,
-            ),
-            patch.object(
-                openyuanrong_sdk._impl,
-                "real_instance_id",
-                side_effect=physical_id_error,
-            ),
-            patch.object(
-                openyuanrong_sdk._impl,
-                "terminate_instance",
-            ) as terminate,
-            self.assertRaisesRegex(
-                BackendOperationError,
-                "physical ID unavailable",
-            ) as raised,
-        ):
-            self.backend.create(_spec())
-
-        self.assertIs(raised.exception.__cause__, physical_id_error)
-        terminate.assert_called_once_with(instance)
-
-    def test_failover_is_explicitly_unsupported(self):
-        with (
-            patch.object(openyuanrong_sdk._impl, "build_options") as build_options,
-            self.assertRaisesRegex(
-                UnsupportedBackendFeatureError,
-                "automatic sandbox failover",
-            ),
-        ):
-            self.backend.create(_spec(failover=True))
-
-        build_options.assert_not_called()
-
-    def test_inherit_entrypoint_is_explicitly_unsupported(self):
-        with (
-            patch.object(openyuanrong_sdk._impl, "build_options") as build_options,
-            self.assertRaisesRegex(
-                UnsupportedBackendFeatureError,
-                "inheriting image ENTRYPOINT",
-            ),
-        ):
-            self.backend.create(
-                _spec(image="example/image:latest", inherit_entrypoint=True)
-            )
-
-        build_options.assert_not_called()
-
-    def test_rollback_failure_does_not_replace_physical_id_error(self):
-        instance = MagicMock()
-        physical_id_error = RuntimeError("physical ID unavailable")
-        with (
-            patch.object(
-                openyuanrong_sdk._impl,
-                "build_options",
-                return_value=MagicMock(),
-            ),
-            patch.object(
-                openyuanrong_sdk._impl,
-                "create_instance",
-                return_value=instance,
-            ),
-            patch.object(
-                openyuanrong_sdk._impl,
-                "real_instance_id",
-                side_effect=physical_id_error,
-            ),
-            patch.object(
-                openyuanrong_sdk._impl,
-                "terminate_instance",
-                side_effect=RuntimeError("rollback failed"),
-            ) as terminate,
-            self.assertLogs(openyuanrong_sdk.logger, level="WARNING"),
-            self.assertRaisesRegex(
-                BackendOperationError,
-                "physical ID unavailable",
-            ) as raised,
-        ):
-            self.backend.create(_spec())
-
-        self.assertIs(raised.exception.__cause__, physical_id_error)
-        terminate.assert_called_once_with(instance)
-
-    def test_termination_failure_still_closes_reverse_tunnel(self):
-        instance = MagicMock()
-        tunnel_client = MagicMock()
-        terminate_error = RuntimeError("remote delete failed")
-        with (
-            patch.object(
-                openyuanrong_sdk._impl,
-                "build_options",
-                return_value=MagicMock(),
-            ),
-            patch.object(
-                openyuanrong_sdk._impl,
-                "create_instance",
-                return_value=instance,
-            ),
-            patch.object(
-                openyuanrong_sdk._impl,
-                "real_instance_id",
-                return_value="physical-id",
-            ),
-            patch.object(
-                openyuanrong_sdk._impl,
-                "start_reverse_tunnel",
-                return_value=tunnel_client,
-            ),
-            patch.object(
-                openyuanrong_sdk._impl,
-                "terminate_instance",
-                side_effect=[terminate_error, None],
-            ) as terminate,
-        ):
-            session = self.backend.create(
-                _spec(reverse_tunnel=HttpReverseTunnel("http://127.0.0.1:9000"))
-            )
-            with self.assertRaisesRegex(
-                BackendOperationError,
-                "remote delete failed",
-            ) as raised:
-                session.terminate()
-            session.close()
-            session.terminate()
-            session.terminate()
-
-        self.assertIs(raised.exception.__cause__, terminate_error)
-        self.assertEqual(terminate.call_count, 2)
-        tunnel_client.stop.assert_called_once_with()
-
-    def test_close_finalizes_actor_sdk(self):
-        with patch.object(openyuanrong_sdk._impl, "finalize") as finalize:
-            self.backend.close()
-
-        finalize.assert_called_once_with()
-
-    def test_dynamic_network_policy_is_explicitly_unsupported(self):
-        session = openyuanrong_sdk._Session(MagicMock(), "physical-id", _spec(), None)
-
-        with self.assertRaisesRegex(
-            UnsupportedBackendFeatureError,
-            "does not support dynamic network policy",
-        ):
-            session.update_network_policy(NetworkPolicy.block())
 
 
 if __name__ == "__main__":

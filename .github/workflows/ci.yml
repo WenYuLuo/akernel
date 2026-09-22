@@ -137,6 +137,7 @@ jobs:
           python builder/scripts/test_verify_adx_release.py -v
           python builder/scripts/test_fetch_adx_release.py -v
           python builder/scripts/test_ensure_adx_certs.py -v
+          python builder/scripts/test_runtime_contract.py -v
           python deploy/standalone/test_start.py -v
           python deploy/scripts/test_ensure_adx_secret.py -v
           python deploy/scripts/test_get_adx_admin_key.py -v
@@ -201,8 +202,7 @@ jobs:
         run: |
           make build \
             IMAGE_REPOSITORY=akernel-ci/all-in-one \
-            IMAGE_TAG="${GITHUB_SHA}" \
-            RUNTIME_PROFILE=rrt
+            IMAGE_TAG="${GITHUB_SHA}"
 
       - name: Verify systemd container identity in the image
         run: |

@@ -107,7 +107,6 @@ depending on the deployment entrypoint and environment.
 
 ```bash
 make build
-make build RUNTIME_PROFILE=python
 make build AKERNEL_ENABLE_RUNC=true
 make build AKERNEL_ENABLE_FIRECRACKER=false
 ```
@@ -119,18 +118,10 @@ The build creates only the selected image reference; it does not add a second
 `akernel-all-in-one` alias. `make push` pushes that selected reference directly.
 
 The build helper performs two Docker builds. `builder/runtime.Dockerfile`
-creates `yr-runtime-rootfs.img`; the default `rrt` profile contains the
-pinned openYuanRong RRT binary without Python. Set
-`RUNTIME_PROFILE=python` to include the optional Python 3.10 through 3.14
-runtimes and `openyuanrong_sdk`. `builder/node.Dockerfile` then compiles the
-node components and produces the AKernel all-in-one image using the selected
-runtime image and its matching service configuration.
-
-The control-plane and RRT release version is independent of the optional
-actor-based `openyuanrong_sdk` installed in the Python runtime profile. This
-actor backend is deprecated and retained only for compatibility with existing
-applications. Keep it on its explicitly pinned legacy version; do not advance
-it with the default `openyuanrong-sandbox` backend or use it for new features.
+creates the RRT-only `yr-runtime-rootfs.img` from the pinned ADX release.
+`builder/node.Dockerfile` then compiles the node components and produces the
+AKernel all-in-one image using that runtime image. The actor-based Python
+runtime is not a build input.
 
 Initialize sandboxd with `git submodule update --init src/sandboxd` before
 building. The all-in-one image builds the sandboxd binaries, including
@@ -481,17 +472,12 @@ python3 -m pip install -e './sdk/python[dev]'
 make sdk-check
 ```
 
-The Python SDK installs `openyuanrong-sandbox` as its default execution
-backend. The actor-based `openyuanrong-sdk` backend is deprecated and retained
-only for compatibility with existing applications through the
-`openyuanrong-sdk` extra. Do not update its pinned legacy version alongside
-the default backend or extend it with new capabilities. Installing that extra
-leaves both distributions present, so `openyuanrong-sandbox` remains the
-automatic default unless `AKERNEL_BACKEND=openyuanrong-sdk` is set before
-import. Backend selection happens once during import and backend modules are
-loaded lazily on first use. Keep public `Sandbox`, `Commands`, `Filesystem`,
-and value types independent of both native packages; all native conversions
-belong under `akernel_sdk._backends`.
+The Python SDK installs ADX as its default execution backend. The optional
+`openyuanrong-sandbox` extra remains for REST compatibility testing; the
+actor-based Python backend is not supported. Backend selection happens once
+during import and backend modules are loaded lazily on first use. Keep public
+`Sandbox`, `Commands`, `Filesystem`, and value types independent of native
+packages; all native conversions belong under `akernel_sdk._backends`.
 
 Keep sandbox cleanup explicit through context managers or `kill()`, with
 observable, retryable deletion failures and workload exceptions preserved on
