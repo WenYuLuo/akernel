@@ -14,7 +14,8 @@ The image installs the complete gVisor bundle pinned by sandboxd's runtime manif
 
 For a fresh cloud deployment, prefer the repository-level Makefile. It keeps
 local deployment state under `.akernel/<env>/`, builds the all-in-one image,
-plans/applies Terraform, and generates SDK JWT tokens from the local IAM seed.
+plans/applies Terraform, creates the Agent DX identity Secret, and reads the
+bootstrap administrator API key for SDK access.
 
 ```bash
 make check
@@ -119,11 +120,11 @@ TTL-bound address grants, even when no separate DNS policy is supplied.
 
 - `.akernel/default/config.env`
 - `.akernel/default/terraform.tfvars`
-- `.akernel/default/iam-seed`
 - `.akernel/default/grafana-admin-password`
 - `.akernel/default/kubeconfig` after `make deploy`
 - `.akernel/default/terraform.tfstate` after `make plan` / `make deploy`
 - `.akernel/default/terraform.tfplan` after `make plan`
+- `.akernel/default/token` and `.akernel/default/sdk.env` after `make print-env`
 
 These files are intentionally ignored by Git because they can contain local
 deployment state and secrets.
@@ -136,8 +137,9 @@ process environment. Future AWS and GCP providers should follow this same
 public entrypoint and local-state contract.
 
 If `.akernel/default/` already exists, `make config` asks before overwriting
-the generated config files. The existing `iam-seed` is reused unless it is
-deleted or explicitly replaced with `IAM_SEED_HEX`.
+the generated config files. The ADX identity Secret is created during
+`make deploy`; an existing Secret is retained so certificates and the
+administrator API key remain stable across updates.
 
 For agent or CI usage, provide values as Make variables and set
 `NON_INTERACTIVE=1`. This is also the recommended path when you want to reuse an
@@ -187,16 +189,17 @@ make plan ENV=staging
 make deploy ENV=staging
 ```
 
-JWT tokens can be generated locally without exposing the IAM token API:
+Read the deployed bootstrap administrator API key after `make deploy`:
 
 ```bash
-make token TTL=24h
-make token TTL=100y
-make token TTL=never
+make token
+make print-env
 ```
 
-Long-lived tokens are useful for manual testing, but rotating the IAM seed is
-currently the revocation mechanism for signed JWT tokens.
+`make token` reads `admin-key` from the `akernel-adx-tls` Secret through the
+Terraform kubeconfig. `make print-env` writes mode-0600 `token` and `sdk.env`
+files under the selected `.akernel/<env>/` directory and prints the SDK
+exports. Treat both commands' output as secret material.
 
 ## 1. Standalone
 
@@ -206,149 +209,169 @@ start/stop instructions.
 
 ## 2. Kubernetes (Helm)
 
-The umbrella chart in [`akernel/`](./akernel/) bundles two subcharts:
+The umbrella chart in [`akernel/`](./akernel/) deploys the Agent DX control and
+data plane from the same AKernel all-in-one image:
 
-- **core** — scheduler + node-side components (etcd, master, frontend, node
-  DaemonSet, and Traefik)
-- **monitor** — observability stack (Prometheus, Grafana, Loki, Tempo)
+| Workload | Replication | Responsibility |
+|----------|-------------|----------------|
+| `akernel-adx-control` Deployment | exactly 1 | ADX Master, API Server, and embedded Edge |
+| `akernel-adx-redis` StatefulSet | exactly 1 in managed mode | AOF-backed control state and discovery |
+| `akernel-node` DaemonSet | one Pod per eligible node | sandboxd plus Node Manager and embedded Node Proxy |
+| `traefik` Deployment | configurable | external HTTPS entrypoint to Edge |
+
+The `monitor` subchart remains optional and contains Prometheus, Grafana, Loki,
+and Tempo. Kubernetes nodes must support privileged Pods and the runtime
+requirements described earlier in this guide. Managed Redis requires a default
+StorageClass or an explicit `core.adx.redis.persistence.storageClassName`.
+
+The image must contain the pinned ADX release, AKernel's sandboxd, AKernel's
+runtime rootfs, and ADX `rrt-runtime`. To build it from a local ADX archive:
 
 ```bash
-# Render / inspect
-helm template akernel ./akernel
+make build ADX_RELEASE_ARCHIVE=/absolute/path/to/adx-release.tar.gz \
+  IMAGE_REPOSITORY=registry.example.com/akernel/all-in-one \
+  IMAGE_TAG=<release-tag>
+```
 
-# Install (provide your own values overrides)
-helm install akernel ./akernel \
+AKernel builds its own sandboxd and runtime rootfs. It consumes the control
+binaries, Python SDK, and `rrt-runtime` from the pinned ADX release.
+
+### Create the Agent DX identity Secret
+
+Create the cluster identity material before installing the chart. The helper is
+idempotent and leaves an existing Secret unchanged:
+
+```bash
+./deploy/scripts/ensure-adx-secret.sh \
+  --namespace akernel \
+  --name akernel-adx-tls
+```
+
+The Secret contains separate Master, API Server, Edge, and public certificates,
+plus one `node-pool` certificate shared by the Node Manager DaemonSet. Each Node
+Manager sends its Kubernetes `spec.nodeName` in authenticated RPC requests;
+Master validates both the pool certificate and the concrete node identity.
+
+### Install with managed Redis
+
+Managed mode is the default. It creates one Redis StatefulSet with AOF enabled,
+`appendfsync=everysec`, and a persistent volume. A minimal values file is:
+
+```yaml
+core:
+  image:
+    repository: registry.example.com/akernel/all-in-one
+    tag: "<release-tag>"
+  adx:
+    placement: pack
+    tls:
+      existingSecret: akernel-adx-tls
+    redis:
+      mode: managed
+      appendfsync: everysec
+      persistence:
+        storageClassName: fast-rwo
+        size: 20Gi
+```
+
+Render first, then install:
+
+```bash
+helm dependency build ./akernel
+helm template akernel ./akernel \
+  --namespace akernel \
+  -f my-values.yaml > /tmp/akernel-rendered.yaml
+
+helm upgrade --install akernel ./akernel \
   --namespace akernel --create-namespace \
   -f my-values.yaml
 ```
 
-Set image repositories, registry pull secrets, and storage classes in your own
-values override file. See [`akernel/charts/core/values.yaml`](./akernel/charts/core/values.yaml)
-and [`akernel/charts/monitor/values.yaml`](./akernel/charts/monitor/values.yaml)
-for the full set of configurable values.
+### Install with external Redis
 
-The bundled etcd StatefulSet is a durable single-member deployment. It keeps
-fsync enabled and uses persistent storage by default. Production environments
-that require etcd high availability should point AKernel at an externally
-managed multi-member etcd cluster instead of increasing `etcd.replicas`.
+Store the complete Redis URL in a Kubernetes Secret. This keeps credentials out
+of the rendered ConfigMap:
 
-The core chart defaults master, frontend, and node to the same all-in-one image:
-
-```yaml
-image:
-  repository: registry.example.com/akernel/all-in-one
-  tag: "<release-tag>"
+```bash
+read -r -s -p "Redis URL: " ADX_REDIS_URL
+printf '%s' "${ADX_REDIS_URL}" | kubectl -n akernel create secret generic akernel-adx-redis \
+  --from-file=redis-url=/dev/stdin
+unset ADX_REDIS_URL
 ```
 
-Each component can still override `master.image`, `frontend.image`, or
-`node.image` when a split-image deployment is required.
-
-### Sandbox placement policy
-
-YuanRong's native default is `binpack`, but AKernel explicitly defaults to
-`spread` so new sandboxes are distributed across eligible nodes. To compact
-placements onto fewer nodes instead, set the core chart value:
+Select external mode in the values file:
 
 ```yaml
 core:
-  master:
-    schedulePlacementPolicy: binpack
+  adx:
+    redis:
+      mode: external
+      external:
+        existingSecret: akernel-adx-redis
+        urlKey: redis-url
 ```
 
-When installing the core chart directly, omit the `core` wrapper. Terraform
-deployments use `schedule_placement_policy = "binpack"`. Guided profiles accept
-the same choice with:
+External mode omits the bundled Redis Service, StatefulSet, and PVC. The URL
+must use the `redis://` scheme accepted by the current ADX release.
 
-```bash
-make config SCHEDULE_PLACEMENT_POLICY=binpack
-```
+### Sandbox placement policy
 
-Only `binpack` and `spread` are accepted. Changing the policy requires the
-master and node workloads to restart. The policy is passed to the master
-scheduler; node proxies advertise frontend create only for `spread`, while
-`binpack` keeps creation on the frontend. It affects subsequent placements and
-does not move running sandboxes. Standalone always enables local frontend
-create and does not expose a cluster placement setting.
-
-### Public Traefik entrypoints
-
-For cloud deployments, use Traefik with two public entrypoints:
+ADX accepts `pack` and `spread`. AKernel defaults to `pack`; use `spread` to
+distribute new Capsules across eligible nodes:
 
 ```yaml
-traefik:
-  enabled: true
-  enableWebEntrypoint: true
-  ports:
-    websecure: 443
-    web: 80
+core:
+  adx:
+    placement: spread
 ```
 
-The `websecure` entrypoint serves the AKernel frontend API and exec websocket
-over HTTPS/WSS. The `web` entrypoint serves function port-forwarding traffic
-over plain HTTP/WS. With this layout the Python SDK only needs the LoadBalancer
-host or IP:
+Changing the policy restarts the ADX control Deployment and affects future
+placements only. Local-first admission accepts a Capsule on the selected entry
+node when it satisfies the request. ShardScheduler applies the cluster policy
+when local admission cannot satisfy it.
+
+### Public Traefik entrypoint
+
+For a public Kubernetes deployment, enable Traefik's web entrypoints:
+
+```yaml
+core:
+  traefik:
+    enabled: true
+    enableWebEntrypoint: true
+    ports:
+      websecure: 443
+      web: 80
+```
+
+`websecure` forwards the Sandbox API, command and file traffic, port forwarding,
+and reverse tunnels to ADX Edge over HTTPS. Configure the SDK with the
+LoadBalancer address and the bootstrap administrator API key:
 
 ```bash
 export AKERNEL_SERVER_ADDRESS=<traefik-load-balancer-ip>
+export AKERNEL_TOKEN="$(kubectl -n akernel get secret akernel-adx-tls \
+  -o jsonpath='{.data.admin-key}' | base64 -d)"
 ```
 
-Do not set `traefik.tls.enabled` just to make port 443 work. The frontend
-router is already configured as a TLS router; `traefik.tls.enabled` only mounts
-a custom default certificate Secret. When it is `false`, Traefik uses its
-default certificate.
+Set `traefik.tls.enabled` only when supplying a custom default certificate for
+the public entrypoint. The internal Edge certificate comes from
+`akernel-adx-tls` and is separate.
 
-The legacy single-entrypoint mode is still available by setting
-`traefik.enableWebEntrypoint=false`. In that mode API, exec, and function
-traffic share `traefik.ports.tcp`, so SDK clients should use an explicit port:
+### Verify the deployment
 
 ```bash
-export AKERNEL_SERVER_ADDRESS=<traefik-load-balancer-ip>:<port>
+kubectl -n akernel rollout status statefulset/akernel-adx-redis  # managed mode
+kubectl -n akernel rollout status deployment/akernel-adx-control
+kubectl -n akernel rollout status daemonset/akernel-node
+kubectl -n akernel get pods -o wide
+kubectl -n akernel logs deployment/akernel-adx-control --tail=200
 ```
 
-### IAM token signing seed
-
-Master and frontend share `LITEBUS_DATA_KEY` from a Kubernetes Secret. A fresh
-seed gives each deployment its own JWT signing key.
-
-For regular `helm install` / `helm upgrade`, the chart creates the Secret when
-it is missing and reuses it on later upgrades. For `helm template | kubectl
-apply`, pre-create the Secret once so repeated renders do not rotate the seed:
-
-```bash
-./scripts/ensure-iam-secret.sh \
-  --namespace akernel \
-  --name akernel-master-secret
-
-helm template akernel ./akernel \
-  --namespace akernel \
-  --set core.auth.existingSecret=akernel-master-secret \
-  -f my-values.yaml \
-  | kubectl apply -n akernel -f -
-```
-
-### Component TLS certificate
-
-The all-in-one image does not contain a TLS private key. The core chart creates
-one deployment-specific Secret and mounts the same certificate into master and
-frontend Pods. This certificate protects the openYuanrong frontend and IAM
-service connections; it is separate from the certificate served by Traefik's
-public `websecure` entrypoint.
-
-Regular `helm install` and `helm upgrade` reuse the existing Secret. For a
-render-and-apply workflow, create it once before rendering so a new certificate
-is not generated on every invocation:
-
-```bash
-./scripts/ensure-component-tls-secret.sh \
-  --namespace akernel \
-  --name akernel-component-tls
-
-helm template akernel ./akernel \
-  --namespace akernel \
-  --set core.componentTLS.existingSecret=akernel-component-tls \
-  -f my-values.yaml \
-  | kubectl apply -n akernel -f -
-```
+There must be one ready `akernel-node` Pod for every eligible Kubernetes node.
+The control Deployment becomes ready only after its Edge health endpoint is
+available. In external Redis mode, verify that Redis is reachable from the
+control Pod and every node Pod before diagnosing ADX discovery.
 
 ## 3. Multi-Cloud (Terraform)
 
@@ -371,8 +394,9 @@ Per-vendor details are in
 [`terraform/huaweicloud/README.md`](./terraform/huaweicloud/README.md).
 
 The Alibaba Cloud Terraform defaults follow the recommended public layout:
-frontend enabled, Traefik `websecure:443` plus `web:80`, and Grafana exposed
-through its own LoadBalancer when `install_monitor=true`. Set
+one ADX control Deployment, one Node Manager DaemonSet, managed Redis,
+Traefik `websecure:443` plus `web:80`, and Grafana exposed through its own
+LoadBalancer when `install_monitor=true`. Set
 `install_dragonfly=true` to install the pinned official Dragonfly chart and
 inject its seed-client proxy into the node runtime configuration.
 
@@ -383,8 +407,8 @@ loop-backed filestore. See the Aliyun guide for capacity, opt-out, and node
 replacement details.
 
 Only the AKernel all-in-one image is pushed to the registry selected by
-`make config`. etcd, Traefik, Grafana, Prometheus, Loki, Tempo, and BusyBox use
-their pinned official public images by default. Set the per-component image
+`make config`. Managed Redis, Traefik, Grafana, Prometheus, Loki, Tempo, and
+BusyBox use pinned public images by default. Set the per-component image
 overrides when a private cluster requires mirrored third-party images.
 
 ## Directory Layout

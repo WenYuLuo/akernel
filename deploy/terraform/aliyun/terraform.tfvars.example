@@ -85,7 +85,8 @@ node_pool_key_name = "<your-ecs-key-name>"
 # --- Core chart settings ---
 core_namespace = "akernel"
 
-# Optional: stable IAM JWT signing seed. Generate a 32-byte hex value with:
+# Legacy control-plane only: stable IAM JWT signing seed. Ignored by the
+# default ADX deployment. Generate a 32-byte hex value with:
 #   python3 -c 'import secrets; print(secrets.token_hex(32).upper())'
 # iam_litebus_data_key = "<64-char-hex-seed>"
 

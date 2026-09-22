@@ -72,12 +72,13 @@ yuanrong:
   imageProcessConfig: "/run/akernel/yr-image-process.json"
 
 auth:
-  # Existing Secret that contains the JWT signing seed. For
+  # Legacy control-plane option: existing Secret containing its JWT signing
+  # seed. It is ignored while adx.enabled=true. For
   # `helm template | kubectl apply`, prefer pre-creating this Secret with
   # deploy/scripts/ensure-iam-secret.sh so repeated applies do not rotate it.
   existingSecret: ""
-  # Optional explicit JWT signing seed. If empty and no existingSecret is set,
-  # the chart generates a random hex seed at render time.
+  # Legacy explicit JWT signing seed. If empty and no existingSecret is set,
+  # the legacy chart path generates a random hex seed at render time.
   litebusDataKey: ""
 
 # Shared TLS material used by the openYuanrong frontend and IAM services.
@@ -584,7 +585,8 @@ traefik:
   mode: "http"
   enableTLS: false
   # When enabled, creates a separate "web" entrypoint (no TLS) on its own port
-  # for port forwarding traffic, while frontend API stays on "websecure" with TLS.
+  # for port forwarding traffic, while the ADX Edge API stays on "websecure"
+  # with TLS.
   enableWebEntrypoint: true
   # Transport options for the frontend (akernel-master) backend.
   frontendTransport:

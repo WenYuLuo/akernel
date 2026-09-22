@@ -88,6 +88,7 @@ make config VENDOR=aliyun \
   IMAGE_REPOSITORY=akerneldev/all-in-one \
   IMAGE_TAG=latest
 make deploy
+make print-env
 ```
 
 #### Option 2: Build from Source
@@ -102,6 +103,7 @@ docker login registry.example.com
 make build ADX_RELEASE_ARCHIVE=/absolute/path/to/adx-release.tar.gz
 make push
 make deploy
+make print-env
 ```
 
 The ADX release archive is verified against
@@ -185,15 +187,28 @@ See the complete [basic usage example](./sdk/python/examples/basic_usage.py), th
 
 ### System Components
 
+**Agent DX control and data plane**
+
+- **Master + ShardScheduler**: keeps the authoritative Capsule directory in
+  Redis and places work that cannot be admitted locally
+- **API Server + Edge**: authenticates the public Sandbox API, caches the
+  Master directory stream, and forwards data-plane traffic
+- **Node Manager + Node Proxy**: performs node-local admission, owns Capsule
+  lifecycle state, calls sandboxd, and serves routed SDK traffic from one
+  process by default
+- **Redis**: durable control-plane state and component discovery; AKernel can
+  deploy a single AOF-backed member or connect to an external Redis service
+
 **Node-Level Infrastructure**
 - **Sandbox runtimes**: gVisor by default; Kata Containers and Firecracker on
   KVM-capable nodes; and an explicitly enabled native Linux runc backend
 - **sandboxd**: Sandbox lifecycle daemon with pluggable sandbox runtime integration
+- **RRT**: the Agent DX runtime transport packaged into AKernel's own runtime
+  rootfs
 - **distill-fs**: Rust-based FUSE filesystem for lazy rootfs access, chunk caching, and deduplication; packaged from a static GitHub Release with its version and checksum pinned in AKernel
 
 **Cluster-Wide Services**
-- **Distributed Scheduler**: Workload-aware placement and scaling
-- **API Gateway**: Unified interface for all operations
+- **Traefik**: external TLS entrypoint in front of Agent DX Edge
 - **Object Storage**: Raw and Nydus rootfs images and read-only sandbox mounts
 - **Cloud Provisioning**: Terraform modules for Alibaba Cloud ACK and Huawei Cloud CCE
 

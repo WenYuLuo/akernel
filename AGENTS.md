@@ -66,7 +66,7 @@ make build
 make push
 make plan
 make deploy
-make token TTL=24h
+make token
 make print-env
 make sdk-test
 make deploy-script-check
@@ -92,18 +92,18 @@ profiles. These directories are intentionally ignored by Git. They may contain:
 
 - generated Terraform variables
 - kubeconfig files and paths
-- IAM signing seeds
-- generated JWT tokens
+- Agent DX identity material
+- bootstrap API keys
 - SDK environment exports
 
-Never commit `.akernel/`, Terraform state, kubeconfigs, tokens, signing seeds,
+Never commit `.akernel/`, Terraform state, kubeconfigs, tokens, private keys,
 cloud credentials, private registry URLs, or local debug artifacts.
 
 ## Build
 
 AKernel uses Docker for building. The public distribution ships one all-in-one
-image that can run as master, frontend, node, or standalone depending on the
-deployment entrypoint and environment.
+image that can run the ADX control role, node role, or standalone topology
+depending on the deployment entrypoint and environment.
 
 ```bash
 make build
@@ -287,14 +287,12 @@ pinned public chart and, by default, creates three seed nodes and one server
 node in dedicated pools. Review the generated Terraform plan and expected cost
 before applying it.
 
-The deployment helper generates a stable IAM signing seed for the environment
-and passes it to the Helm chart through Terraform. This allows JWT tokens to be
-generated locally without exposing the IAM token API publicly.
+The deployment helper creates an Agent DX identity Secret before Helm install.
+It retains an existing Secret so certificates and the bootstrap administrator
+API key stay stable across updates.
 
 If `.akernel/default/` already exists, `make config` asks before overwriting
-`config.env` and `terraform.tfvars`. The existing `iam-seed` is reused unless
-you delete it or explicitly provide `IAM_SEED_HEX`, so previously generated
-tokens normally remain compatible.
+`config.env` and `terraform.tfvars`.
 
 For agent/non-interactive deployment setup, do not rely on prompts. Pass config
 values explicitly and use a named environment to avoid overwriting a user's
@@ -319,28 +317,20 @@ make plan ENV="${ENV_NAME}"
 Inspect an existing profile before reusing its name. Add `FORCE=1` only when
 the user has explicitly approved overwriting its generated configuration.
 
-## JWT Tokens
+## Agent DX API Key
 
-Generate SDK tokens locally with:
+Read the deployed bootstrap administrator API key with:
 
 ```bash
-make token TTL=24h
-make token TTL=100y
-make token TTL=never
+make token
+make print-env
 ```
 
-`make token` and `make print-env` print JWT credentials. Treat their output as
-a secret: do not include it in logs, commits, or issue reports, and do not
-repeat it in chat unless the user explicitly requests credential handoff.
-
-The token generator intentionally follows openYuanrong's current signed JWT
-format:
-the `LITEBUS_DATA_KEY` hex seed is decoded to bytes, the JWT header and payload
-are signed with HMAC-SHA256, and the hex digest string is base64url encoded.
-
-Long-lived or never-expiring tokens are supported but should not be the default.
-Current signed JWT tokens are stateless; a leaked token cannot be revoked
-individually. Rotate the IAM signing seed to invalidate existing tokens.
+`make token` reads `admin-key` from the deployed `akernel-adx-tls` Secret.
+`make print-env` writes mode-0600 `token` and `sdk.env` files under the selected
+deployment profile. Treat their output as a secret: do not include it in logs,
+commits, issue reports, or chat unless the user explicitly requests credential
+handoff.
 
 ## SDK And CLI
 
@@ -424,7 +414,7 @@ export AKERNEL_TOKEN="<your_token>"
 ```
 
 When the public Traefik dual-entrypoint mode is enabled, a host/IP-only
-`AKERNEL_SERVER_ADDRESS` uses HTTPS/WSS on 443 for the frontend API and exec
+`AKERNEL_SERVER_ADDRESS` uses HTTPS/WSS on 443 for the ADX Edge API and exec
 websocket, and HTTP on 80 for sandbox port URLs. For standalone deployments,
 use the Traefik container IP printed by `deploy/standalone/start.sh`:
 
@@ -441,8 +431,8 @@ default; pass `IMAGE` to test a locally built or differently tagged image.
 Standalone GPU testing additionally requires NVIDIA Container Toolkit on the
 host and `AKERNEL_ENABLE_GPU=true`. sandboxd uses the read-only cgroup
 node-resource provider in standalone mode; Kubernetes deployments retain the
-Kubernetes provider. Standalone explicitly enables local DNAT because the
-frontend shares the node network namespace.
+Kubernetes provider. Standalone explicitly enables local DNAT because Edge
+shares the node network namespace.
 
 Standalone uses iptables NAT by default. Set `AKERNEL_NAT_BACKEND=bpfnat` to
 use the experimental embedded TC eBPF backend. AKernel prepares the required
