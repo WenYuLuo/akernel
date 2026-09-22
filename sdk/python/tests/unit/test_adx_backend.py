@@ -174,10 +174,33 @@ class AdxBackendTest(unittest.TestCase):
         self.assertEqual(kwargs["storage_mb"], 10240)
         self.assertEqual(kwargs["extra_config"], {"featureFlag": True})
         self.assertTrue(kwargs["failover"])
+        self.assertEqual(kwargs["data_plane_security"].tunnel_mode, "tls")
+        self.assertEqual(kwargs["data_plane_security"].port_forward_mode, "tls")
         self.assertIs(kwargs["connection"], backend._connection)
         self.assertIsInstance(kwargs["mounts"][0], adx.adx_sandbox.Mount)
         self.assertIsInstance(kwargs["network"], adx.adx_sandbox.NetworkPolicy)
         self.assertEqual(session.id, "default-worker")
+        native.commands.list.assert_called_once_with()
+
+    def test_session_pty_uses_the_authenticated_tls_entrypoint(self):
+        backend = adx.AdxBackend(self.config)
+        native = MagicMock()
+        native.id = "default-worker"
+        native.commands = MagicMock()
+        native.files = MagicMock()
+
+        with (
+            patch.object(adx.adx_sandbox, "Sandbox", return_value=native),
+            patch.object(adx.adx_sandbox, "Pty") as pty,
+        ):
+            session = backend.create(_spec())
+
+        connection = pty.call_args.kwargs["connection"]
+        self.assertEqual(pty.call_args.args, ("default-worker",))
+        self.assertEqual(connection.server_address, "api.example:443")
+        self.assertIsNone(connection.gateway_address)
+        self.assertTrue(connection.use_tls)
+        self.assertIs(session.pty, pty.return_value)
 
     def test_session_uses_stable_id_delete_with_the_same_connection(self):
         backend = adx.AdxBackend(self.config)

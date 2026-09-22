@@ -288,6 +288,14 @@ class _Session:
         self.id = str(sandbox.id)
         self.commands = _CommandsDriver(sandbox.commands)
         self.files = _FilesystemDriver(sandbox.files)
+        pty_connection = adx_sandbox.ConnectionConfig(
+            server_address=connection.server_address,
+            token=connection.token,
+            use_tls=connection.use_tls,
+            verify_tls=connection.verify_tls,
+            token_provider=connection.token_provider,
+        )
+        self.pty = adx_sandbox.Pty(self.id, connection=pty_connection)
         self._sandbox = sandbox
         self._spec = spec
         self._connection = connection
@@ -530,13 +538,32 @@ class AdxBackend:
             create_timeout=create_timeout,
             failover=spec.failover,
             inherit_entrypoint=spec.inherit_entrypoint,
+            data_plane_security=adx_sandbox.DataPlaneSecurityPolicy(
+                tunnel_mode="tls",
+                port_forward_mode="tls",
+            ),
             connection=self._connection,
         )
         try:
             sandbox = adx_sandbox.Sandbox(**create_args)
         except Exception as error:
             raise _convert_error("create sandbox", error) from error
-        return _Session(sandbox, spec, self._connection)
+        session = _Session(sandbox, spec, self._connection)
+        try:
+            # Creation is authoritative before Edge necessarily applies the
+            # next route-stream delta. A read-only direct operation closes
+            # that gap so the first caller operation does not observe 503.
+            session.commands.list()
+        except Exception:
+            try:
+                session.terminate()
+            except Exception:
+                logger.warning(
+                    "failed to clean up sandbox after direct route readiness failure",
+                    exc_info=True,
+                )
+            raise
+        return session
 
     def delete_named(self, name: str) -> None:
         sandbox_id = f"{self.namespace}-{name}"

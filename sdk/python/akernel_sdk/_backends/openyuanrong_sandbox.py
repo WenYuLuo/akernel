@@ -305,6 +305,7 @@ class _Session:
         self.id = str(sandbox.id)
         self.commands = _CommandsDriver(sandbox.commands)
         self.files = _FilesystemDriver(sandbox.files)
+        self.pty = getattr(sandbox, "pty", None)
         self._sandbox = sandbox
         self._spec = spec
         self._terminated = False
