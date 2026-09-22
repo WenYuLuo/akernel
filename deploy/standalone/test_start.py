@@ -15,26 +15,89 @@ SCRIPT = Path(__file__).with_name("start.sh")
 
 
 class StartScriptTest(unittest.TestCase):
-    def test_gateway_config_keeps_control_and_data_ports_separate(self) -> None:
+    def test_node_publishes_distinct_control_and_data_ports(self) -> None:
+        script = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn(
+            '-p "${AKERNEL_CONTROL_BIND}:${AKERNEL_CONTROL_PORT}:8443"',
+            script,
+        )
+        self.assertIn(
+            '-p "${AKERNEL_DATA_BIND}:${AKERNEL_DATA_PORT}:8080"',
+            script,
+        )
+        self.assertNotIn("TRAEFIK", script)
+
+    def test_capacity_probe_waits_for_a_registered_node(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            token = root / "admin-key"
+            token.write_text("test-secret\n", encoding="utf-8")
+            fake_curl = root / "curl"
+            fake_curl.write_text(
+                textwrap.dedent(
+                    """\
+                    #!/bin/sh
+                    cat > /dev/null
+                    printf '%s' "$CAPACITY_RESPONSE"
+                    """
+                ),
+                encoding="utf-8",
+            )
+            fake_curl.chmod(0o755)
+            environment = os.environ.copy()
+            environment["PATH"] = f"{root}:{environment['PATH']}"
             command = (
                 f"source {SCRIPT!s}; "
-                f"DATA_DIR={directory!s}; "
-                "write_traefik_config 10.0.0.2"
+                f"TOKEN_FILE={token!s}; "
+                "probe_adx_capacity https://127.0.0.1:8443/api/sandbox/v1/resources"
             )
-            subprocess.run(
-                ["bash", "-c", command],
-                check=True,
-                capture_output=True,
-                text=True,
+
+            for payload, expected in (
+                ('{"items":[]}', 1),
+                (
+                    '{"items":[{"allocatable":{"CPU":1000,"Memory":2048}}]}',
+                    0,
+                ),
+            ):
+                with self.subTest(payload=payload):
+                    environment["CAPACITY_RESPONSE"] = payload
+                    result = subprocess.run(
+                        ["bash", "-c", command],
+                        check=False,
+                        env=environment,
+                        capture_output=True,
+                        text=True,
+                    )
+                    self.assertEqual(result.returncode, expected, result.stderr)
+
+    def test_data_listener_probe_requires_control_api_rejection(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fake_curl = root / "curl"
+            fake_curl.write_text(
+                "#!/bin/sh\nprintf '%s' \"$DATA_STATUS\"\n",
+                encoding="utf-8",
             )
-            config = (Path(directory) / "traefik/dynamic.yml").read_text(
-                encoding="utf-8"
+            fake_curl.chmod(0o755)
+            environment = os.environ.copy()
+            environment["PATH"] = f"{root}:{environment['PATH']}"
+            command = (
+                f"source {SCRIPT!s}; "
+                "probe_adx_data_listener "
+                "http://127.0.0.1:8080/api/sandbox/v1/resources"
             )
-            self.assertIn("- websecure", config)
-            self.assertIn("- web", config)
-            self.assertIn('url: "https://10.0.0.2:8443"', config)
-            self.assertIn('url: "http://10.0.0.2:8080"', config)
+
+            for status, expected in (("426", 0), ("200", 1), ("000", 1)):
+                with self.subTest(status=status):
+                    environment["DATA_STATUS"] = status
+                    result = subprocess.run(
+                        ["bash", "-c", command],
+                        check=False,
+                        env=environment,
+                        capture_output=True,
+                        text=True,
+                    )
+                    self.assertEqual(result.returncode, expected, result.stderr)
 
     def test_health_probe_reads_token_from_curl_stdin(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -407,12 +407,12 @@ export AKERNEL_TOKEN="<your_token>"
 
 ADX always keeps two public listeners: HTTPS/WSS control traffic on 443 and
 plain HTTP/WS instance data on 80. API Server and Edge may share a process, but
-their public ports remain distinct. For standalone deployments, use the
-Traefik container IP printed by `deploy/standalone/start.sh`:
+their public ports remain distinct. Standalone publishes both embedded Edge
+listeners directly from the `akernel-node` container:
 
 ```bash
-export AKERNEL_SERVER_ADDRESS=<traefik-container-ip>
-export AKERNEL_GATEWAY_ADDRESS=http://<traefik-container-ip>
+export AKERNEL_SERVER_ADDRESS=https://127.0.0.1
+export AKERNEL_GATEWAY_ADDRESS=http://127.0.0.1
 ```
 
 The SDK can derive the standard port-80 gateway from a host-only control

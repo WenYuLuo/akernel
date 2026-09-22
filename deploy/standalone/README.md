@@ -2,16 +2,15 @@
 
 This directory contains scripts and configurations for running AKernel in
 standalone mode using Docker or Pouch, without Kubernetes. The deployment uses
-two containers on the default container bridge:
+one privileged container on the default container bridge:
 
 - `akernel-node` runs sandboxd plus the ADX Redis, Master, Node Manager, API
   Server, Edge, and Node Proxy processes from the AKernel all-in-one image.
-- `akernel-traefik` runs the official Traefik image as the external gateway.
 
-Keeping the gateway in a separate network namespace allows sandboxd's normal
-`PREROUTING` rules to handle gateway traffic. Traefik forwards HTTPS requests
-to the embedded ADX Edge; Edge uses the Master route stream and forwards
-instance traffic to the embedded Node Proxy.
+The container publishes the embedded ADX Edge directly through two distinct
+host listeners. The TLS control listener defaults to port `443`; the plaintext
+instance-data listener defaults to port `80`. Edge uses the Master route stream
+and forwards instance traffic to the embedded Node Proxy.
 
 The default runtime is gVisor `runsc`. The bundled image also contains Kata
 Containers and Firecracker. Both `Sandbox(runtime="kata")` and
@@ -123,8 +122,8 @@ initialize ACLs while pre-ACL sandboxes remain in its store.
 ```
 deploy/standalone/
 ├── README.md                  # This file
-├── start.sh                   # Start AKernel and Traefik containers
-├── stop.sh                    # Stop AKernel and Traefik containers
+├── start.sh                   # Start the AKernel container
+├── stop.sh                    # Stop the AKernel container
 └── config/                    # Configuration files
     ├── config.json            # OCI runtime configuration
     ├── oss_auths.json         # OSS authentication (edit as needed)
@@ -180,24 +179,31 @@ This will:
 - Use `akerneldev/all-in-one:latest` if `IMAGE` is not set, reusing a local
   copy when present and otherwise pulling it from Docker Hub
 - Start the privileged AKernel all-in-one container
-- Start an independent Traefik container for the HTTPS API and sandbox gateway
-- Configure Traefik to forward all requests to the ADX Edge
+- Publish the embedded Edge control listener on host port `443` and the data
+  listener on host port `80`
 - Generate distinct internal mTLS identities and an administrator API key
 - Generate a sandboxd config using `AKERNEL_NAT_BACKEND` (`iptables` by
   default)
-- Print the Traefik container IP and API-key path used by the SDK
+- Wait until the Node Manager has registered allocatable capacity
+- Print the control URL, data URL, and API-key path used by the SDK
 
-No host ports are published. On Linux, the host accesses Traefik directly
-through its Docker bridge IP.
+The default listeners bind all host interfaces. Override the bind addresses or
+ports before starting when the defaults conflict with another service:
+
+```bash
+AKERNEL_CONTROL_BIND=127.0.0.1 AKERNEL_CONTROL_PORT=8443 \
+AKERNEL_DATA_BIND=127.0.0.1 AKERNEL_DATA_PORT=8080 \
+AKERNEL_ENDPOINT_HOST=127.0.0.1 ./start.sh
+```
+
+`AKERNEL_ENDPOINT_HOST` controls the hostname printed for SDK configuration;
+it does not change the Docker bind address.
 
 ### 4. Check Status
 
 ```bash
 # View AKernel logs
 sudo docker logs -f akernel-node
-
-# View gateway logs
-sudo docker logs -f akernel-traefik
 
 # Enter the container
 sudo docker exec -it akernel-node bash
@@ -218,22 +224,15 @@ sudo docker exec akernel-node systemctl status
 
 ### SDK Connection
 
-Traefik exposes two ADX Edge listeners: port 443/TLS for authenticated control,
-command and file traffic, and port 80/plain HTTP for instance data such as
-public port forwarding. These ports are not published on the host. Use the
-Traefik container IP printed by `start.sh`, or retrieve it later:
-
-```bash
-TRAEFIK_IP=$(docker inspect \
-  --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' \
-  akernel-traefik)
-```
+The standalone container publishes two ADX Edge listeners: port 443/TLS for
+authenticated control, direct command, file and PTY traffic, and port 80/plain
+HTTP for instance data such as reverse tunnels and public port forwarding.
 
 Set the SDK environment:
 
 ```bash
-export AKERNEL_SERVER_ADDRESS="https://${TRAEFIK_IP}"
-export AKERNEL_GATEWAY_ADDRESS="http://${TRAEFIK_IP}"
+export AKERNEL_SERVER_ADDRESS="https://127.0.0.1"
+export AKERNEL_GATEWAY_ADDRESS="http://127.0.0.1"
 export AKERNEL_TOKEN="$(cat data/adx/secrets/admin-key)"
 ```
 
@@ -252,13 +251,6 @@ By default, `start.sh` uses the public Docker Hub image
 variable to test another registry, tag, or locally built image:
 ```bash
 IMAGE="<your-docker-registry>:<your-tag>" ./start.sh
-```
-
-The gateway defaults to `traefik:v3.6.8`. Override it independently when
-needed:
-
-```bash
-TRAEFIK_IMAGE="traefik:v3.6.8" ./start.sh
 ```
 
 ### Data Directory Location
