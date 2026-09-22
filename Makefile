@@ -11,9 +11,6 @@ IMAGE_REPOSITORY ?=
 OPEN_YR_CORE_WHEEL_URL ?=
 OPEN_YR_CORE_WHEEL_SHA256 ?=
 ADX_RELEASE_ARCHIVE ?=
-TOKEN_TTL ?= $(if $(TTL),$(TTL),24h)
-TENANT ?= default
-ROLE ?= developer
 FORCE ?= 0
 NON_INTERACTIVE ?= 0
 REGION ?=
@@ -60,7 +57,7 @@ help:
 	@echo "  make push                          Push the configured all-in-one image"
 	@echo "  make plan                          Terraform plan"
 	@echo "  make deploy                        Terraform apply"
-	@echo "  make token TTL=24h                 Generate a local JWT token"
+	@echo "  make token                         Read the deployed ADX administrator API key"
 	@echo "  make print-env                     Print SDK environment exports"
 	@echo "  make sdk-check                     Lint, type-check, and test the Python SDK"
 	@echo "  make deploy-script-check           Check deployment script syntax"
@@ -128,11 +125,9 @@ deploy:
 
 .PHONY: token
 token:
-	@./deploy/scripts/generate-token.py \
+	@./deploy/scripts/get-adx-admin-key.sh \
+		--vendor "$(VENDOR)" \
 		--env "$(ENV)" \
-		--tenant "$(TENANT)" \
-		--role "$(ROLE)" \
-		--ttl "$(TOKEN_TTL)" \
 		--print-export \
 		--write-file ".akernel/$(ENV)/token"
 

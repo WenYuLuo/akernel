@@ -55,7 +55,8 @@ get_lb_host() {
 traefik_host="$(get_lb_host "${core_ns}" traefik)"
 [[ -n "${traefik_host}" ]] || die "traefik LoadBalancer address is not ready"
 
-token="$("${AKERNEL_REPO_ROOT}/deploy/scripts/generate-token.py" --env "${env_name}" --write-file "${dir}/token")"
+token="$("${AKERNEL_REPO_ROOT}/deploy/scripts/get-adx-admin-key.sh" \
+  --vendor "${vendor}" --env "${env_name}" --write-file "${dir}/token")"
 
 sdk_env="${dir}/sdk.env"
 {

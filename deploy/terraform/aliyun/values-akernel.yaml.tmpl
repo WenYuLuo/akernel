@@ -24,6 +24,38 @@ monitoring:
   tempoEndpoint: "tempo.${monitor_namespace}.svc:4317"
 %{ endif ~}
 
+adx:
+  enabled: true
+  namespace: "${adx_namespace}"
+  placement: "${adx_placement}"
+  tls:
+    existingSecret: akernel-adx-tls
+  redis:
+    mode: managed
+    appendfsync: everysec
+    persistence:
+      enabled: true
+      storageClassName: "${etcd_storage_class}"
+      size: "${etcd_pvc_size}"
+      accessModes:
+        - "ReadWriteOnce"
+    resources:
+      limits:
+        cpu: "${etcd_cpu}"
+        memory: "${etcd_memory}"
+      requests:
+        cpu: "${etcd_cpu}"
+        memory: "${etcd_memory}"
+  control:
+    replicas: 1
+    resources:
+      limits:
+        cpu: "${master_cpu}"
+        memory: "${master_memory}"
+      requests:
+        cpu: "${master_cpu}"
+        memory: "${master_memory}"
+
 etcd:
   image:
     repository: "${etcd_image_repository}"

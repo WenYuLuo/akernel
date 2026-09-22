@@ -148,6 +148,8 @@ locals {
     master_image_repository     = local.master_image_repo
     master_image_tag            = var.master_image_tag
     schedule_placement_policy   = var.schedule_placement_policy
+    adx_placement               = var.schedule_placement_policy == "binpack" ? "pack" : "spread"
+    adx_namespace               = var.core_namespace
     node_image_repository       = local.node_image_repo
     node_image_tag              = var.node_image_tag
     traefik_image_repository    = local.traefik_image_repo
@@ -770,6 +772,25 @@ resource "null_resource" "ensure_monitor_namespace" {
   depends_on = [data.alicloud_cs_cluster_credential.ack, alicloud_cs_kubernetes_node_pool.default_with_key, alicloud_cs_kubernetes_node_pool.default_with_password]
 }
 
+resource "null_resource" "ensure_adx_secret" {
+  triggers = {
+    always = timestamp()
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOT
+      set -euo pipefail
+      "${path.module}/../../scripts/ensure-adx-secret.sh" \
+        --namespace "${var.core_namespace}" \
+        --name akernel-adx-tls \
+        --kubeconfig "${local.kubeconfig_path}"
+    EOT
+  }
+
+  depends_on = [null_resource.ensure_core_namespace]
+}
+
 resource "helm_release" "prereq_openkruise" {
   count = var.install_prereqs ? 1 : 0
 
@@ -804,7 +825,7 @@ resource "helm_release" "akernel_core" {
     value = sha256(join("", [for f in fileset("${path.module}/../../akernel/charts/core", "**") : filesha256("${path.module}/../../akernel/charts/core/${f}")]))
   }
 
-  depends_on = [data.alicloud_cs_cluster_credential.ack, helm_release.prereq_openkruise, null_resource.ensure_core_namespace, null_resource.create_storage_class]
+  depends_on = [data.alicloud_cs_cluster_credential.ack, helm_release.prereq_openkruise, null_resource.ensure_core_namespace, null_resource.ensure_adx_secret, null_resource.create_storage_class]
 }
 
 resource "helm_release" "akernel_monitor" {
