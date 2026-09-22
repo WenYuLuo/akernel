@@ -1,0 +1,124 @@
+{{- if .Values.adx.enabled }}
+{{- if ne (int .Values.adx.control.replicas) 1 }}
+{{- fail "adx.control.replicas must be 1 while ADX uses a single active Master" }}
+{{- end }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: akernel-adx-control
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    app: akernel-adx-control
+  ports:
+    - name: master
+      port: 19000
+      targetPort: master
+    - name: edge
+      port: 8443
+      targetPort: edge
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: akernel-adx-control
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: {{ .Values.adx.control.replicas }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: akernel-adx-control
+  template:
+    metadata:
+      labels:
+        app: akernel-adx-control
+      annotations:
+        checksum/adx-config: {{ include (print $.Template.BasePath "/adx/configmap.yaml") . | sha256sum }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: control
+          image: "{{ include "core.image" (dict "root" . "image" .Values.image) }}"
+          imagePullPolicy: {{ include "core.image.pullPolicy" (dict "root" . "image" .Values.image) }}
+          command:
+            - /opt/adx/current/bin/adxctl
+          args:
+            - --config
+            - /etc/akernel/adx-control.yaml
+            - run
+          env:
+            - name: ADX_REDIS_URL
+              {{- if eq .Values.adx.redis.mode "managed" }}
+              value: redis://akernel-adx-redis.{{ .Release.Namespace }}.svc.cluster.local:6379/
+              {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.adx.redis.external.existingSecret | quote }}
+                  key: {{ .Values.adx.redis.external.urlKey | quote }}
+              {{- end }}
+          ports:
+            - name: master
+              containerPort: 19000
+            - name: edge
+              containerPort: 8443
+            - name: health
+              containerPort: 18080
+            - name: master-metrics
+              containerPort: 19090
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            periodSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.adx.control.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/akernel/adx-control.yaml
+              subPath: control.yaml
+              readOnly: true
+            - name: credentials
+              mountPath: /etc/adx
+              readOnly: true
+            - name: state
+              mountPath: /var/lib/adx
+      volumes:
+        - name: config
+          configMap:
+            name: akernel-adx-config
+        - name: credentials
+          secret:
+            secretName: {{ .Values.adx.tls.existingSecret | quote }}
+            defaultMode: 0400
+            items:
+              - {key: ca.pem, path: tls/ca.pem}
+              - {key: master.pem, path: tls/master.pem}
+              - {key: master.key, path: tls/master.key}
+              - {key: master.der, path: tls/master.der}
+              - {key: node.pem, path: tls/node.pem}
+              - {key: node.key, path: tls/node.key}
+              - {key: node.der, path: tls/node.der}
+              - {key: api-server.pem, path: tls/api-server.pem}
+              - {key: api-server.key, path: tls/api-server.key}
+              - {key: api-server.der, path: tls/api-server.der}
+              - {key: edge.pem, path: tls/edge.pem}
+              - {key: edge.key, path: tls/edge.key}
+              - {key: edge.der, path: tls/edge.der}
+              - {key: public.pem, path: tls/public.pem}
+              - {key: public.key, path: tls/public.key}
+              - {key: admin-key, path: secrets/admin-key}
+        - name: state
+          emptyDir: {}
+{{- end }}

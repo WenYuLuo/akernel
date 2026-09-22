@@ -1,3 +1,4 @@
+{{- if not .Values.adx.enabled }}
 {{- if .Values.frontend.enabled }}
 {{- if .Values.kruise.enabled }}
 apiVersion: apps.kruise.io/v1alpha1
@@ -170,4 +171,5 @@ spec:
           configMap:
             name: akernel-otel-collector-config
       {{- end }}
+{{- end }}
 {{- end }}

@@ -32,6 +32,10 @@ case "${role}" in
         ;;
     node)
         /bin/bash /root/prepare_node.sh
+        if [ "${AKERNEL_CONTROL_PLANE:-legacy}" = "adx" ]; then
+            systemctl disable yuanrong.service >/dev/null 2>&1 || true
+            systemctl enable adx.service >/dev/null
+        fi
         exec /usr/sbin/init "$@"
         ;;
     standalone)

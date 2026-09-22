@@ -1,0 +1,169 @@
+#!/usr/bin/env python3
+
+"""Rendered-contract tests for the default ADX Kubernetes deployment."""
+
+from __future__ import annotations
+
+from pathlib import Path
+import subprocess
+import unittest
+
+import yaml
+
+
+CHART = Path(__file__).resolve().parents[1]
+
+
+def render() -> tuple[list[dict], str]:
+    result = subprocess.run(
+        [
+            "helm",
+            "template",
+            "akernel",
+            str(CHART),
+            "--namespace",
+            "akernel-system",
+            "--set",
+            "adx.tls.existingSecret=adx-test-tls",
+            "--set",
+            "traefik.enabled=true",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return [item for item in yaml.safe_load_all(result.stdout) if item], result.stdout
+
+
+class AdxChartTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.resources, cls.rendered = render()
+
+    def resource(self, kind: str, name: str) -> dict:
+        for resource in self.resources:
+            if resource.get("kind") == kind and resource["metadata"]["name"] == name:
+                return resource
+        self.fail(f"missing {kind}/{name}")
+
+    def test_default_replaces_legacy_control_plane(self) -> None:
+        self.resource("StatefulSet", "akernel-adx-redis")
+        self.resource("Deployment", "akernel-adx-control")
+        self.resource("Service", "akernel-adx-control")
+        self.resource("DaemonSet", "akernel-node")
+        names = {item["metadata"]["name"] for item in self.resources}
+        self.assertNotIn("akernel-master", names)
+        self.assertNotIn("akernel-frontend", names)
+        self.assertNotIn("akernel-etcd", names)
+
+    def test_node_uses_dynamic_identity_and_pool_certificate(self) -> None:
+        config = self.resource("ConfigMap", "akernel-adx-config")["data"]
+        self.assertIn("node-pool:", config["control.yaml"])
+        self.assertIn("node_id: ${NODE_NAME}", config["node.yaml"])
+        self.assertIn("advertised_address: ${INSTANCE_IP}:19001", config["node.yaml"])
+        daemonset = self.resource("DaemonSet", "akernel-node")
+        container = daemonset["spec"]["template"]["spec"]["containers"][0]
+        env = {item["name"]: item.get("value") for item in container["env"]}
+        self.assertEqual(env["AKERNEL_CONTROL_PLANE"], "adx")
+        self.assertEqual(env["AKERNEL_ADX_CONFIG"], "/etc/akernel/adx-node.yaml")
+
+        volumes = {
+            item["name"]: item for item in daemonset["spec"]["template"]["spec"]["volumes"]
+        }
+        credentials = volumes["adx-credentials"]["secret"]
+        self.assertEqual(credentials["secretName"], "adx-test-tls")
+        self.assertEqual(
+            {item["key"] for item in credentials["items"]},
+            {"ca.pem", "master.der", "api-server.der", "node.pem", "node.key"},
+        )
+
+    def test_gateway_is_the_only_public_control_entry(self) -> None:
+        dynamic = self.resource("ConfigMap", "traefik-dynamic")["data"]["config.yml"]
+        self.assertIn('url: "https://akernel-adx-control:8443"', dynamic)
+        self.assertNotIn("akernel-frontend:8888", dynamic)
+
+    def test_redis_is_single_member_aof_with_persistent_storage(self) -> None:
+        redis = self.resource("StatefulSet", "akernel-adx-redis")
+        self.assertEqual(redis["spec"]["replicas"], 1)
+        container = redis["spec"]["template"]["spec"]["containers"][0]
+        self.assertIn("--appendonly", container["args"])
+        self.assertIn("everysec", container["args"])
+        claims = redis["spec"]["volumeClaimTemplates"]
+        self.assertEqual(claims[0]["metadata"]["name"], "data")
+
+    def test_external_redis_uses_a_secret_and_omits_managed_redis(self) -> None:
+        result = subprocess.run(
+            [
+                "helm",
+                "template",
+                "akernel",
+                str(CHART),
+                "--namespace",
+                "akernel-system",
+                "--set",
+                "adx.redis.mode=external",
+                "--set",
+                "adx.redis.external.existingSecret=external-redis",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        resources = [item for item in yaml.safe_load_all(result.stdout) if item]
+        names = {item["metadata"]["name"] for item in resources}
+        self.assertNotIn("akernel-adx-redis", names)
+        control = next(
+            item
+            for item in resources
+            if item["kind"] == "Deployment"
+            and item["metadata"]["name"] == "akernel-adx-control"
+        )
+        node = next(item for item in resources if item["kind"] == "DaemonSet")
+        for workload in (control, node):
+            environment = workload["spec"]["template"]["spec"]["containers"][0]["env"]
+            redis = next(item for item in environment if item["name"] == "ADX_REDIS_URL")
+            self.assertEqual(
+                redis["valueFrom"]["secretKeyRef"],
+                {"name": "external-redis", "key": "redis-url"},
+            )
+
+    def test_external_redis_requires_a_secret(self) -> None:
+        result = subprocess.run(
+            [
+                "helm",
+                "template",
+                "akernel",
+                str(CHART),
+                "--set",
+                "adx.redis.mode=external",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("adx.redis.external.existingSecret is required", result.stderr)
+
+    def test_adx_mode_does_not_render_unused_legacy_control_secrets(self) -> None:
+        names = {item["metadata"]["name"] for item in self.resources}
+        self.assertNotIn("akernel-component-tls", names)
+        self.assertNotIn("akernel-master-secret", names)
+
+    def test_multiple_control_replicas_are_rejected(self) -> None:
+        result = subprocess.run(
+            [
+                "helm",
+                "template",
+                "akernel",
+                str(CHART),
+                "--set",
+                "adx.control.replicas=2",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("adx.control.replicas must be 1", result.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()

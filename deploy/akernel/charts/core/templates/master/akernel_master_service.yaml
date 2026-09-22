@@ -1,3 +1,4 @@
+{{- if not .Values.adx.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -40,3 +41,4 @@ spec:
   selector:
     app: akernel-master
   sessionAffinity: None
+{{- end }}

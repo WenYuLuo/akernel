@@ -6,8 +6,8 @@ Wants=network-online.target sandboxd.service
 [Service]
 Type=simple
 ExecStartPre=/usr/local/bin/ensure-adx-certs
-ExecStart=/opt/adx/current/bin/adxctl --config /etc/akernel/adx-standalone.yaml run
-ExecStop=/opt/adx/current/bin/adxctl --config /etc/akernel/adx-standalone.yaml stop
+ExecStart=/usr/local/bin/adx-service run
+ExecStop=/usr/local/bin/adx-service stop
 Restart=on-failure
 RestartSec=5s
 TimeoutStopSec=120

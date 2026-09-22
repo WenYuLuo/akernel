@@ -6,6 +6,10 @@
 
 set -euo pipefail
 
+if [[ "${AKERNEL_ADX_MANAGED_CREDENTIALS:-local}" == "external" ]]; then
+  exit 0
+fi
+
 state_dir="${AKERNEL_ADX_STATE_DIR:-/home/akernel/adx}"
 tls_dir="${state_dir}/tls"
 secrets_dir="${state_dir}/secrets"

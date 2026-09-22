@@ -1,3 +1,4 @@
+{{- if not .Values.adx.enabled }}
 {{- $schedulePlacementPolicy := .Values.master.schedulePlacementPolicy | default "spread" -}}
 {{- if not (has $schedulePlacementPolicy (list "binpack" "spread")) -}}
 {{- fail "master.schedulePlacementPolicy must be binpack or spread" -}}
@@ -166,3 +167,4 @@ spec:
           configMap:
             name: akernel-otel-collector-config
       {{- end }}
+{{- end }}

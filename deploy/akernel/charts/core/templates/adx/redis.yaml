@@ -1,0 +1,88 @@
+{{- if and .Values.adx.enabled (eq .Values.adx.redis.mode "managed") }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: akernel-adx-redis
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    app: akernel-adx-redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: akernel-adx-redis
+  namespace: {{ .Release.Namespace }}
+spec:
+  serviceName: akernel-adx-redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app: akernel-adx-redis
+  template:
+    metadata:
+      labels:
+        app: akernel-adx-redis
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: redis
+          image: "{{ include "core.image" (dict "root" . "image" .Values.image) }}"
+          imagePullPolicy: {{ include "core.image.pullPolicy" (dict "root" . "image" .Values.image) }}
+          command:
+            - /opt/adx/current/bin/redis-server
+          args:
+            - --bind
+            - 0.0.0.0
+            - --port
+            - "6379"
+            - --dir
+            - /var/lib/redis
+            - --appendonly
+            - "yes"
+            - --appendfsync
+            - {{ .Values.adx.redis.appendfsync | quote }}
+          ports:
+            - name: redis
+              containerPort: 6379
+          readinessProbe:
+            tcpSocket:
+              port: redis
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: redis
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.adx.redis.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/redis
+      {{- if not .Values.adx.redis.persistence.enabled }}
+      volumes:
+        - name: data
+          emptyDir: {}
+      {{- end }}
+  {{- if .Values.adx.redis.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          {{- toYaml .Values.adx.redis.persistence.accessModes | nindent 10 }}
+        resources:
+          requests:
+            storage: {{ .Values.adx.redis.persistence.size | quote }}
+        {{- if .Values.adx.redis.persistence.storageClassName }}
+        storageClassName: {{ .Values.adx.redis.persistence.storageClassName | quote }}
+        {{- end }}
+  {{- end }}
+{{- end }}

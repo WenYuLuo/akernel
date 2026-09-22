@@ -1,3 +1,4 @@
+{{- if not .Values.adx.enabled }}
 {{- if ne (int .Values.etcd.replicas) 1 }}
 {{- fail "the bundled etcd chart supports exactly one member; use an external HA etcd deployment for multiple replicas" }}
 {{- end }}
@@ -117,3 +118,4 @@ spec:
         storageClassName: {{ .Values.etcd.persistence.storageClassName | quote }}
         {{- end }}
   {{- end }}
+{{- end }}

@@ -394,6 +394,7 @@ RUN if [ "${AKERNEL_ENABLE_KATA}" = "true" ]; then \
 COPY ./builder/scripts/akernel-entrypoint.sh /usr/local/bin/akernel-entrypoint
 COPY ./builder/scripts/ensure-component-cert.sh /usr/local/bin/ensure-component-cert
 COPY ./builder/scripts/ensure-adx-certs.sh /usr/local/bin/ensure-adx-certs
+COPY ./builder/scripts/adx-service.sh /usr/local/bin/adx-service
 COPY ./builder/scripts/sandboxd_network_prepare.sh /usr/local/bin/sandboxd-network-prepare
 COPY ./builder/config/adx-standalone.yaml /etc/akernel/adx-standalone.yaml
 RUN chmod 0755 \
@@ -405,6 +406,7 @@ RUN chmod 0755 \
         /usr/local/bin/akernel-entrypoint \
         /usr/local/bin/ensure-component-cert \
         /usr/local/bin/ensure-adx-certs \
+        /usr/local/bin/adx-service \
         /usr/local/bin/sandboxd-network-prepare
 RUN if [ "${AKERNEL_ENABLE_KATA}" = "true" ]; then chmod 0755 /usr/local/bin/containerd-shim-kata-v2; fi
 RUN if [ "${AKERNEL_ENABLE_RUNC}" = "true" ]; then \

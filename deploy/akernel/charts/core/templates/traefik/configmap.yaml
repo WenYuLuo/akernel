@@ -19,6 +19,7 @@ data:
       traefik:
         address: ":{{ .Values.traefik.ports.dashboard }}"
 
+    {{- if not .Values.adx.enabled }}
     {{- $masterEtcd := .Values.master.etcd | default dict }}
     {{- $etcdHost := get $masterEtcd "host" | default (printf "akernel-etcd.%s.svc.cluster.local" .Release.Namespace) }}
     {{- $etcdPort := get $masterEtcd "port" | default "2379" }}
@@ -38,6 +39,7 @@ data:
           - "{{ $etcdHost }}:{{ $etcdPort }}"
         rootKey: "traefik"
       {{- end }}
+    {{- end }}
 
     ping: {}
 
@@ -77,6 +79,25 @@ data:
     {{- end }}
 
     http:
+      {{- if .Values.adx.enabled }}
+      routers:
+        adx:
+          entryPoints:
+            - websecure
+          rule: "PathPrefix(`/`)"
+          service: akernel-adx-control
+          tls: {}
+      services:
+        akernel-adx-control:
+          loadBalancer:
+            serversTransport: adx-transport
+            servers:
+              - url: "https://akernel-adx-control:8443"
+      serversTransports:
+        adx-transport:
+          insecureSkipVerify: true
+          disableHTTP2: true
+      {{- else }}
       routers:
         frontend-terminal:
           entryPoints:
@@ -148,4 +169,5 @@ data:
           # An HTTP/1.1 connection pool is unaffected.
           disableHTTP2: true
           {{- end }}
+      {{- end }}
 {{- end }}

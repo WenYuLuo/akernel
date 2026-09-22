@@ -23,6 +23,51 @@ image:
   tag: "latest"
   pullPolicy: IfNotPresent
 
+# Agent DX is the default AKernel control and data plane. The chart expects an
+# existing Secret containing the deployment CA, component certificates and the
+# initial administrator key; see deploy/README.md for the exact key contract.
+adx:
+  enabled: true
+  namespace: akernel
+  placement: pack
+  schedulerShards: 1
+  tls:
+    existingSecret: akernel-adx-tls
+    serverName: adx.internal
+  redis:
+    mode: managed
+    appendfsync: everysec
+    external:
+      existingSecret: ""
+      urlKey: redis-url
+    persistence:
+      enabled: true
+      storageClassName: ""
+      size: 20Gi
+      accessModes:
+        - ReadWriteOnce
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+  control:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 2Gi
+  node:
+    allowedTargetCidrs: 10.88.0.0/16
+    allowedEdgeCidrs: 0.0.0.0/0
+    reportIntervalSeconds: 5
+    resourceValidForSeconds: 30
+
 yuanrong:
   imageProcessConfig: "/run/akernel/yr-image-process.json"
 
