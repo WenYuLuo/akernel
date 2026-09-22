@@ -82,3 +82,29 @@ with the revised configuration and entrypoint scripts. This run verifies the
 SDK and deployment behavior; it does not verify a clean all-in-one build from
 the currently pinned release. Public artifact publication, the formal package
 update, custom OCI validation, and live Kubernetes validation remain pending.
+
+## Internal network mode regression (2026-09-22)
+
+Standalone now selects `internal_security: network`. Internal RPC and Edge-to-node
+forwarding do not load component certificates. Public HTTPS and API key checks
+remain enabled; the SDK still uses the existing server address and token.
+Component role declarations are trusted within the deployment network, while
+node-session, ownership and tenant checks remain in place.
+
+The test started from a new data directory and asserted that `data/adx/tls`
+contained only `edge-public.pem` and `edge-public.key`:
+
+- gVisor: 6 passed, 1 custom OCI case skipped (51.158 seconds).
+- Firecracker: 6 passed, 1 custom OCI case skipped (72.260 seconds).
+- Both included command, filesystem, PTY and workload checkpoint/reload with
+  reverse-tunnel recovery. The task container was removed after testing.
+- Certificate/Secret generation and Helm contracts: 13 tests passed; deployment
+  shell checks passed. Existing public certificates are reused on restart.
+- Image: `akernel-adx-validation:network-mode`.
+- Image ID: `sha256:1e6f257b828b17a735c7d8e12b59e73471ba6d326fe2b06387942c397b145e44`.
+- Remote log: `/var/log/akernel-network-mode-e2e.log`.
+- Local log: `out/pr/network-e2e.log`.
+
+This image overlays the updated ADX control and gateway binaries on the reviewed
+checkpoint image. The formal #71 artifact pin still needs replacement with a
+release containing both changes. Custom OCI and live Kubernetes were not tested.

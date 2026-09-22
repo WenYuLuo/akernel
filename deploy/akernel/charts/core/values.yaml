@@ -24,14 +24,13 @@ image:
   pullPolicy: IfNotPresent
 
 # Agent DX is the default AKernel control and data plane. The chart expects an
-# existing Secret containing the deployment CA, component certificates and the
-# initial administrator key; see deploy/README.md for the exact key contract.
+# existing Secret containing the public HTTPS certificate and initial API key;
+# see deploy/README.md for the exact key contract.
 adx:
   namespace: akernel
   schedulerShards: 1
   tls:
     existingSecret: akernel-adx-tls
-    serverName: adx.internal
   redis:
     mode: managed
     appendfsync: everysec

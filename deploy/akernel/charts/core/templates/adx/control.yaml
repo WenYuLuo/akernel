@@ -107,19 +107,6 @@ spec:
             secretName: {{ .Values.adx.tls.existingSecret | quote }}
             defaultMode: 0400
             items:
-              - {key: ca.pem, path: tls/ca.pem}
-              - {key: master.pem, path: tls/master.pem}
-              - {key: master.key, path: tls/master.key}
-              - {key: master.der, path: tls/master.der}
-              - {key: node.pem, path: tls/node.pem}
-              - {key: node.key, path: tls/node.key}
-              - {key: node.der, path: tls/node.der}
-              - {key: api-server.pem, path: tls/api-server.pem}
-              - {key: api-server.key, path: tls/api-server.key}
-              - {key: api-server.der, path: tls/api-server.der}
-              - {key: edge.pem, path: tls/edge.pem}
-              - {key: edge.key, path: tls/edge.key}
-              - {key: edge.der, path: tls/edge.der}
               - {key: public.pem, path: tls/public.pem}
               - {key: public.key, path: tls/public.key}
               - {key: admin-key, path: secrets/admin-key}

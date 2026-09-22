@@ -179,9 +179,6 @@ spec:
           name: adx-config
           subPath: node.yaml
           readOnly: true
-        - mountPath: /etc/adx
-          name: adx-credentials
-          readOnly: true
         {{- if or $.Values.monitoring.prometheusEndpoint $.Values.monitoring.lokiEndpoint $.Values.monitoring.tempoEndpoint }}
         - mountPath: /etc/otel-collector
           name: otel-collector-config
@@ -236,16 +233,6 @@ spec:
       - name: adx-config
         configMap:
           name: akernel-adx-config
-      - name: adx-credentials
-        secret:
-          secretName: {{ .Values.adx.tls.existingSecret | quote }}
-          defaultMode: 0400
-          items:
-            - {key: ca.pem, path: tls/ca.pem}
-            - {key: master.der, path: tls/master.der}
-            - {key: api-server.der, path: tls/api-server.der}
-            - {key: node.pem, path: tls/node.pem}
-            - {key: node.key, path: tls/node.key}
       {{- if or .Values.monitoring.prometheusEndpoint .Values.monitoring.lokiEndpoint .Values.monitoring.tempoEndpoint }}
       - name: otel-collector-config
         configMap:

@@ -65,62 +65,14 @@ for arg in args:
                 for argument in create
                 if argument.startswith("--from-file=")
             }
-            self.assertEqual(
-                keys,
-                {
-                    "ca.pem",
-                    "master.pem",
-                    "master.key",
-                    "master.der",
-                    "node.pem",
-                    "node.key",
-                    "node.der",
-                    "api-server.pem",
-                    "api-server.key",
-                    "api-server.der",
-                    "edge.pem",
-                    "edge.key",
-                    "edge.der",
-                    "public.pem",
-                    "public.key",
-                    "admin-key",
-                },
+            self.assertEqual(keys, {"public.pem", "public.key", "admin-key"})
+            subprocess.run(
+                ["openssl", "verify", "-CAfile", captured / "public.pem", captured / "public.pem"],
+                check=True, capture_output=True, text=True,
             )
-            for identity in ("master", "node", "api-server", "edge", "public"):
-                subprocess.run(
-                    [
-                        "openssl",
-                        "verify",
-                        "-CAfile",
-                        captured / "ca.pem",
-                        captured / f"{identity}.pem",
-                    ],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                )
-            for identity in ("master", "node", "api-server", "edge"):
-                expected_der = root / f"{identity}.der"
-                subprocess.run(
-                    [
-                        "openssl",
-                        "x509",
-                        "-in",
-                        captured / f"{identity}.pem",
-                        "-outform",
-                        "DER",
-                        "-out",
-                        expected_der,
-                    ],
-                    check=True,
-                )
-                self.assertEqual(
-                    expected_der.read_bytes(),
-                    (captured / f"{identity}.der").read_bytes(),
-                )
 
             certificate = subprocess.run(
-                ["openssl", "x509", "-in", captured / "master.pem", "-text", "-noout"],
+                ["openssl", "x509", "-in", captured / "public.pem", "-text", "-noout"],
                 check=True,
                 capture_output=True,
                 text=True,

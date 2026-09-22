@@ -14,7 +14,7 @@ The image installs the complete gVisor bundle pinned by sandboxd's runtime manif
 
 For a fresh cloud deployment, prefer the repository-level Makefile. It keeps
 local deployment state under `.akernel/<env>/`, builds the all-in-one image,
-plans/applies Terraform, creates the Agent DX identity Secret, and reads the
+plans/applies Terraform, creates the HTTPS and API key Secret, and reads the
 bootstrap administrator API key for SDK access.
 
 ```bash
@@ -218,9 +218,9 @@ and Tempo. Kubernetes nodes must support privileged Pods and the runtime
 requirements described earlier in this guide. Managed Redis requires a default
 StorageClass or an explicit `core.adx.redis.persistence.storageClassName`.
 
-### Create the Agent DX identity Secret
+### Create the HTTPS and API key Secret
 
-Create the cluster identity material before installing the chart. The helper is
+Create the public HTTPS certificate and API key before installing the chart. The helper is
 idempotent and leaves an existing Secret unchanged:
 
 ```bash
@@ -229,10 +229,10 @@ idempotent and leaves an existing Secret unchanged:
   --name akernel-adx-tls
 ```
 
-The Secret contains separate Master, API Server, Edge, and public certificates,
-plus one `node-pool` certificate shared by the Node Manager DaemonSet. Each Node
-Manager sends its Kubernetes `spec.nodeName` in authenticated RPC requests;
-Master validates both the pool certificate and the concrete node identity.
+The Secret contains only `public.pem`, `public.key`, and `admin-key`. Internal
+RPC and worker forwarding use network mode without component certificates;
+keep these listeners within the deployment network. Node sessions, capsule
+ownership, tenant permissions and user API keys are still checked.
 
 ### Install with managed Redis
 
@@ -329,8 +329,8 @@ export AKERNEL_TOKEN="$(kubectl -n akernel get secret akernel-adx-tls \
 ```
 
 Set `traefik.tls.enabled` only when supplying a custom default certificate for
-the public entrypoint. The internal Edge certificate comes from
-`akernel-adx-tls` and is separate.
+the public entrypoint. The HTTPS certificate used between Traefik and Edge
+comes from `akernel-adx-tls`; this connection does not require client certificates.
 
 ### Verify the deployment
 
@@ -410,3 +410,7 @@ The node image's distill-fs v0.1.2 supports a configurable shared image-cache da
 Whole bytes and integer `B`, `KiB`, `MiB`, `GiB`, or `TiB` values are supported. Sandboxd validates the minimum of 1 MiB, addressability, and host page alignment and supplies the same capacity to mounts, stats, GC, and recovered daemons. This is the LMDB map limit, not a memory reservation, a whole-cache disk quota, or a sandbox `storage_mb` limit.
 
 Resizing an existing cache is unsupported. Same-Pod service restarts retain it; a replacement Pod with a changed hostname clears the image-manager root and creates a new cache with the configured capacity. Drain workloads before replacement. Standalone deployments must stop all users and select a fresh image-manager cache directory when changing capacity. Custom sandboxd configuration templates must retain the `# AKERNEL_CHUNK_DB_SIZE` marker when using the standalone or Helm override.
+
+Internal network mode requires an ADX package containing the optional internal
+transport implementation. The current #71 artifact pin predates it; validate
+with the updated package before deploying these templates.

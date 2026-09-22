@@ -90,7 +90,7 @@ profiles. These directories are intentionally ignored by Git. They may contain:
 
 - generated Terraform variables
 - kubeconfig files and paths
-- Agent DX identity material
+- public HTTPS certificate material
 - bootstrap API keys
 - SDK environment exports
 
@@ -276,7 +276,7 @@ pinned public chart and, by default, creates three seed nodes and one server
 node in dedicated pools. Review the generated Terraform plan and expected cost
 before applying it.
 
-The deployment helper creates an Agent DX identity Secret before Helm install.
+The deployment helper creates an HTTPS and API key Secret before Helm install.
 It retains an existing Secret so certificates and the bootstrap administrator
 API key stay stable across updates.
 

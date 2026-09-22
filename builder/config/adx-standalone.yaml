@@ -1,5 +1,6 @@
 schema_version: 1
 profile: standalone
+internal_security: network
 namespace: akernel
 service_overrides:
   master:

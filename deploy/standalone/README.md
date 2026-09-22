@@ -215,7 +215,13 @@ export AKERNEL_SERVER_ADDRESS="127.0.0.1"
 export AKERNEL_TOKEN="$(cat data/token)"
 ```
 
-Credentials are generated once under `data/adx/` and reused on restart.
+The public HTTPS certificate and API key are generated once under `data/adx/`
+and reused on restart. Internal components use network mode without mTLS;
+these listeners remain within the standalone container network. SDK address
+and token settings are unchanged.
+
+This configuration requires the ADX internal-network-mode update; the current
+#71 package pin predates that update. See [validation status](checkpoint-validation.md).
 `data/token` points to the deployment token. Keep the data directory private.
 For custom host port mappings, use the additional gateway override printed by
 `start.sh`; the default deployment does not require it.

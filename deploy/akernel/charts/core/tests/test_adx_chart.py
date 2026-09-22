@@ -76,9 +76,13 @@ class AdxChartTest(unittest.TestCase):
         static = self.resource("ConfigMap", "traefik-static")["data"]["traefik.yml"]
         self.assertIn("file:", static)
 
-    def test_node_uses_dynamic_identity_and_pool_certificate(self) -> None:
+    def test_internal_rpc_uses_network_identity_without_node_certificates(self) -> None:
         config = self.resource("ConfigMap", "akernel-adx-config")["data"]
-        self.assertIn("node-pool:", config["control.yaml"])
+        self.assertNotIn("node-pool:", config["control.yaml"])
+        self.assertIn("mode: network", config["control.yaml"])
+        self.assertIn("internal_security: network", config["control.yaml"])
+        self.assertIn("mode: network", config["node.yaml"])
+        self.assertNotIn(".der", config["control.yaml"] + config["node.yaml"])
         self.assertIn("node_id: ${NODE_NAME}", config["node.yaml"])
         self.assertIn("advertised_address: ${INSTANCE_IP}:19001", config["node.yaml"])
         daemonset = self.resource("DaemonSet", "akernel-node")
@@ -91,12 +95,11 @@ class AdxChartTest(unittest.TestCase):
             item["name"]: item
             for item in daemonset["spec"]["template"]["spec"]["volumes"]
         }
-        credentials = volumes["adx-credentials"]["secret"]
-        self.assertEqual(credentials["secretName"], "adx-test-tls")
-        self.assertEqual(
-            {item["key"] for item in credentials["items"]},
-            {"ca.pem", "master.der", "api-server.der", "node.pem", "node.key"},
-        )
+        self.assertNotIn("adx-credentials", volumes)
+        control = self.resource("Deployment", "akernel-adx-control")
+        volumes = control["spec"]["template"]["spec"]["volumes"]
+        secret = next(v["secret"] for v in volumes if v["name"] == "credentials")
+        self.assertEqual({i["key"] for i in secret["items"]}, {"public.pem", "public.key", "admin-key"})
 
     def test_gateway_keeps_control_and_data_ports_separate(self) -> None:
         dynamic = self.resource("ConfigMap", "traefik-dynamic")["data"]["config.yml"]
