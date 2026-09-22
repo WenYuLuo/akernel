@@ -59,3 +59,26 @@ verification. The guest initrd was built from the same sandboxd source
 This remains an overlay validation image. The formal ADX release and AKernel
 artifact lock update are still pending; this result does not cover custom OCI,
 cross-node cloning or Kubernetes deployment.
+
+## Review compatibility regression (2026-09-22)
+
+The revised SDK and simplified standalone profile were validated using only
+`AKERNEL_SERVER_ADDRESS=127.0.0.1` and `AKERNEL_TOKEN`. No backend selector,
+URL scheme, or gateway override was supplied. The existing `data/token` path
+remains the credential entry point, and generated certificates are reused.
+
+- SDK: 227 unit tests, Ruff, and mypy passed. Tests of the removed adapter were
+  retired; address parsing, legacy selector aliases, explicit cleanup, and the
+  GC-under-HTTPX-lock regression remain covered.
+- Deployment: 22 runtime/certificate/Secret/Helm/Terraform contract tests passed;
+  shell syntax and Terraform input-reference checks passed.
+- gVisor: 6 passed, 1 custom OCI case skipped (52.085 seconds).
+- Firecracker: 6 passed, 1 custom OCI case skipped (71.901 seconds).
+- Remote run log: `/var/log/akernel-review-78-final-e2e.log`.
+- Local run log: `out/pr/standalone-final-e2e.log`.
+
+The runtime image is still derived from the checkpoint validation overlay above,
+with the revised configuration and entrypoint scripts. This run verifies the
+SDK and deployment behavior; it does not verify a clean all-in-one build from
+the currently pinned release. Public artifact publication, the formal package
+update, custom OCI validation, and live Kubernetes validation remain pending.

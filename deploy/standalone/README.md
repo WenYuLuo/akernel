@@ -1,16 +1,8 @@
 # AKernel Standalone Deployment
 
 This directory contains scripts and configurations for running AKernel in
-standalone mode using Docker or Pouch, without Kubernetes. The deployment uses
-one privileged container on the default container bridge:
-
-- `akernel-node` runs sandboxd plus the ADX Redis, Master, Node Manager, API
-  Server, Edge, and Node Proxy processes from the AKernel all-in-one image.
-
-The container publishes the embedded ADX Edge directly through two distinct
-host listeners. The TLS control listener defaults to port `443`; the plaintext
-instance-data listener defaults to port `80`. Edge uses the Master route stream
-and forwards instance traffic to the embedded Node Proxy.
+standalone mode using Docker or Pouch, without Kubernetes. One privileged `akernel-node` container serves the SDK on HTTPS port 443 and
+public sandbox ports on HTTP port 80. Both are ready before startup returns.
 
 The default runtime is gVisor `runsc`. The bundled image also contains Kata
 Containers and Firecracker. Both `Sandbox(runtime="kata")` and
@@ -65,20 +57,17 @@ rather than tmpfs. Without `storage_mb`, runsc retains its configured
 memory-backed overlay while Firecracker uses its configured sparse ext4
 default.
 
-Sandbox checkpoints for runsc and Firecracker use ADX's local-only
-snapshot mode. Checkpoint state is kept under the persistent
+Sandbox checkpoints for runsc and Firecracker are local to the node. Checkpoint state is kept under the persistent
 `/home/akernel/adx/checkpoints` data mount. Workloads trigger an anonymous recovery
 point through `POST /checkpoint` on `/run/akernel/rrt.sock`, and the SDK can
 reload the same logical sandbox from the latest usable point. Recovery points
 follow the source sandbox lifecycle; they are not exposed as reusable SDK
 objects.
 
-The ADX workload checkpoint bridge requires both the updated RRT and Node Manager.
-The current Buildkite #71 artifact pin predates that bridge. The source changes
+The currently pinned release does not yet contain workload checkpoint support. The source changes
 were verified with an overlay validation image; see
 [checkpoint validation](checkpoint-validation.md) for results and the remaining
 release update.
-
 
 `start.sh` loads the host `tun` module and verifies `/dev/net/tun` before
 starting the pooled-TAP runtimes. Runc retains its separate veth network path.
@@ -100,10 +89,6 @@ network namespace when bpfnat local DNAT is enabled. bpfnat replaces NAT; it
 does not override firewall policy. A custom host-network deployment whose
 `FORWARD` policy is `DROP` must allow traffic to and from `sandbox0` with
 bridge- and sandbox-CIDR-scoped rules.
-
-ADX standalone publishes loopback control-plane addresses because all roles
-share the node container. Sandbox traffic still uses the sandbox bridge and
-Node Proxy binding.
 
 The standalone configuration enables per-sandbox network ACLs. With the
 default iptables backend, `start.sh` loads IPv6 filter-table, `br_netfilter`,
@@ -179,13 +164,12 @@ This will:
 - Use `akerneldev/all-in-one:latest` if `IMAGE` is not set, reusing a local
   copy when present and otherwise pulling it from Docker Hub
 - Start the privileged AKernel all-in-one container
-- Publish the embedded Edge control listener on host port `443` and the data
-  listener on host port `80`
-- Generate distinct internal mTLS identities and an administrator API key
+- Publish HTTPS port `443` and HTTP port `80`
+- Initialize and reuse local credentials automatically
 - Generate a sandboxd config using `AKERNEL_NAT_BACKEND` (`iptables` by
   default)
-- Wait until the Node Manager has registered allocatable capacity
-- Print the control URL, data URL, and API-key path used by the SDK
+- Wait until the node has allocatable capacity
+- Print the SDK address and token path
 
 The default listeners bind all host interfaces. Override the bind addresses or
 ports before starting when the defaults conflict with another service:
@@ -224,25 +208,17 @@ sudo docker exec akernel-node systemctl status
 
 ### SDK Connection
 
-The standalone container publishes two ADX Edge listeners: port 443/TLS for
-authenticated control, direct command, file and PTY traffic, and port 80/plain
-HTTP for instance data such as reverse tunnels and public port forwarding.
-
-Set the SDK environment:
+Use the existing SDK environment variables:
 
 ```bash
-export AKERNEL_SERVER_ADDRESS="https://127.0.0.1"
-export AKERNEL_GATEWAY_ADDRESS="http://127.0.0.1"
-export AKERNEL_TOKEN="$(cat data/adx/secrets/admin-key)"
+export AKERNEL_SERVER_ADDRESS="127.0.0.1"
+export AKERNEL_TOKEN="$(cat data/token)"
 ```
 
-The administrator API key and component certificates are generated once under
-`data/adx/` and reused while that standalone data directory exists. Keep this
-directory private. Tenant keys can be created later through the ADX admin API.
-
-The two listeners belong to the same Edge process in this profile. A deployment
-may run API Server and Edge in one process or separate processes without
-collapsing their public control and data ports.
+Credentials are generated once under `data/adx/` and reused on restart.
+`data/token` points to the deployment token. Keep the data directory private.
+For custom host port mappings, use the additional gateway override printed by
+`start.sh`; the default deployment does not require it.
 
 ### Container Image Version
 

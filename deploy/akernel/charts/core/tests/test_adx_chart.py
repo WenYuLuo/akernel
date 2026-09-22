@@ -55,6 +55,27 @@ class AdxChartTest(unittest.TestCase):
         self.assertNotIn("akernel-frontend", names)
         self.assertNotIn("akernel-etcd", names)
 
+    def test_control_preserves_master_image_override(self) -> None:
+        result = subprocess.run(
+            ["helm", "template", "akernel", str(CHART), "--set",
+             "master.image.repository=example.test/control,master.image.tag=release"],
+            check=True, capture_output=True, text=True,
+        )
+        resources = [item for item in yaml.safe_load_all(result.stdout) if item]
+        control = next(item for item in resources
+                       if item["kind"] == "Deployment"
+                       and item["metadata"]["name"] == "akernel-adx-control")
+        image = control["spec"]["template"]["spec"]["containers"][0]["image"]
+        self.assertEqual(image, "example.test/control:release")
+
+    def test_retired_templates_are_removed(self) -> None:
+        for directory in ("etcd", "frontend", "master"):
+            self.assertFalse((CHART / "templates" / directory).exists())
+        self.assertNotIn("ETCD_ADDRESS", self.rendered)
+        self.assertNotIn("YR_IMAGE_PROCESS_CONFIG", self.rendered)
+        static = self.resource("ConfigMap", "traefik-static")["data"]["traefik.yml"]
+        self.assertIn("file:", static)
+
     def test_node_uses_dynamic_identity_and_pool_certificate(self) -> None:
         config = self.resource("ConfigMap", "akernel-adx-config")["data"]
         self.assertIn("node-pool:", config["control.yaml"])
@@ -63,7 +84,7 @@ class AdxChartTest(unittest.TestCase):
         daemonset = self.resource("DaemonSet", "akernel-node")
         container = daemonset["spec"]["template"]["spec"]["containers"][0]
         env = {item["name"]: item.get("value") for item in container["env"]}
-        self.assertEqual(env["AKERNEL_CONTROL_PLANE"], "adx")
+        self.assertNotIn("AKERNEL_CONTROL_PLANE", env)
         self.assertEqual(env["AKERNEL_ADX_CONFIG"], "/etc/akernel/adx-node.yaml")
 
         volumes = {

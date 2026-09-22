@@ -1,4 +1,6 @@
-{{- if .Values.adx.enabled }}
+{{- if not (has (.Values.master.schedulePlacementPolicy | default "spread") (list "binpack" "spread")) }}
+{{- fail "master.schedulePlacementPolicy must be binpack or spread" }}
+{{- end }}
 {{- if not (has .Values.adx.redis.mode (list "managed" "external")) }}
 {{- fail "adx.redis.mode must be managed or external" }}
 {{- end }}
@@ -27,7 +29,7 @@ data:
           listen: 0.0.0.0:19000
           advertised_address: https://akernel-adx-control.{{ .Release.Namespace }}.svc.cluster.local:19000
           scheduler_shards: {{ .Values.adx.schedulerShards }}
-          placement: {{ .Values.adx.placement | quote }}
+          placement: {{ eq (.Values.master.schedulePlacementPolicy | default "spread") "binpack" | ternary "pack" "spread" | quote }}
           rpc_timeout_seconds: 30
           heartbeat_timeout_seconds: 30
           discovery_ttl_seconds: 15
@@ -182,4 +184,3 @@ data:
         image_process_config: /etc/adx-image-process.json
       env:
         PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-{{- end }}

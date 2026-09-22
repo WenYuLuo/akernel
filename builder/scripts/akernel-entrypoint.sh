@@ -27,19 +27,13 @@ fi
 
 case "${role}" in
     master|frontend)
-        /usr/local/bin/ensure-component-cert
-        exec /bin/bash /home/yuanrong/entrypoint.sh "$@"
+        exec /usr/local/bin/adx-service run
         ;;
     node)
         /bin/bash /root/prepare_node.sh
-        if [ "${AKERNEL_CONTROL_PLANE:-legacy}" = "adx" ]; then
-            systemctl disable yuanrong.service >/dev/null 2>&1 || true
-            systemctl enable adx.service >/dev/null
-        fi
         exec /usr/sbin/init "$@"
         ;;
     standalone)
-        systemctl disable yuanrong.service >/dev/null 2>&1 || true
         systemctl enable adx.service >/dev/null
         exec /usr/sbin/init "$@"
         ;;

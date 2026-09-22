@@ -100,24 +100,18 @@ make config VENDOR=aliyun \
   IMAGE_REPOSITORY=registry.example.com/akernel/all-in-one \
   IMAGE_TAG=your-release-tag
 docker login registry.example.com
-make build ADX_RELEASE_ARCHIVE=/absolute/path/to/adx-release.tar.gz
+make build
 make push
 make deploy
 make print-env
 ```
-
-The ADX release archive is verified against
-[`builder/adx-release.lock.json`](./builder/adx-release.lock.json). AKernel uses
-its control-plane binaries, Python SDK wheel, and `rrt-runtime`; AKernel still
-builds sandboxd and the runtime rootfs from its own pinned sources.
 
 See the [Deployment Guide](./deploy/README.md) for prerequisites, cloud-specific configuration, deployment verification, and cluster cleanup, and the [Build Guide](./CLAUDE.md) for development details.
 
 
 ### Create a Sandbox
 
-Install the Python SDK. The default installation includes the `adx-sandbox`
-backend:
+Install the Python SDK:
 
 ```bash
 # PyPI
@@ -127,14 +121,10 @@ python -m pip install akernel-sdk
 python -m pip install ./sdk/python
 ```
 
-New applications use the ADX backend automatically. The actor-based legacy
-backend and its Python runtime dependency are not included.
-
 Configure the AKernel environment:
 
 ```bash
 export AKERNEL_SERVER_ADDRESS="<your-akernel-server-address>"
-export AKERNEL_GATEWAY_ADDRESS="http://<your-akernel-server-address>"
 export AKERNEL_TOKEN="<your-akernel-token>"
 ```
 
@@ -170,17 +160,9 @@ See the complete [basic usage example](./sdk/python/examples/basic_usage.py), th
 
 ### System Components
 
-**Agent DX control and data plane**
+**Sandbox management**
 
-- **Master + ShardScheduler**: keeps the authoritative Capsule directory in
-  Redis and places work that cannot be admitted locally
-- **API Server + Edge**: authenticates the public Sandbox API, caches the
-  Master directory stream, and forwards data-plane traffic
-- **Node Manager + Node Proxy**: performs node-local admission, owns Capsule
-  lifecycle state, calls sandboxd, and serves routed SDK traffic from one
-  process by default
-- **Redis**: durable control-plane state and component discovery; AKernel can
-  deploy a single AOF-backed member or connect to an external Redis service
+Agent DX handles sandbox scheduling, lifecycle and request routing.
 
 **Node-Level Infrastructure**
 - **Sandbox runtimes**: gVisor by default; Kata Containers and Firecracker on

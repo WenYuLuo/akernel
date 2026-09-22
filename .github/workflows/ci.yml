@@ -247,10 +247,9 @@ jobs:
 
       - name: Run SDK end-to-end examples
         run: |
-          token="$(cat deploy/standalone/data/adx/secrets/admin-key)"
+          token="$(cat deploy/standalone/data/token)"
           export AKERNEL_TOKEN="${token}"
-          export AKERNEL_SERVER_ADDRESS="https://127.0.0.1"
-          export AKERNEL_GATEWAY_ADDRESS="http://127.0.0.1"
+          export AKERNEL_SERVER_ADDRESS="127.0.0.1"
           export PYTHONPATH="${GITHUB_WORKSPACE}/sdk/python"
 
           examples=(
@@ -278,10 +277,9 @@ jobs:
 
       - name: Run runsc checkpoint reload E2E
         run: |
-          token="$(cat deploy/standalone/data/adx/secrets/admin-key)"
+          token="$(cat deploy/standalone/data/token)"
           export AKERNEL_TOKEN="${token}"
-          export AKERNEL_SERVER_ADDRESS="https://127.0.0.1"
-          export AKERNEL_GATEWAY_ADDRESS="http://127.0.0.1"
+          export AKERNEL_SERVER_ADDRESS="127.0.0.1"
           export AKERNEL_RUN_INTEGRATION=1
           export PYTHONPATH="${GITHUB_WORKSPACE}/sdk/python"
 

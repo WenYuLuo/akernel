@@ -73,7 +73,11 @@ for identity in master node-1 api-server edge edge-public; do
 done
 
 cp "${tmp_dir}/ca.pem" "${tmp_dir}/public-ca.pem"
-openssl rand -hex 32 > "${tmp_dir}/admin-key"
+if [[ -s "${secrets_dir}/admin-key" ]]; then
+  cp "${secrets_dir}/admin-key" "${tmp_dir}/admin-key"
+else
+  openssl rand -hex 32 > "${tmp_dir}/admin-key"
+fi
 chmod 0644 "${tmp_dir}"/*.pem "${tmp_dir}"/*.der
 chmod 0600 "${tmp_dir}"/*.key "${tmp_dir}/admin-key"
 

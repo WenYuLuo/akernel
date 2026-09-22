@@ -1,4 +1,4 @@
-{{- if and .Values.adx.enabled (eq .Values.adx.redis.mode "managed") }}
+{{- if eq .Values.adx.redis.mode "managed" }}
 apiVersion: v1
 kind: Service
 metadata:

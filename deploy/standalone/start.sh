@@ -13,7 +13,7 @@ CONFIG_DIR="${SCRIPT_DIR}/config"
 DATA_DIR="${SCRIPT_DIR}/data"
 NODE_CONTAINER_NAME="akernel-node"
 IMAGE="${IMAGE:-akerneldev/all-in-one:latest}"
-TOKEN_FILE="${DATA_DIR}/adx/secrets/admin-key"
+TOKEN_FILE="${DATA_DIR}/token"
 SANDBOXD_CONFIG_FILE="${DATA_DIR}/sandboxd/config.toml"
 AKERNEL_NAT_BACKEND="${AKERNEL_NAT_BACKEND:-iptables}"
 AKERNEL_ENABLE_RUNC="${AKERNEL_ENABLE_RUNC:-false}"
@@ -534,6 +534,15 @@ main() {
     configure_gpu
     configure_network
     prepare_host_network_modules
+    # Keep the established token path, including a token from an earlier setup.
+    if [[ -s "${TOKEN_FILE}" && ! -L "${TOKEN_FILE}" ]]; then
+        if [[ ! -s "${DATA_DIR}/adx/secrets/admin-key" ]]; then
+            install -d -m 0700 "${DATA_DIR}/adx/secrets"
+            install -m 0600 "${TOKEN_FILE}" "${DATA_DIR}/adx/secrets/admin-key"
+        fi
+    elif [[ ! -e "${TOKEN_FILE}" && ! -L "${TOKEN_FILE}" ]]; then
+        ln -s adx/secrets/admin-key "${TOKEN_FILE}"
+    fi
     start_node_container
     wait_for_ready
     CONTROL_URL="https://${AKERNEL_ENDPOINT_HOST}:${AKERNEL_CONTROL_PORT}"
@@ -542,8 +551,14 @@ main() {
     show_status "${CONTROL_URL}" "${DATA_URL}"
 
     log_info "AKernel started successfully in standalone mode"
-    log_info "Set AKERNEL_SERVER_ADDRESS=${CONTROL_URL}"
-    log_info "Set AKERNEL_GATEWAY_ADDRESS=${DATA_URL}"
+    local sdk_address="${AKERNEL_ENDPOINT_HOST}"
+    if [[ "${AKERNEL_CONTROL_PORT}" != 443 ]]; then
+        sdk_address+=":${AKERNEL_CONTROL_PORT}"
+    fi
+    log_info "Set AKERNEL_SERVER_ADDRESS=${sdk_address}"
+    if [[ "${AKERNEL_DATA_PORT}" != 80 || "${AKERNEL_CONTROL_PORT}" != 443 ]]; then
+        log_info "Set AKERNEL_GATEWAY_ADDRESS=${DATA_URL}"
+    fi
     log_info "Set AKERNEL_TOKEN=\$(cat ${TOKEN_FILE})"
 }
 

@@ -436,6 +436,15 @@ class _Session:
             self._closed = True
 
 
+class _OwnedSandbox(adx_sandbox.Sandbox):
+    """Native handle whose lifecycle is owned by the AKernel session."""
+
+    def __del__(self) -> None:
+        # GC can run while HTTPX holds a non-reentrant pool lock. Network
+        # deletion and transport closure belong to explicit session cleanup.
+        pass
+
+
 class AdxBackend:
     """Backend implemented by ``adx-sandbox``."""
 
@@ -545,7 +554,7 @@ class AdxBackend:
             connection=self._connection,
         )
         try:
-            sandbox = adx_sandbox.Sandbox(**create_args)
+            sandbox = _OwnedSandbox(**create_args)
         except Exception as error:
             raise _convert_error("create sandbox", error) from error
         session = _Session(sandbox, spec, self._connection)

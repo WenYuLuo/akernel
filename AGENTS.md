@@ -16,7 +16,7 @@ advertises Kata Containers and Firecracker on KVM-capable nodes. The native
 Linux runc payload is build-time optional and must be explicitly included and
 enabled by an operator.
 Creation-time network policies and atomic runtime replacement support
-unrestricted networking, blocking new flows except the YuanRong control and
+unrestricted networking, blocking new flows except the control-plane and
 published sandbox-port routes, or denying exact and leading-wildcard DNS names.
 Experimental whole-device NVIDIA GPU requests require runsc. Configurable
 writable-storage requests are supported by runsc and Firecracker.
@@ -37,8 +37,6 @@ tunnels. The project overview and deployment quick start are in
   Dockerfile direct-launch configuration, independent of the parser and backend.
 - `sdk/python/examples/` - maintained AKernel SDK examples.
 - `sdk/python/tests/` - maintained AKernel SDK tests.
-- `src/yuanrong/` - pinned openYuanRong mirror checkout, including its
-  recursive component submodules.
 - `builder/` - Dockerfiles, service configs, runtime rootfs build, and image
   entrypoint scripts for the public all-in-one image.
 - `deploy/` - Helm charts, standalone scripts, Terraform modules, and
@@ -176,15 +174,6 @@ Each component embeds its own semantic version: sandboxd uses
 `version/VERSION`, while distill-fs uses its release package version in
 `Cargo.toml`. AKernel does not inject parent-repository version metadata into
 component compilation.
-
-To test an unreleased openYuanRong core wheel without rebuilding YuanRong,
-provide both `OPEN_YR_CORE_WHEEL_URL` and `OPEN_YR_CORE_WHEEL_SHA256` to
-`make build`. The complete wheel is verified before it replaces the pinned
-release control plane.
-
-To test an unreleased RRT binary, provide both `RRT_RUNTIME_URL` and
-`RRT_RUNTIME_SHA256` to `make build`. The runtime build verifies the binary
-before packaging it into the selected runtime root filesystem.
 
 Inspect the selected local versions without building an image:
 
@@ -410,7 +399,6 @@ Required environment:
 
 ```bash
 export AKERNEL_SERVER_ADDRESS="<server_address>"
-export AKERNEL_GATEWAY_ADDRESS="http://<gateway_address>"
 export AKERNEL_TOKEN="<your_token>"
 ```
 
@@ -420,12 +408,11 @@ their public ports remain distinct. Standalone publishes both embedded Edge
 listeners directly from the `akernel-node` container:
 
 ```bash
-export AKERNEL_SERVER_ADDRESS=https://127.0.0.1
-export AKERNEL_GATEWAY_ADDRESS=http://127.0.0.1
+export AKERNEL_SERVER_ADDRESS=127.0.0.1
 ```
 
 The SDK can derive the standard port-80 gateway from a host-only control
-address, while deployment tools print both variables explicitly. A custom
+address. Default deployment tools print only the server address and token. A custom
 `AKERNEL_GATEWAY_ADDRESS` applies only to public sandbox port URLs and reverse
 tunnels; exec and file transfer continue to use `AKERNEL_SERVER_ADDRESS`.
 Standalone uses `akerneldev/all-in-one:latest` by default; pass `IMAGE` to test
@@ -484,12 +471,10 @@ python3 -m pip install -e './sdk/python[dev]'
 make sdk-check
 ```
 
-The Python SDK installs ADX as its default execution backend. The optional
-`openyuanrong-sandbox` extra remains for REST compatibility testing; the
-actor-based Python backend is not supported. Backend selection happens once
-during import and backend modules are loaded lazily on first use. Keep public
-`Sandbox`, `Commands`, `Filesystem`, and value types independent of native
-packages; all native conversions belong under `akernel_sdk._backends`.
+The Python SDK installs its execution backend automatically. Preserve the
+public `AKERNEL_SERVER_ADDRESS=host[:port]` and `AKERNEL_TOKEN` contract.
+Retired backend selector names map to ADX without installing old dependencies.
+Native conversions remain under `akernel_sdk._backends`.
 
 Keep sandbox cleanup explicit through context managers or `kill()`, with
 observable, retryable deletion failures and workload exceptions preserved on

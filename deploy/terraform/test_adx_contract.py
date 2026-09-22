@@ -25,8 +25,10 @@ class AdxTerraformContractTest(unittest.TestCase):
         for provider in ("aliyun", "huaweicloud"):
             with self.subTest(provider=provider):
                 values = (ROOT / provider / "values-akernel.yaml.tmpl").read_text()
-                self.assertIn("adx:\n  enabled: true", values)
-                self.assertIn('placement: "${adx_placement}"', values)
+                self.assertIn("adx:", values)
+                self.assertIn('repository: "${master_image_repository}"', values)
+                self.assertIn('tag: "${master_image_tag}"', values)
+                self.assertIn('schedulePlacementPolicy: "${schedule_placement_policy}"', values)
                 self.assertIn("existingSecret: akernel-adx-tls", values)
                 self.assertIn("mode: managed", values)
                 self.assertIn("appendfsync: everysec", values)

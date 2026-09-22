@@ -4,12 +4,6 @@
 sandboxes. Applications use one stable API for commands, files, interactive
 PTYs, port forwarding, and reverse tunnels.
 
-ADX is the default backend. One REST compatibility backend remains available:
-
-- `adx` (default), using the Agent DX Sandbox API.
-- `openyuanrong-sandbox` (optional compatibility extra), using the earlier
-  RESTful Sandbox API.
-
 ## Navigation
 
 - [AKernel Python SDK](#akernel-python-sdk)
@@ -46,7 +40,7 @@ To install from source:
 python -m pip install ./sdk/python
 ```
 
-Configure the public AKernel entrypoint and a signed JWT token:
+Configure the public AKernel entrypoint and the deployment token:
 
 ```bash
 export AKERNEL_SERVER_ADDRESS="akernel.example.com"
@@ -57,20 +51,12 @@ Address behavior is deterministic:
 
 - A host or IP without a port uses HTTPS/WSS on 443 for the frontend and HTTP
   on 80 for public sandbox port URLs.
-- `host:port` changes only the HTTPS/WSS control endpoint; the public sandbox
-  gateway remains HTTP port 80 unless explicitly overridden.
+- `host:port` preserves shared-port behavior: control uses HTTPS/WSS and
+  public sandbox URLs use HTTP/WS on that explicit port.
 - `AKERNEL_GATEWAY_ADDRESS` overrides only the port-forwarding and reverse
   tunnel data endpoint for nonstandard ports or TLS gateways. An override
   without a scheme uses HTTP/WS. Exec and file transfer continue to use
   `AKERNEL_SERVER_ADDRESS`.
-
-The actor-based Python backend is not included. To test the earlier REST
-compatibility backend, install and select it before importing `akernel_sdk`:
-
-```bash
-pip install "akernel-sdk[openyuanrong-sandbox]"
-export AKERNEL_BACKEND=openyuanrong-sandbox
-```
 
 ## Create a sandbox
 
@@ -229,7 +215,7 @@ with Sandbox() as sandbox:
 
 The desired policy survives sandboxd restarts, explicit reloads, and same-node
 failover. Dynamic replacement is supported by the default
-`openyuanrong-sandbox` backend; the actor-based backend rejects it explicitly.
+bundled backend.
 
 For independent ingress and egress defaults, deny rules, sandbox-side port
 ranges, DNS allowlists, or stateless matching, construct the schema v2 model
@@ -440,7 +426,7 @@ rollback explicitly. It returns `False` whenever the rollback is not completed,
 including when no usable local anonymous checkpoint exists, the sandbox is
 already closed, or the backend reports an operational failure. A successful
 reload preserves `sandbox.id` and the existing commands, filesystem, and PTY
-facades. The ADX adapter also confirms the data route with a read-only process
+facades. The SDK also confirms the data route with a read-only process
 listing before reporting success. A temporary route conflict is retried within
 a 10-second window; it never reissues the rollback. Other errors, explicit
 non-retryable errors, or an expired wait return `False`.
@@ -496,7 +482,7 @@ certificate verification. The sandbox application talks only to its loopback
 HTTP listener. AKernel supports one HTTP/HTTPS reverse tunnel per sandbox and
 does not expose a general TCP tunnel.
 
-The default `openyuanrong-sandbox` backend supports custom internal tunnel
+The bundled backend supports custom internal tunnel
 ports. Its frontend derives the WebSocket port from the HTTP listener, so
 `reverse_port` must equal `listen_port - 1`. Both ports are reserved inside
 that sandbox while the tunnel is active and must not also appear in

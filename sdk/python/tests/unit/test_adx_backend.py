@@ -66,7 +66,7 @@ class AdxBackendTest(unittest.TestCase):
     def test_reload_waits_for_new_data_route_without_repeating_reload(self):
         backend = adx.AdxBackend(self.config)
         native = MagicMock(id="default-worker")
-        with patch.object(adx.adx_sandbox, "Sandbox", return_value=native):
+        with patch.object(adx, "_OwnedSandbox", return_value=native):
             session = backend.create(_spec())
         native.commands.list.reset_mock()
         native.commands.list.side_effect = [
@@ -80,7 +80,7 @@ class AdxBackendTest(unittest.TestCase):
     def test_reload_route_conflict_wait_is_bounded(self):
         backend = adx.AdxBackend(self.config)
         native = MagicMock(id="default-worker")
-        with patch.object(adx.adx_sandbox, "Sandbox", return_value=native):
+        with patch.object(adx, "_OwnedSandbox", return_value=native):
             session = backend.create(_spec())
         native.commands.list.reset_mock()
         native.commands.list.side_effect = SandboxHTTPError(409, {}, "stale route")
@@ -93,7 +93,7 @@ class AdxBackendTest(unittest.TestCase):
     def test_reload_does_not_retry_terminal_route_errors(self):
         backend = adx.AdxBackend(self.config)
         native = MagicMock(id="default-worker")
-        with patch.object(adx.adx_sandbox, "Sandbox", return_value=native):
+        with patch.object(adx, "_OwnedSandbox", return_value=native):
             session = backend.create(_spec())
         native.commands.list.reset_mock()
         native.commands.list.side_effect = SandboxHTTPError(403, {}, "forbidden")
@@ -126,7 +126,7 @@ class AdxBackendTest(unittest.TestCase):
         tunnel = HttpReverseTunnel("https://service.example")
         network = NetworkPolicy.deny_dns("github.com")
 
-        with patch.object(adx.adx_sandbox, "Sandbox", return_value=native) as sandbox:
+        with patch.object(adx, "_OwnedSandbox", return_value=native) as sandbox:
             session = backend.create(
                 _spec(
                     rootfs=rootfs,
@@ -190,7 +190,7 @@ class AdxBackendTest(unittest.TestCase):
         native.files = MagicMock()
 
         with (
-            patch.object(adx.adx_sandbox, "Sandbox", return_value=native),
+            patch.object(adx, "_OwnedSandbox", return_value=native),
             patch.object(adx.adx_sandbox, "Pty") as pty,
         ):
             session = backend.create(_spec())
@@ -208,12 +208,15 @@ class AdxBackendTest(unittest.TestCase):
         native.id = "default-worker"
         native.commands = MagicMock()
         native.files = MagicMock()
-        with patch.object(adx.adx_sandbox, "Sandbox", return_value=native) as sandbox:
+        with (
+            patch.object(adx, "_OwnedSandbox", return_value=native),
+            patch.object(adx.adx_sandbox.Sandbox, "delete") as delete,
+        ):
             session = backend.create(_spec())
             session.terminate()
 
         native.close.assert_called_once_with()
-        sandbox.delete.assert_called_once_with(
+        delete.assert_called_once_with(
             "default-worker",
             connection=backend._connection,
         )
@@ -231,7 +234,7 @@ class AdxBackendTest(unittest.TestCase):
             memory=8192,
             image="worker:v1",
         )
-        with patch.object(adx.adx_sandbox, "Sandbox", return_value=native):
+        with patch.object(adx, "_OwnedSandbox", return_value=native):
             session = backend.create(
                 _spec(xpu="gpu:A100:1", storage_mb=10240)
             )

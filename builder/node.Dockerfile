@@ -8,12 +8,6 @@ ARG AKERNEL_ENABLE_KATA=true
 ARG AKERNEL_ENABLE_RUNC=false
 ARG AKERNEL_ENABLE_FIRECRACKER=true
 ARG SANDBOXD_BUILD_IMAGE=golang:1.25.5-bookworm
-ARG OPEN_YR_VERSION=0.10.2rc9
-ARG OPEN_YR_CORE_WHEEL_URL=
-ARG OPEN_YR_CORE_WHEEL_SHA256=
-ARG OPEN_YR_RELEASE_BASE_URL=https://github.com/openYuanrong-mirror/yuanrong/releases/download
-ARG OPEN_YR_CORE_AMD64_SHA256=ced5668500ca8fa7c100690fac5e0877a90b26b7ce1347c81b1b4bc1174abf16
-ARG OPEN_YR_CORE_ARM64_SHA256=084e0bfc115985910ac6c9141126ad856f6b16b87843089441ea352927a56ec4
 ARG GVISOR_DOWNLOAD_IMAGE=ubuntu:24.04
 ARG GVISOR_RELEASE
 ARG GVISOR_AMD64_URL
@@ -234,12 +228,6 @@ ARG AKERNEL_ENABLE_RUNC
 ARG AKERNEL_ENABLE_FIRECRACKER
 ARG AKERNEL_VERSION
 ARG AKERNEL_REVISION
-ARG OPEN_YR_VERSION
-ARG OPEN_YR_CORE_WHEEL_URL
-ARG OPEN_YR_CORE_WHEEL_SHA256
-ARG OPEN_YR_RELEASE_BASE_URL
-ARG OPEN_YR_CORE_AMD64_SHA256
-ARG OPEN_YR_CORE_ARM64_SHA256
 ARG GVISOR_RELEASE
 ARG RUNC_VERSION
 ARG FIRECRACKER_RELEASE
@@ -311,55 +299,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
     echo $TZ > /etc/timezone
 
 
-ENV YR_INSTALLATION_DIR=/home/yuanrong
-
-# Install the complete, language-runtime-free openYuanRong control plane from
-# its checksum-pinned core wheel. A URL and checksum pair may override the
-# release asset when validating an unreleased daily build.
-RUN set -eux; \
-    case "${TARGETARCH:-}" in \
-      amd64) wheel_arch=x86_64; wheel_platform=amd64; release_sha="${OPEN_YR_CORE_AMD64_SHA256}" ;; \
-      arm64) wheel_arch=aarch64; wheel_platform=arm64; release_sha="${OPEN_YR_CORE_ARM64_SHA256}" ;; \
-      "") \
-        case "$(uname -m)" in \
-          x86_64) wheel_arch=x86_64; wheel_platform=amd64; release_sha="${OPEN_YR_CORE_AMD64_SHA256}" ;; \
-          aarch64) wheel_arch=aarch64; wheel_platform=arm64; release_sha="${OPEN_YR_CORE_ARM64_SHA256}" ;; \
-          *) echo "unsupported openYuanRong target architecture: $(uname -m)" >&2; exit 1 ;; \
-        esac ;; \
-      *) echo "unsupported openYuanRong target architecture: ${TARGETARCH}" >&2; exit 1 ;; \
-    esac; \
-    wheel_name="openyuanrong_core-${OPEN_YR_VERSION}-py3-none-manylinux_2_31_${wheel_arch}.whl"; \
-    wheel_url="${OPEN_YR_RELEASE_BASE_URL}/${OPEN_YR_VERSION}/${wheel_name}"; \
-    wheel_sha="${release_sha}"; \
-    if [ -n "${OPEN_YR_CORE_WHEEL_URL}" ]; then \
-      test -n "${OPEN_YR_CORE_WHEEL_SHA256}"; \
-      wheel_name="$(python3 -c 'import os, sys, urllib.parse; print(os.path.basename(urllib.parse.unquote(urllib.parse.urlparse(sys.argv[1]).path)))' "${OPEN_YR_CORE_WHEEL_URL}")"; \
-      case "${wheel_name}" in *.whl) ;; *) echo "OPEN_YR_CORE_WHEEL_URL must reference a .whl file" >&2; exit 1 ;; esac; \
-      wheel_url="${OPEN_YR_CORE_WHEEL_URL}"; \
-      wheel_sha="${OPEN_YR_CORE_WHEEL_SHA256}"; \
-    else \
-      test -z "${OPEN_YR_CORE_WHEEL_SHA256}"; \
-    fi; \
-    wheel="/tmp/${wheel_name}"; \
-    target=/tmp/openyuanrong-core; \
-    curl -fSL --retry 10 --retry-delay 2 --retry-all-errors \
-      "${wheel_url}" -o "${wheel}"; \
-    echo "${wheel_sha}  ${wheel}" | sha256sum -c -; \
-    python3 -m pip install \
-      --break-system-packages \
-      --no-cache-dir \
-      --no-deps \
-      --target "${target}" \
-      "${wheel}"; \
-    test -x "${target}/yr/functionsystem/bin/yr"; \
-    mkdir -p "${YR_INSTALLATION_DIR}"; \
-    cp -a "${target}/yr/." "${YR_INSTALLATION_DIR}/"; \
-    rm -rf "${target}" "${wheel}"; \
-    ln -sfn "${YR_INSTALLATION_DIR}/functionsystem/bin/yr" /usr/bin/yr
-
 COPY --from=runtime-image /yr-runtime-rootfs.img /opt/akernel/runtime/akernel-runtime-rootfs.img
-RUN ln -sfn /opt/akernel/runtime/akernel-runtime-rootfs.img \
-      ${YR_INSTALLATION_DIR}/yr-runtime-rootfs.img
 
 # ADX provides the control and data plane processes. AKernel keeps building
 # sandboxd and the runtime rootfs from its own pinned sources; only the exact
@@ -390,7 +330,6 @@ RUN if [ "${AKERNEL_ENABLE_KATA}" = "true" ]; then \
     fi
 
 COPY ./builder/scripts/akernel-entrypoint.sh /usr/local/bin/akernel-entrypoint
-COPY ./builder/scripts/ensure-component-cert.sh /usr/local/bin/ensure-component-cert
 COPY ./builder/scripts/ensure-adx-certs.sh /usr/local/bin/ensure-adx-certs
 COPY ./builder/scripts/adx-service.sh /usr/local/bin/adx-service
 COPY ./builder/scripts/sandboxd_network_prepare.sh /usr/local/bin/sandboxd-network-prepare
@@ -402,7 +341,6 @@ RUN chmod 0755 \
         /usr/local/bin/sandbox-logger \
         /usr/local/bin/distill_fs \
         /usr/local/bin/akernel-entrypoint \
-        /usr/local/bin/ensure-component-cert \
         /usr/local/bin/ensure-adx-certs \
         /usr/local/bin/adx-service \
         /usr/local/bin/sandboxd-network-prepare
@@ -414,15 +352,8 @@ RUN if [ "${AKERNEL_ENABLE_RUNC}" = "true" ]; then \
       test ! -e /usr/local/bin/runc-shim; \
     fi
 
-COPY ./builder/config/yr_services.yaml ${YR_INSTALLATION_DIR}/deploy/process/services.yaml
-
-RUN mkdir -p ${YR_INSTALLATION_DIR}/metrics ${YR_INSTALLATION_DIR}/trace
-COPY ./builder/config/otel-collector-config.yaml ${YR_INSTALLATION_DIR}/otel_config.yaml
-COPY ./builder/config/metrics_config.json ${YR_INSTALLATION_DIR}/metrics/metrics_config.json
-COPY ./builder/config/trace_config.json ${YR_INSTALLATION_DIR}/trace/trace_config.json
+COPY ./builder/config/otel-collector-config.yaml /etc/akernel/otel_config.yaml
 COPY ./builder/config/logrotate.d/gvisor /etc/logrotate.d/gvisor
-COPY ./builder/scripts/yr_node_bootstrap.sh ${YR_INSTALLATION_DIR}/yr_node_bootstrap.sh
-COPY ./builder/scripts/master_entrypoint.sh ${YR_INSTALLATION_DIR}/entrypoint.sh
 COPY ./builder/scripts/*.sh /root/
 COPY ./builder/systemd_services/*.service /etc/systemd/system/
 
@@ -431,14 +362,9 @@ RUN curl -fSL --retry 10 --retry-delay 2 --retry-all-errors \
     | tar -xz -C /usr/local/bin otelcol-contrib && \
     chmod 0755 /usr/local/bin/otelcol-contrib
 
-RUN mkdir -p ${YR_INSTALLATION_DIR}/logs ${YR_INSTALLATION_DIR}/metrics ${YR_INSTALLATION_DIR}/trace && \
-    chmod 0755 ${YR_INSTALLATION_DIR}/yr_node_bootstrap.sh ${YR_INSTALLATION_DIR}/entrypoint.sh && \
-    chmod 0644 /etc/logrotate.d/gvisor && \
-    systemctl mask getty-static.service || true && \
-    systemctl enable logrotate.timer && \
-    systemctl enable otel_collector.service && \
-    systemctl enable sandboxd.service && \
-    systemctl enable yuanrong.service
+RUN chmod 0644 /etc/logrotate.d/gvisor && \
+    systemctl mask getty-static.service && \
+    systemctl enable logrotate.timer otel_collector.service sandboxd.service adx.service
 
 LABEL org.opencontainers.image.version="${AKERNEL_VERSION}" \
       org.opencontainers.image.revision="${AKERNEL_REVISION}" \
@@ -450,6 +376,4 @@ LABEL org.opencontainers.image.version="${AKERNEL_VERSION}" \
       org.akernel.firecracker.release="${FIRECRACKER_RELEASE}" \
       org.akernel.firecracker.enabled="${AKERNEL_ENABLE_FIRECRACKER}"
 
-ENV YR_LOG_PATH=${YR_INSTALLATION_DIR}/logs \
-    YR_IMAGE_PROCESS_CONFIG=/run/akernel/yr-image-process.json
 STOPSIGNAL SIGRTMIN+3

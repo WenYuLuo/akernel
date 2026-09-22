@@ -35,16 +35,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-openyuanrong-sandbox = [
-    "openyuanrong-sandbox==0.10.2rc9",
-]
-all = [
-    "openyuanrong-sandbox==0.10.2rc9",
-]
+# Retain existing installation extras without installing retired backends.
+openyuanrong-sandbox = []
+all = []
 dev = [
     "build>=1.2,<2",
     "mypy>=1.10,<2",
-    "openyuanrong-sandbox==0.10.2rc9",
     "ruff>=0.11,<1",
 ]
 

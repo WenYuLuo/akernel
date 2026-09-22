@@ -131,7 +131,6 @@ locals {
     auths = { for host, cred in var.registry_auths : host => { auth = base64encode("${cred.username}:${cred.password}") } }
   }
 
-  etcd_image_repo              = length(var.etcd_image_repository) > 0 ? var.etcd_image_repository : "public.ecr.aws/bitnami/etcd"
   master_image_repo            = length(var.master_image_repository) > 0 ? var.master_image_repository : "${local.acr_registry}/all-in-one"
   node_image_repo              = length(var.node_image_repository) > 0 ? var.node_image_repository : "${local.acr_registry}/all-in-one"
   traefik_image_repo           = length(var.traefik_image_repository) > 0 ? var.traefik_image_repository : "traefik"
@@ -143,20 +142,14 @@ locals {
     acr_host                    = local.acr_host
     acr_username                = var.acr_username
     acr_password                = var.acr_password
-    etcd_image_repository       = local.etcd_image_repo
-    etcd_image_tag              = var.etcd_image_tag
     master_image_repository     = local.master_image_repo
     master_image_tag            = var.master_image_tag
     schedule_placement_policy   = var.schedule_placement_policy
-    adx_placement               = var.schedule_placement_policy == "binpack" ? "pack" : "spread"
-    adx_namespace               = var.core_namespace
     node_image_repository       = local.node_image_repo
     node_image_tag              = var.node_image_tag
     traefik_image_repository    = local.traefik_image_repo
     traefik_image_tag           = var.traefik_image_tag
-    iam_litebus_data_key        = var.iam_litebus_data_key
     enable_kruise               = var.install_prereqs
-    master_service_type         = (var.master_public_access_8888 && !var.traefik_enabled) ? var.master_service_type : "ClusterIP"
     traefik_enabled             = var.traefik_enabled
     sandboxd_nat_backend        = var.sandboxd_nat_backend
     chunk_db_size               = var.chunk_db_size
@@ -172,7 +165,6 @@ locals {
     etcd_storage_class = local.effective_storage_class
     etcd_cpu           = var.etcd_resources.cpu
     etcd_memory        = var.etcd_resources.memory
-    etcd_ephemeral     = var.etcd_resources.ephemeral_storage
     etcd_pvc_size      = var.etcd_resources.pvc_size
     master_cpu         = var.master_resources.cpu
     master_memory      = var.master_resources.memory
@@ -190,11 +182,6 @@ locals {
     monitor_namespace = var.monitor_namespace
     akernel_env       = length(var.akernel_env) > 0 ? var.akernel_env : var.cluster_name
 
-    master_replicas   = var.master_replicas
-    frontend_enabled  = var.frontend_enabled
-    frontend_replicas = var.frontend_replicas
-    frontend_cpu      = var.frontend_cpu
-    frontend_memory   = var.frontend_memory
 
     install_traefik               = var.install_traefik
     traefik_replicas              = var.traefik_replicas

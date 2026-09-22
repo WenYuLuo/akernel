@@ -120,7 +120,7 @@ add their own Kruise-based overrides.
 
 The Makefile workflow is preferred because it keeps generated files outside
 the module directory. Advanced users can instead copy
-`terraform.tfvars.example`, set a unique `iam_litebus_data_key`, and provide an
+`terraform.tfvars.example` and provide an
 external state path explicitly:
 
 ```bash

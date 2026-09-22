@@ -8,8 +8,6 @@ VENDOR ?= aliyun
 ENV ?= default
 IMAGE_TAG ?=
 IMAGE_REPOSITORY ?=
-OPEN_YR_CORE_WHEEL_URL ?=
-OPEN_YR_CORE_WHEEL_SHA256 ?=
 ADX_RELEASE_ARCHIVE ?= out/buildkite/adx-release.tar.gz
 FORCE ?= 0
 NON_INTERACTIVE ?= 0
@@ -32,7 +30,6 @@ ENABLE_RUNC ?=
 SCHEDULE_PLACEMENT_POLICY ?=
 GRAFANA_PUBLIC_ACCESS ?=
 GRAFANA_ADMIN_PASSWORD ?=
-IAM_SEED_HEX ?=
 
 .PHONY: help
 help:
@@ -95,7 +92,6 @@ config:
 	if [[ -n "$(SCHEDULE_PLACEMENT_POLICY)" ]]; then args+=(--schedule-placement-policy "$(SCHEDULE_PLACEMENT_POLICY)"); fi; \
 	if [[ -n "$(GRAFANA_PUBLIC_ACCESS)" ]]; then args+=(--grafana-public-access "$(GRAFANA_PUBLIC_ACCESS)"); fi; \
 	if [[ -n "$(GRAFANA_ADMIN_PASSWORD)" ]]; then args+=(--grafana-admin-password "$(GRAFANA_ADMIN_PASSWORD)"); fi; \
-	if [[ -n "$(IAM_SEED_HEX)" ]]; then args+=(--iam-seed-hex "$(IAM_SEED_HEX)"); fi; \
 	./deploy/scripts/configure.sh "$${args[@]}"
 
 .PHONY: adx-release
@@ -108,8 +104,6 @@ build: adx-release
 	@args=(--env "$(ENV)"); \
 	if [[ -n "$(IMAGE_REPOSITORY)" ]]; then args+=(--repository "$(IMAGE_REPOSITORY)"); fi; \
 	if [[ -n "$(IMAGE_TAG)" ]]; then args+=(--tag "$(IMAGE_TAG)"); fi; \
-	if [[ -n "$(OPEN_YR_CORE_WHEEL_URL)" ]]; then args+=(--open-yr-core-wheel-url "$(OPEN_YR_CORE_WHEEL_URL)"); fi; \
-	if [[ -n "$(OPEN_YR_CORE_WHEEL_SHA256)" ]]; then args+=(--open-yr-core-wheel-sha256 "$(OPEN_YR_CORE_WHEEL_SHA256)"); fi; \
 	args+=(--adx-release "$(ADX_RELEASE_ARCHIVE)"); \
 	./deploy/scripts/build-image.sh "$${args[@]}"
 

@@ -28,16 +28,13 @@ from .base import Backend, BackendConfig
 from .errors import BackendNotInstalledError, InvalidBackendError
 
 ADX: Final = "adx"
-OPENYUANRONG_SANDBOX: Final = "openyuanrong-sandbox"
-SUPPORTED_BACKENDS: Final = (ADX, OPENYUANRONG_SANDBOX)
+SUPPORTED_BACKENDS: Final = (ADX,)
 
 _MODULES: Final = {
     ADX: "akernel_sdk._backends.adx",
-    OPENYUANRONG_SANDBOX: "akernel_sdk._backends.openyuanrong_sandbox",
 }
 _DISTRIBUTIONS: Final = {
     ADX: "adx-sandbox",
-    OPENYUANRONG_SANDBOX: "openyuanrong-sandbox",
 }
 
 
@@ -51,6 +48,9 @@ def _is_installed(distribution: str) -> bool:
 
 def _select_backend() -> str | None:
     configured = os.environ.get("AKERNEL_BACKEND", "").strip()
+    # Existing deployments can retain their backend selector during migration.
+    if configured in ("openyuanrong-sandbox", "openyuanrong-sdk"):
+        configured = ADX
     if configured:
         if configured not in SUPPORTED_BACKENDS:
             choices = ", ".join(SUPPORTED_BACKENDS)
@@ -82,10 +82,7 @@ def _not_installed_error(backend: str | None) -> BackendNotInstalledError:
             "The default AKernel backend is not installed. Reinstall with:\n"
             "  pip install akernel-sdk"
         )
-    if backend == ADX:
-        command = "pip install akernel-sdk"
-    else:
-        command = f"pip install 'akernel-sdk[{backend}]'"
+    command = "pip install akernel-sdk"
     return BackendNotInstalledError(
         f"Backend {backend!r} is not installed. Install it with:\n  {command}"
     )

@@ -209,32 +209,14 @@ start/stop instructions.
 
 ## 2. Kubernetes (Helm)
 
-The umbrella chart in [`akernel/`](./akernel/) deploys the Agent DX control and
-data plane from the same AKernel all-in-one image:
-
-| Workload | Replication | Responsibility |
-|----------|-------------|----------------|
-| `akernel-adx-control` Deployment | exactly 1 | ADX Master, API Server, and embedded Edge |
-| `akernel-adx-redis` StatefulSet | exactly 1 in managed mode | AOF-backed control state and discovery |
-| `akernel-node` DaemonSet | one Pod per eligible node | sandboxd plus Node Manager and embedded Node Proxy |
-| `traefik` Deployment | configurable | external HTTPS entrypoint to Edge |
+The umbrella chart in [`akernel/`](./akernel/) deploys AKernel's control
+service, persistent state store, one worker Pod per eligible node, and the
+public ingress. They use the same AKernel all-in-one image.
 
 The `monitor` subchart remains optional and contains Prometheus, Grafana, Loki,
 and Tempo. Kubernetes nodes must support privileged Pods and the runtime
 requirements described earlier in this guide. Managed Redis requires a default
 StorageClass or an explicit `core.adx.redis.persistence.storageClassName`.
-
-The image must contain the pinned ADX release, AKernel's sandboxd, AKernel's
-runtime rootfs, and ADX `rrt-runtime`. To build it from a local ADX archive:
-
-```bash
-make build ADX_RELEASE_ARCHIVE=/absolute/path/to/adx-release.tar.gz \
-  IMAGE_REPOSITORY=registry.example.com/akernel/all-in-one \
-  IMAGE_TAG=<release-tag>
-```
-
-AKernel builds its own sandboxd and runtime rootfs. It consumes the control
-binaries, Python SDK, and `rrt-runtime` from the pinned ADX release.
 
 ### Create the Agent DX identity Secret
 
@@ -263,12 +245,9 @@ core:
     repository: registry.example.com/akernel/all-in-one
     tag: "<release-tag>"
   adx:
-    placement: pack
     tls:
       existingSecret: akernel-adx-tls
     redis:
-      mode: managed
-      appendfsync: everysec
       persistence:
         storageClassName: fast-rwo
         size: 20Gi
@@ -316,19 +295,15 @@ must use the `redis://` scheme accepted by the current ADX release.
 
 ### Sandbox placement policy
 
-ADX accepts `pack` and `spread`. AKernel defaults to `pack`; use `spread` to
-distribute new Capsules across eligible nodes:
+The existing placement setting remains `spread` (default) or `binpack`:
 
 ```yaml
 core:
-  adx:
-    placement: spread
+  master:
+    schedulePlacementPolicy: spread
 ```
 
-Changing the policy restarts the ADX control Deployment and affects future
-placements only. Local-first admission accepts a Capsule on the selected entry
-node when it satisfies the request. ShardScheduler applies the cluster policy
-when local admission cannot satisfy it.
+Changing this setting affects future placements.
 
 ### Public Traefik entrypoint
 
@@ -344,14 +319,11 @@ core:
       web: 80
 ```
 
-`websecure` forwards authenticated Sandbox API, command and file traffic to the
-ADX Edge TLS listener. `web` forwards instance data to the separate Edge plain
-listener. Configure both SDK addresses with the LoadBalancer address and use
-the bootstrap administrator API key for the control endpoint:
+The public entrypoint exposes HTTPS on 443 and HTTP sandbox ports on 80.
+Use the existing SDK configuration, or run `make print-env`:
 
 ```bash
 export AKERNEL_SERVER_ADDRESS=<traefik-load-balancer-ip>
-export AKERNEL_GATEWAY_ADDRESS=http://<traefik-load-balancer-ip>
 export AKERNEL_TOKEN="$(kubectl -n akernel get secret akernel-adx-tls \
   -o jsonpath='{.data.admin-key}' | base64 -d)"
 ```

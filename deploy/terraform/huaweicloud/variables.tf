@@ -416,34 +416,15 @@ variable "core_namespace" {
   default     = "akernel"
 }
 
-variable "iam_litebus_data_key" {
-  type        = string
-  description = "Hex-encoded IAM JWT signing seed passed to the core chart. Leave empty to let the chart generate or reuse a seed."
-  default     = ""
-  sensitive   = true
-}
-
-variable "etcd_image_repository" {
-  type        = string
-  description = "Image repository for etcd."
-  default     = "public.ecr.aws/bitnami/etcd"
-}
-
-variable "etcd_image_tag" {
-  type        = string
-  description = "Image tag for etcd."
-  default     = "3.6.8"
-}
-
 variable "master_image_repository" {
   type        = string
-  description = "Image repository for akernel-master."
+  description = "Image repository for the control-plane service."
   default     = ""
 }
 
 variable "master_image_tag" {
   type        = string
-  description = "Image tag for akernel-master."
+  description = "Image tag for the control-plane service."
   default     = ""
 }
 
@@ -519,34 +500,10 @@ variable "dragonfly_dfinit_image_tag" {
   default     = ""
 }
 
-variable "master_service_type" {
-  type        = string
-  description = "Service type for akernel-master. Use 'LoadBalancer' for public access (CCE auto-creates ELB)."
-  default     = "LoadBalancer"
-}
-
-variable "master_public_access_8888" {
-  type        = bool
-  description = "Whether to expose akernel-master port 8888 to public network via LoadBalancer."
-  default     = false
-}
-
-
-variable "master_service_loadbalancer_ip" {
-  type        = string
-  description = "Optional Service loadBalancerIP (EIP) for akernel-master when master_public_access_8888=true."
-  default     = ""
-}
-
-variable "master_service_annotations" {
-  type        = map(string)
-  description = "Extra annotations for akernel-master Service."
-  default     = {}
-}
 
 variable "master_elb_bandwidth_size" {
   type        = number
-  description = "Bandwidth size (Mbit/s) for auto-created ELB when master_public_access_8888=true."
+  description = "Bandwidth size (Mbit/s) for auto-created public load balancers."
   default     = 5
 }
 
@@ -560,36 +517,6 @@ variable "master_elb_eip_type" {
   type        = string
   description = "EIP type for auto-created ELB."
   default     = "5_bgp"
-}
-
-variable "master_replicas" {
-  type        = number
-  description = "Number of master replicas (for HA when frontend is enabled)."
-  default     = 1
-}
-
-variable "frontend_enabled" {
-  type        = bool
-  description = "Whether to enable frontend Deployment (splits from master for independent scaling)."
-  default     = false
-}
-
-variable "frontend_replicas" {
-  type        = number
-  description = "Number of frontend replicas."
-  default     = 2
-}
-
-variable "frontend_cpu" {
-  type        = string
-  description = "CPU request/limit for frontend pods."
-  default     = "4"
-}
-
-variable "frontend_memory" {
-  type        = string
-  description = "Memory request/limit for frontend pods."
-  default     = "8Gi"
 }
 
 variable "install_traefik" {
@@ -929,7 +856,7 @@ variable "registry_auths" {
 # --- Component resource specifications ---
 
 variable "etcd_resources" {
-  description = "Resource requests/limits and PVC size for etcd."
+  description = "Resource requests/limits and PVC size for managed Redis (retained input name)."
   type = object({
     cpu               = optional(string, "1")
     memory            = optional(string, "2Gi")
@@ -940,7 +867,7 @@ variable "etcd_resources" {
 }
 
 variable "master_resources" {
-  description = "Resource requests/limits for akernel-master."
+  description = "Resource requests/limits for the control-plane service."
   type = object({
     cpu               = optional(string, "1")
     memory            = optional(string, "2Gi")

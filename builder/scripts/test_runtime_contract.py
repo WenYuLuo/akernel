@@ -26,6 +26,16 @@ class RuntimeContractTest(unittest.TestCase):
         backend = ROOT / "sdk/python/akernel_sdk/_backends"
         self.assertFalse(list(backend.glob("openyuanrong_sdk*.py")))
 
+    def test_image_does_not_install_retired_control_plane(self) -> None:
+        dockerfile = (ROOT / "builder/node.Dockerfile").read_text()
+        self.assertNotIn("OPEN_YR", dockerfile)
+        self.assertNotIn("yuanrong.service", dockerfile)
+        self.assertFalse((ROOT / "builder/systemd_services/yuanrong.service").exists())
+
+    def test_default_sdk_config_keeps_the_existing_address_contract(self) -> None:
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+        self.assertNotIn("export AKERNEL_GATEWAY_ADDRESS=", workflow)
+
     def test_actor_runtime_entrypoint_is_absent(self) -> None:
         self.assertFalse((ROOT / "builder/scripts/entryfile.sh").exists())
 

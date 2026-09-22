@@ -1,7 +1,3 @@
-{{- $schedulePlacementPolicy := .Values.master.schedulePlacementPolicy | default "spread" -}}
-{{- if not (has $schedulePlacementPolicy (list "binpack" "spread")) -}}
-{{- fail "master.schedulePlacementPolicy must be binpack or spread" -}}
-{{- end -}}
 {{- if .Values.kruise.enabled }}
 apiVersion: apps.kruise.io/v1alpha1
 {{- else }}
@@ -44,9 +40,7 @@ spec:
         {{- end }}
       annotations:
         checksum/node-config: {{ include (print $.Template.BasePath "/node/configmap.yaml") . | sha256sum }}
-        {{- if .Values.adx.enabled }}
         checksum/adx-config: {{ include (print $.Template.BasePath "/adx/configmap.yaml") . | sha256sum }}
-        {{- end }}
         checksum/otel-collector-config: {{ include (print $.Template.BasePath "/otel-configmap.yaml") . | sha256sum }}
         {{- with .Values.node.podAnnotations }}
         {{- toYaml . | nindent 8 }}
@@ -65,7 +59,6 @@ spec:
       initContainers:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- $nodeEtcd := .Values.node.etcd | default dict }}
       containers:
       - name: akernel-node
         image: "{{ include "core.image" (dict "root" . "image" .Values.node.image) }}"
@@ -88,9 +81,6 @@ spec:
           value: "oci"
         - name: AKERNEL_ROLE
           value: "node"
-        {{- if .Values.adx.enabled }}
-        - name: AKERNEL_CONTROL_PLANE
-          value: "adx"
         - name: AKERNEL_ADX_CONFIG
           value: /etc/akernel/adx-node.yaml
         - name: AKERNEL_ADX_MANAGED_CREDENTIALS
@@ -104,19 +94,8 @@ spec:
               name: {{ .Values.adx.redis.external.existingSecret | quote }}
               key: {{ .Values.adx.redis.external.urlKey | quote }}
           {{- end }}
-        {{- end }}
         - name: RUNSC_AKERNEL
           value: "1"
-        - name: YR_RRT_CONTROL_SOCKET_PATH
-          value: "/run/akernel"
-        - name: YR_IMAGE_PROCESS_CONFIG
-          value: {{ .Values.yuanrong.imageProcessConfig | default "/run/akernel/yr-image-process.json" | quote }}
-        - name: SCHEDULE_PLACEMENT_POLICY
-          value: {{ $schedulePlacementPolicy | quote }}
-        - name: ETCD_ADDRESS
-          value: {{ get $nodeEtcd "host" | default (printf "akernel-etcd.%s.svc.cluster.local" .Release.Namespace) | quote }}
-        - name: ETCD_PORT
-          value: {{ get $nodeEtcd "port" | default "2379" | quote }}
         - name: NODE_NAME
           valueFrom:
             fieldRef:
@@ -151,16 +130,6 @@ spec:
         {{- end }}
         - name: AKERNEL_ENV
           value: {{ .Values.monitoring.akernelEnv | default "default" | quote }}
-        - name: ENABLE_METRICS
-          value: {{ ne (.Values.monitoring.prometheusEndpoint | default "") "" | ternary "true" "false" | quote }}
-        - name: ENABLE_TRACE
-          value: {{ ne (.Values.monitoring.tempoEndpoint | default "") "" | ternary "true" "false" | quote }}
-        - name: TRAEFIK_MODE
-          value: {{ .Values.traefik.mode | default "http" | quote }}
-        - name: TRAEFIK_ENABLE_TLS
-          value: {{ .Values.traefik.enableWebEntrypoint | default false | ternary false (.Values.traefik.enableTLS | default false) | quote }}
-        - name: TRAEFIK_HTTP_ENTRYPOINT
-          value: {{ .Values.traefik.enableWebEntrypoint | default false | ternary "web" "websecure" | quote }}
         securityContext:
           privileged: true
         volumeMounts:
@@ -206,7 +175,6 @@ spec:
           {{- if not .Values.node.homeDisk.useEphemeralPVC }}
           mountPropagation: HostToContainer
           {{- end }}
-        {{- if .Values.adx.enabled }}
         - mountPath: /etc/akernel/adx-node.yaml
           name: adx-config
           subPath: node.yaml
@@ -214,7 +182,6 @@ spec:
         - mountPath: /etc/adx
           name: adx-credentials
           readOnly: true
-        {{- end }}
         {{- if or $.Values.monitoring.prometheusEndpoint $.Values.monitoring.lokiEndpoint $.Values.monitoring.tempoEndpoint }}
         - mountPath: /etc/otel-collector
           name: otel-collector-config
@@ -266,7 +233,6 @@ spec:
         emptyDir:
           medium: Memory
           sizeLimit: 500Mi
-      {{- if .Values.adx.enabled }}
       - name: adx-config
         configMap:
           name: akernel-adx-config
@@ -280,7 +246,6 @@ spec:
             - {key: api-server.der, path: tls/api-server.der}
             - {key: node.pem, path: tls/node.pem}
             - {key: node.key, path: tls/node.key}
-      {{- end }}
       {{- if or .Values.monitoring.prometheusEndpoint .Values.monitoring.lokiEndpoint .Values.monitoring.tempoEndpoint }}
       - name: otel-collector-config
         configMap:

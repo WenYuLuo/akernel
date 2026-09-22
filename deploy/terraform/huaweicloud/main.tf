@@ -44,17 +44,6 @@ locals {
 
   # When auto-creating ELB on Huawei Cloud CCE, inject required annotations
   # so the cloud-controller-manager provisions the ELB automatically.
-  huaweicloud_master_elb_annotations = var.master_public_access_8888 ? {
-    "kubernetes.io/elb.class" = "union"
-    "kubernetes.io/elb.autocreate" = jsonencode({
-      type                 = "public"
-      bandwidth_name       = "${var.cluster_name}-master-elb"
-      bandwidth_chargemode = var.master_elb_bandwidth_charge_mode
-      bandwidth_size       = var.master_elb_bandwidth_size
-      bandwidth_sharetype  = "PER"
-      eip_type             = var.master_elb_eip_type
-    })
-  } : {}
   huaweicloud_traefik_elb_annotations = var.traefik_public_access ? {
     "kubernetes.io/elb.class" = "union"
     "kubernetes.io/elb.autocreate" = jsonencode({
@@ -98,22 +87,14 @@ locals {
   ]) : local.node_pool_bootstrap_script
 
   core_values = templatefile("${path.module}/values-akernel.yaml.tmpl", {
-    etcd_image_repository          = var.etcd_image_repository
-    etcd_image_tag                 = var.etcd_image_tag
     master_image_repository        = var.master_image_repository
     master_image_tag               = var.master_image_tag
     schedule_placement_policy      = var.schedule_placement_policy
-    adx_placement                  = var.schedule_placement_policy == "binpack" ? "pack" : "spread"
-    adx_namespace                  = var.core_namespace
     node_image_repository          = var.node_image_repository
     node_image_tag                 = var.node_image_tag
     traefik_image_repository       = var.traefik_image_repository
     traefik_image_tag              = var.traefik_image_tag
-    iam_litebus_data_key           = var.iam_litebus_data_key
     enable_kruise                  = var.install_prereqs
-    master_service_type            = var.master_public_access_8888 ? var.master_service_type : "ClusterIP"
-    master_service_annotations     = merge(local.huaweicloud_master_elb_annotations, var.master_service_annotations)
-    master_service_loadbalancer_ip = var.master_public_access_8888 ? var.master_service_loadbalancer_ip : ""
     sandboxd_nat_backend           = var.sandboxd_nat_backend
     chunk_db_size                  = var.chunk_db_size
     enable_runc                    = var.enable_runc
@@ -126,7 +107,6 @@ locals {
 
     etcd_cpu         = var.etcd_resources.cpu
     etcd_memory      = var.etcd_resources.memory
-    etcd_ephemeral   = var.etcd_resources.ephemeral_storage
     etcd_pvc_size    = var.etcd_resources.pvc_size
     master_cpu       = var.master_resources.cpu
     master_memory    = var.master_resources.memory
@@ -144,11 +124,6 @@ locals {
     monitor_namespace = var.monitor_namespace
     akernel_env       = length(var.akernel_env) > 0 ? var.akernel_env : var.cluster_name
 
-    master_replicas   = var.master_replicas
-    frontend_enabled  = var.frontend_enabled
-    frontend_replicas = var.frontend_replicas
-    frontend_cpu      = var.frontend_cpu
-    frontend_memory   = var.frontend_memory
 
     install_traefik                 = var.install_traefik
     traefik_replicas                = var.traefik_replicas

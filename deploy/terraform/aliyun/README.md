@@ -223,8 +223,6 @@ terraform apply \
 - `node_pool_key_name` and `node_pool_login_password` are mutually exclusive. Set only one.
 - If neither SSH key nor login password is set, Terraform passes `password = null` to node pool creation.
 - `kubeconfig_output_path` controls where the generated kubeconfig is written when `create_cluster=true`.
-- `adx_namespace` identifies the ADX certificate namespace used by the generated Helm values and identity Secret.
-- `master_public_access_8888` applies only to the optional legacy control-plane templates; the default ADX control plane remains internal behind Edge.
 - `oss_auths` and `registry_auths` accept strongly typed credential maps; keep
   their generated `terraform.tfvars` private.
 - `dragonfly_chart_repository` and `dragonfly_chart_version` select the

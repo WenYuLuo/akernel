@@ -32,8 +32,6 @@ gvisor_amd64_url="${GVISOR_AMD64_URL:-}"
 firecracker_release="${FIRECRACKER_RELEASE:-}"
 firecracker_amd64_sha256="${FIRECRACKER_AMD64_SHA256:-}"
 firecracker_amd64_url="${FIRECRACKER_AMD64_URL:-}"
-open_yr_core_wheel_url="${OPEN_YR_CORE_WHEEL_URL:-}"
-open_yr_core_wheel_sha256="${OPEN_YR_CORE_WHEEL_SHA256:-}"
 adx_release_archive="${ADX_RELEASE_ARCHIVE:-}"
 print_component_versions=0
 
@@ -79,14 +77,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --runtime-image)
       runtime_image="$2"
-      shift 2
-      ;;
-    --open-yr-core-wheel-url)
-      open_yr_core_wheel_url="$2"
-      shift 2
-      ;;
-    --open-yr-core-wheel-sha256)
-      open_yr_core_wheel_sha256="$2"
       shift 2
       ;;
     --adx-release)
@@ -218,15 +208,7 @@ node_build_args+=(
   --build-arg "FIRECRACKER_AMD64_URL=${firecracker_amd64_url}"
   --build-arg "FIRECRACKER_AMD64_SHA256=${firecracker_amd64_sha256}"
 )
-if [[ -n "${open_yr_core_wheel_url}" || -n "${open_yr_core_wheel_sha256}" ]]; then
-  if [[ -z "${open_yr_core_wheel_url}" || -z "${open_yr_core_wheel_sha256}" ]]; then
-    die "OPEN_YR_CORE_WHEEL_URL and OPEN_YR_CORE_WHEEL_SHA256 must be set together"
-  fi
-  node_build_args+=(
-    --build-arg "OPEN_YR_CORE_WHEEL_URL=${open_yr_core_wheel_url}"
-    --build-arg "OPEN_YR_CORE_WHEEL_SHA256=${open_yr_core_wheel_sha256}"
-  )
-fi
+
 docker build \
   -f builder/node.Dockerfile \
   --build-context "adx_release=${adx_release_stage}/package" \

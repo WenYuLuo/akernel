@@ -78,7 +78,9 @@ token="$("${AKERNEL_REPO_ROOT}/deploy/scripts/get-adx-admin-key.sh" \
 sdk_env="${dir}/sdk.env"
 {
   printf 'export AKERNEL_SERVER_ADDRESS=%q\n' "${server_address}"
-  printf 'export AKERNEL_GATEWAY_ADDRESS=%q\n' "${gateway_address}"
+  if [[ "${traefik_data_port}" != 80 || "${traefik_control_port}" != 443 ]]; then
+    printf 'export AKERNEL_GATEWAY_ADDRESS=%q\n' "${gateway_address}"
+  fi
   printf 'export AKERNEL_TOKEN=%q\n' "${token}"
 } > "${sdk_env}"
 chmod 600 "${sdk_env}"

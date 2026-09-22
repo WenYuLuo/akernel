@@ -1,4 +1,3 @@
-{{- if .Values.adx.enabled }}
 {{- if ne (int .Values.adx.control.replicas) 1 }}
 {{- fail "adx.control.replicas must be 1 while ADX uses a single active Master" }}
 {{- end }}
@@ -46,8 +45,8 @@ spec:
       {{- end }}
       containers:
         - name: control
-          image: "{{ include "core.image" (dict "root" . "image" .Values.image) }}"
-          imagePullPolicy: {{ include "core.image.pullPolicy" (dict "root" . "image" .Values.image) }}
+          image: "{{ include "core.image" (dict "root" . "image" .Values.master.image) }}"
+          imagePullPolicy: {{ include "core.image.pullPolicy" (dict "root" . "image" .Values.master.image) }}
           command:
             - /opt/adx/current/bin/adxctl
           args:
@@ -126,4 +125,3 @@ spec:
               - {key: admin-key, path: secrets/admin-key}
         - name: state
           emptyDir: {}
-{{- end }}

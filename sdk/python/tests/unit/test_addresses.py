@@ -43,7 +43,7 @@ class AddressConfigTest(unittest.TestCase):
                 ("http", "10.0.0.1", 80, False),
             )
 
-    def test_explicit_server_port_does_not_replace_the_data_port(self):
+    def test_explicit_server_port_preserves_shared_port_contract(self):
         with patch.dict(
             os.environ, {"AKERNEL_SERVER_ADDRESS": "10.0.0.1:8888"}, clear=True
         ):
@@ -52,7 +52,7 @@ class AddressConfigTest(unittest.TestCase):
             self.assertEqual(endpoint_tuple(exec_endpoint_from_env()), expected)
             self.assertEqual(
                 endpoint_tuple(gateway_endpoint_from_env()),
-                ("http", "10.0.0.1", 80, False),
+                ("http", "10.0.0.1", 8888, False),
             )
 
     def test_gateway_override_only_affects_public_gateway(self):

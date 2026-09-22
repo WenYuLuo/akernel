@@ -378,65 +378,16 @@ variable "core_namespace" {
   default     = "akernel"
 }
 
-variable "iam_litebus_data_key" {
-  type        = string
-  description = "Hex-encoded IAM JWT signing seed passed to the core chart as auth.litebusDataKey. Leave empty to let the chart generate or reuse a seed."
-  default     = ""
-  sensitive   = true
-}
-
-variable "etcd_image_repository" {
-  type        = string
-  description = "Image repository for etcd."
-  default     = ""
-}
-
-variable "etcd_image_tag" {
-  type        = string
-  description = "Image tag for etcd."
-  default     = "3.6.8"
-}
-
 variable "master_image_repository" {
   type        = string
-  description = "All-in-one image repository for akernel-master. Defaults to '<acr_registry>/all-in-one'."
+  description = "All-in-one image repository for the control-plane service. Defaults to '<acr_registry>/all-in-one'."
   default     = ""
 }
 
 variable "master_image_tag" {
   type        = string
-  description = "Image tag for akernel-master."
+  description = "Image tag for the control-plane service."
   default     = ""
-}
-
-variable "master_replicas" {
-  type        = number
-  description = "Number of master replicas (for HA when frontend is enabled)."
-  default     = 1
-}
-
-variable "frontend_enabled" {
-  type        = bool
-  description = "Whether to enable frontend Deployment (splits from master for independent scaling)."
-  default     = true
-}
-
-variable "frontend_replicas" {
-  type        = number
-  description = "Number of frontend replicas."
-  default     = 1
-}
-
-variable "frontend_cpu" {
-  type        = string
-  description = "CPU request/limit for frontend pods."
-  default     = "1"
-}
-
-variable "frontend_memory" {
-  type        = string
-  description = "Memory request/limit for frontend pods."
-  default     = "2Gi"
 }
 
 variable "node_image_repository" {
@@ -509,18 +460,6 @@ variable "dragonfly_dfinit_image_tag" {
   type        = string
   description = "Image tag for Dragonfly dfinit. Empty means chart default."
   default     = ""
-}
-
-variable "master_service_type" {
-  type        = string
-  description = "Service type for akernel-master. Use 'LoadBalancer' for public access (ACK auto-creates SLB)."
-  default     = "LoadBalancer"
-}
-
-variable "master_public_access_8888" {
-  type        = bool
-  description = "Whether to expose akernel-master port 8888 publicly. Ignored (forced ClusterIP) when traefik_enabled=true."
-  default     = false
 }
 
 
@@ -895,7 +834,7 @@ variable "registry_auths" {
 # --- Component resource specifications ---
 
 variable "etcd_resources" {
-  description = "Resource requests/limits and PVC size for etcd."
+  description = "Resource requests/limits and PVC size for managed Redis (retained input name)."
   type = object({
     cpu               = optional(string, "1")
     memory            = optional(string, "2Gi")
@@ -906,7 +845,7 @@ variable "etcd_resources" {
 }
 
 variable "master_resources" {
-  description = "Resource requests/limits for akernel-master."
+  description = "Resource requests/limits for the control-plane service."
   type = object({
     cpu               = optional(string, "1")
     memory            = optional(string, "2Gi")

@@ -14,7 +14,20 @@ class EnsureAdxCertificatesTest(unittest.TestCase):
             environment = dict(os.environ, AKERNEL_ADX_STATE_DIR=str(state))
 
             subprocess.run([script], check=True, env=environment)
+            initial = {
+                p.relative_to(state): p.read_bytes()
+                for p in state.rglob("*")
+                if p.is_file()
+            }
             subprocess.run([script], check=True, env=environment)
+            self.assertEqual(
+                initial,
+                {
+                    p.relative_to(state): p.read_bytes()
+                    for p in state.rglob("*")
+                    if p.is_file()
+                },
+            )
 
             tls = state / "tls"
             certificates = []
