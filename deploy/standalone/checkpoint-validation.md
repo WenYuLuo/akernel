@@ -31,4 +31,31 @@ Results:
   in the isolated validation worktree for diagnosis.
 
 Remote log: `/var/log/akernel-rrt-checkpoint-e2e-final-20260922.log`.
-Firecracker, custom OCI and Kubernetes were not validated by this run.
+Custom OCI and Kubernetes were not validated by this run.
+
+## Firecracker follow-up (2026-09-22)
+
+The same integration suite was rerun with `AKERNEL_TEST_RUNTIME=firecracker`
+on the x86_64 host (Linux `6.8.0-137-generic`, accessible `/dev/kvm`, KVM API 12).
+It passed: **6 cases passed, 1 OCI/Nydus case skipped**, zero failures/errors,
+73.973 seconds. The checkpoint/reload/file rollback/reverse-tunnel case passed.
+Command/process listing, filesystem and all three PTY cases also passed.
+The test container was stopped and removed; logs and task data were retained.
+
+The gVisor validation image did not contain the optional Firecracker payload.
+The FC image adds the pinned `v1.16.1-akernel.3` VMM, guest kernel `6.1.177`,
+and virtiofsd `1.14.0` from the existing AKernel image after manifest/hash
+verification. The guest initrd was built from the same sandboxd source
+`7d2af7f52eeaae5203fc9f4fe3dadffc357eac3c`; the sandboxd daemon was unchanged.
+
+- Image: `akernel-adx-validation:rrt-checkpoint-fc`.
+- Image ID: `sha256:e5e653a06555cac24d490550b8aad770df3b1d7ba1984a26b7da818f5b9243d9`.
+- VMM SHA256: `41133331123c05d635a1a4a61a1eb41f078e9a216b5a197c1398e4e64e957cbf`.
+- Kernel SHA256: `78c482cb6904f12c7de16e434de3e8163e9bb7d8abac982a508250ca59abe9af`.
+- Initrd SHA256: `1753c338a6a100105ea0e93ce1b94031ff6b9820f7f62292a1c662c82ed6b912`.
+- Remote log: `/var/log/akernel-adx-fc-e2e-20260922.log`.
+- Local log: `out/remote-validation/logs/firecracker-e2e.log`.
+
+This remains an overlay validation image. The formal ADX release and AKernel
+artifact lock update are still pending; this result does not cover custom OCI,
+cross-node cloning or Kubernetes deployment.
