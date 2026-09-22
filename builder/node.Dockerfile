@@ -361,6 +361,21 @@ RUN set -eux; \
 
 COPY --from=runtime-image /yr-runtime-rootfs.img ${YR_INSTALLATION_DIR}/yr-runtime-rootfs.img
 
+# ADX provides the control and data plane processes. AKernel keeps building
+# sandboxd and the runtime rootfs from its own pinned sources; only the exact
+# files staged from builder/adx-release.lock.json enter this image.
+COPY --from=adx_release /bin/ /opt/adx/current/bin/
+COPY --from=adx_release /sdk/ /opt/adx/current/sdk/
+COPY --from=adx_release /runtime/rrt-runtime /opt/adx/current/runtime/rrt-runtime
+RUN set -eux; \
+    test -x /opt/adx/current/bin/adxctl; \
+    test -x /opt/adx/current/bin/adx-master; \
+    test -x /opt/adx/current/bin/adx-node-manager; \
+    test -x /opt/adx/current/bin/adx-api-server; \
+    test -x /opt/adx/current/runtime/rrt-runtime; \
+    test ! -e /opt/adx/current/runtime/adx-runtime-rootfs.img; \
+    ln -sfn /opt/adx/current/bin/adxctl /usr/local/bin/adxctl
+
 COPY --from=gvisor-runtime /gvisor/ /usr/local/bin/
 COPY --from=sandboxd-builder /src/sandboxd/output/sandboxd /usr/local/bin/sandboxd
 COPY --from=sandboxd-builder /src/sandboxd/output/sbox /usr/local/bin/sbox

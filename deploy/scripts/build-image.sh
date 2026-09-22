@@ -35,8 +35,7 @@ firecracker_amd64_sha256="${FIRECRACKER_AMD64_SHA256:-}"
 firecracker_amd64_url="${FIRECRACKER_AMD64_URL:-}"
 open_yr_core_wheel_url="${OPEN_YR_CORE_WHEEL_URL:-}"
 open_yr_core_wheel_sha256="${OPEN_YR_CORE_WHEEL_SHA256:-}"
-rrt_runtime_url="${RRT_RUNTIME_URL:-}"
-rrt_runtime_sha256="${RRT_RUNTIME_SHA256:-}"
+adx_release_archive="${ADX_RELEASE_ARCHIVE:-}"
 print_component_versions=0
 
 component_revision() {
@@ -95,12 +94,8 @@ while [[ $# -gt 0 ]]; do
       open_yr_core_wheel_sha256="$2"
       shift 2
       ;;
-    --rrt-runtime-url)
-      rrt_runtime_url="$2"
-      shift 2
-      ;;
-    --rrt-runtime-sha256)
-      rrt_runtime_sha256="$2"
+    --adx-release)
+      adx_release_archive="$2"
       shift 2
       ;;
     --print-component-versions)
@@ -129,6 +124,7 @@ case "${AKERNEL_ENABLE_FIRECRACKER:-true}" in
 esac
 
 require_cmd docker
+require_cmd python3
 
 if [[ -n "${env_name}" && -f "$(state_dir "${env_name}")/config.env" ]]; then
   load_env_config "${env_name}"
@@ -177,22 +173,26 @@ if [[ -z "${DISTILL_FS_RELEASE:-}" || -z "${DISTILL_FS_AMD64_URL:-}" ||
   die "publish and pin DISTILL_FS_RELEASE, DISTILL_FS_AMD64_URL, and DISTILL_FS_AMD64_SHA256 in ${distill_fs_versions_file} before building"
 fi
 
-runtime_build_args=()
-if [[ -n "${rrt_runtime_url}" || -n "${rrt_runtime_sha256}" ]]; then
-  if [[ -z "${rrt_runtime_url}" || -z "${rrt_runtime_sha256}" ]]; then
-    die "RRT_RUNTIME_URL and RRT_RUNTIME_SHA256 must be set together"
-  fi
-  runtime_build_args+=(
-    --build-arg "RRT_RUNTIME_URL=${rrt_runtime_url}"
-    --build-arg "RRT_RUNTIME_SHA256=${rrt_runtime_sha256}"
-  )
+if [[ -z "${adx_release_archive}" ]]; then
+  die "ADX_RELEASE_ARCHIVE or --adx-release must name the pinned ADX release archive"
 fi
+if [[ ! -f "${adx_release_archive}" ]]; then
+  die "ADX release archive does not exist: ${adx_release_archive}"
+fi
+
+adx_release_stage="$(mktemp -d "${TMPDIR:-/tmp}/akernel-adx-release.XXXXXX")"
+cleanup_adx_release_stage() {
+  rm -rf "${adx_release_stage}"
+}
+trap cleanup_adx_release_stage EXIT
+python3 "${AKERNEL_REPO_ROOT}/builder/scripts/stage_adx_release.py" \
+  "${adx_release_archive}" "${adx_release_stage}/package"
 
 info "building ${runtime_image} with runtime profile ${runtime_profile}"
 docker build \
   -f builder/runtime.Dockerfile \
   --target "runtime-${runtime_profile}" \
-  "${runtime_build_args[@]}" \
+  --build-context "adx_release=${adx_release_stage}/package" \
   -t "${runtime_image}" \
   .
 
@@ -240,6 +240,7 @@ if [[ -n "${open_yr_core_wheel_url}" || -n "${open_yr_core_wheel_sha256}" ]]; th
 fi
 docker build \
   -f builder/node.Dockerfile \
+  --build-context "adx_release=${adx_release_stage}/package" \
   "${node_build_args[@]}" \
   -t "${all_in_one_image}" \
   .

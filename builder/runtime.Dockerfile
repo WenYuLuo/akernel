@@ -9,24 +9,11 @@ ARG PYTHON_311_VERSION=3.11.13
 ARG PYTHON_312_VERSION=3.12.11
 ARG PYTHON_313_VERSION=3.13.5
 ARG PYTHON_314_VERSION=3.14.6
-ARG OPEN_YR_VERSION=0.10.2rc9
 ARG OPEN_YR_LEGACY_SDK_VERSION=0.9.9
 
-FROM ${AKERNEL_RUNTIME_BASE_IMAGE} AS rrt-download
+FROM scratch AS rrt-download
 
-ARG OPEN_YR_VERSION
-ARG RRT_RUNTIME_URL=https://github.com/openYuanrong-mirror/yuanrong/releases/download/${OPEN_YR_VERSION}/rrt-runtime-amd64
-ARG RRT_RUNTIME_SHA256=62113fca0ce0a56adf6906c653da562985a723efd7981dc10c8f0f1083c78a89
-
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates curl && \
-    rm -rf /var/lib/apt/lists/*
-
-RUN set -eux; \
-    curl -fSL --retry 5 --retry-delay 2 --retry-all-errors \
-        -o /rrt-runtime "${RRT_RUNTIME_URL}"; \
-    echo "${RRT_RUNTIME_SHA256}  /rrt-runtime" | sha256sum -c -; \
-    chmod 0755 /rrt-runtime
+COPY --from=adx_release /runtime/rrt-runtime /rrt-runtime
 
 FROM ${AKERNEL_RUNTIME_BASE_IMAGE} AS rrt-runtime-rootfs
 
@@ -42,11 +29,15 @@ RUN apt-get update && \
     test -x /usr/bin/tini-static && \
     /usr/bin/tini-static --version
 
-RUN mkdir -p /var/task/code /__yuanrong && \
+RUN mkdir -p /var/task/code /__yuanrong /__adx && \
     ln -sfn /home /__yuanrong/home && \
     ln -sfn /usr /__yuanrong/usr && \
     ln -sfn /opt /__yuanrong/opt && \
-    ln -sfn /root /__yuanrong/root
+    ln -sfn /root /__yuanrong/root && \
+    ln -sfn /home /__adx/home && \
+    ln -sfn /usr /__adx/usr && \
+    ln -sfn /opt /__adx/opt && \
+    ln -sfn /root /__adx/root
 
 COPY --from=rrt-download /rrt-runtime /usr/local/bin/rrt-runtime
 
