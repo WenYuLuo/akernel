@@ -15,12 +15,9 @@
 import http.server
 import os
 import socketserver
-import tempfile
 import threading
 import time
 import unittest
-import uuid
-from pathlib import Path
 
 from akernel_sdk import HttpReverseTunnel, Sandbox
 
@@ -100,27 +97,6 @@ class SandboxIntegrationTest(unittest.TestCase):
             "filesystem-ok",
         )
         self.assertTrue(self.sandbox.files.exists("/tmp/akernel-integration.txt"))
-
-    def test_copy_directory_round_trip(self):
-        remote_path = f"/tmp/akernel-copy-dir-{uuid.uuid4().hex}"
-        with tempfile.TemporaryDirectory() as directory:
-            source = Path(directory) / "source"
-            (source / "nested").mkdir(parents=True)
-            (source / "root.txt").write_text("directory copy", encoding="utf-8")
-            payload = b"\x00nested\xffpayload"
-            (source / "nested" / "payload.bin").write_bytes(payload)
-            destination = Path(directory) / "download"
-
-            self.sandbox.files.copy_from_local(str(source), remote_path)
-            self.sandbox.files.copy_to_local(remote_path, str(destination))
-
-            self.assertEqual(
-                (destination / "root.txt").read_text(encoding="utf-8"),
-                "directory copy",
-            )
-            self.assertEqual(
-                (destination / "nested" / "payload.bin").read_bytes(), payload
-            )
 
     @unittest.skipUnless(_IMAGE, "set AKERNEL_TEST_IMAGE to test an OCI/Nydus root")
     def test_image_writes_are_private(self):

@@ -47,6 +47,20 @@ def main() -> None:
             assert local_target.read_text(encoding="utf-8") == "copy round trip"
             print("File copy round trip: OK")
 
+            source_dir = Path(directory) / "source-dir"
+            (source_dir / "nested").mkdir(parents=True)
+            (source_dir / "root.txt").write_text("directory copy", encoding="utf-8")
+            payload = b"\x00nested\xffpayload"
+            (source_dir / "nested" / "payload.bin").write_bytes(payload)
+            target_dir = Path(directory) / "download-dir"
+            sandbox.files.copy_from_local(str(source_dir), "/tmp/upload-dir")
+            sandbox.files.copy_to_local("/tmp/upload-dir", str(target_dir))
+            assert (target_dir / "root.txt").read_text(
+                encoding="utf-8"
+            ) == "directory copy"
+            assert (target_dir / "nested" / "payload.bin").read_bytes() == payload
+            print("Directory copy round trip: OK")
+
         handle = sandbox.commands.run("sleep 30", background=True)
         process = next(
             item for item in sandbox.commands.list() if item.pid == handle.pid
