@@ -238,7 +238,7 @@ jobs:
               python -u "sdk/python/examples/${example}"
           done
 
-      - name: Run runsc checkpoint reload E2E
+      - name: Run runsc directory copy and checkpoint reload E2E
         run: |
           gateway_ip="$(docker inspect \
             --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' \
@@ -252,6 +252,7 @@ jobs:
 
           AKERNEL_TEST_RUNTIME=runsc timeout 600s python \
             sdk/python/tests/integration/test_sandbox.py \
+            SandboxIntegrationTest.test_copy_directory_round_trip \
             SandboxReloadIntegrationTest -v
 
       - name: Show standalone diagnostics
