@@ -312,12 +312,14 @@ class _Session:
             value = self._sandbox.get_info()
         except Exception as error:
             raise _convert_error("get sandbox info", error) from error
+        raw_image = getattr(value, "image", None)
+        image = str(raw_image).strip() if raw_image is not None else ""
         return SandboxInfo(
             id=str(value.id),
             state=str(value.state),
             cpu=value.cpu,
             memory=value.memory,
-            image=value.image,
+            image=image or None,
             xpu=self._spec.xpu,
             storage_mb=self._spec.storage_mb,
         )

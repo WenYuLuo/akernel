@@ -44,8 +44,9 @@ UT、组件测试和功能 E2E 继续独立存在。L0 是快速端到端功能�
 压测前还需核对部署采集链：Master/Node 已配置 `19090/19091` 指标端口，但不能仅凭端口
 认定 Prometheus 已采集。当前 Collector 的 Control 日志路径为 `/opt/adx/run/control/logs`，
 与部署的 `/var/lib/adx/logs` 不一致，Control Pod 的采集链也需验证。
-CI 仍引用不存在的 `builder/scripts/test_ensure_adx_certs.py`，应按当前服务测试入口更新。
-这些是实施前置项，本规划没有修改这些实现。
+CI 的 ADX 服务契约已切换到现有的 `builder/scripts/test_adx_service.py`，Standalone
+门禁会分别发现运行时集成目录和 `tests/e2e/standalone/` 公共 SDK 契约目录。
+其余采集项仍是实施前置条件。
 
 ### 功能前置缺口
 

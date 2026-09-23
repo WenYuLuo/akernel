@@ -243,6 +243,24 @@ class AdxBackendTest(unittest.TestCase):
         self.assertEqual(info.xpu, "gpu:A100:1")
         self.assertEqual(info.storage_mb, 10240)
 
+    def test_get_info_normalizes_an_empty_backend_image(self):
+        backend = adx.AdxBackend(self.config)
+        native = MagicMock()
+        native.id = "default-worker"
+        native.commands = MagicMock()
+        native.files = MagicMock()
+        native.get_info.return_value = SimpleNamespace(
+            id="default-worker",
+            state="running",
+            cpu=1000,
+            memory=4096,
+            image="",
+        )
+        with patch.object(adx, "_OwnedSandbox", return_value=native):
+            session = backend.create(_spec())
+
+        self.assertIsNone(session.get_info().image)
+
     def test_delete_named_uses_default_namespace_and_explicit_connection(self):
         backend = adx.AdxBackend(self.config)
         with patch.object(adx.adx_sandbox.Sandbox, "delete") as delete:
