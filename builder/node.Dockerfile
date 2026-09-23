@@ -130,7 +130,8 @@ RUN make release
 FROM ${VIRTIOFSD_BUILD_IMAGE} AS virtiofsd-builder
 ARG VIRTIOFSD_REVISION
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+      -o Dpkg::Options::="--force-confold" --no-install-recommends \
       ca-certificates git libcap-ng-dev libseccomp-dev pkg-config && \
     rm -rf /var/lib/apt/lists/*
 WORKDIR /src/virtiofsd
