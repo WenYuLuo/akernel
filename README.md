@@ -63,6 +63,7 @@ Built-in OpenTelemetry (OTEL) integration provides complete observability out of
 - 💡 [Examples](./sdk/python/examples/) - AKernel SDK examples and use cases
 - 🏗️ [Architecture](#architecture) - System design and components
 - 🚀 [Deployment](./deploy/README.md) - Installation and configuration guide
+- 🧪 [Performance and stability test plan](./sdk/python/benchmarks/README.md) - Baselines, capacity and mixed-workload acceptance
 
 ### Bootstrap a Cluster
 
