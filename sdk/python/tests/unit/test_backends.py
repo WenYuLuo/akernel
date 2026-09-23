@@ -152,6 +152,28 @@ class OpenYuanRongSandboxBackendTest(unittest.TestCase):
         self.assertEqual(os.environ["YR_GATEWAY_TLS"], "0")
         self.assertEqual(os.environ["YR_TOKEN"], "secret")
 
+    def test_wait_timeout_preserves_result_without_exit_code(self):
+        native_result = openyuanrong_sandbox.yr_sandbox.CommandResult(
+            stdout="partial",
+            stderr="",
+            exit_code=None,
+            status=openyuanrong_sandbox.yr_sandbox.CommandStatus.RUNNING,
+            error_code="WAIT_TIMEOUT",
+            error_message="command wait timed out",
+        )
+
+        self.assertEqual(
+            openyuanrong_sandbox._command_result(native_result),
+            CommandResult(
+                stdout="partial",
+                stderr="",
+                exit_code=None,
+                status="RUNNING",
+                error_code="WAIT_TIMEOUT",
+                error_message="command wait timed out",
+            ),
+        )
+
     def test_runtime_identifier_without_explicit_rootfs_is_forwarded(self):
         native = MagicMock()
         native.id = "default-gvisor-next"

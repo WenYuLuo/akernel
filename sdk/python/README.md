@@ -362,6 +362,12 @@ Foreground commands return a backend-neutral `CommandResult`. Background
 commands return an AKernel `CommandHandle`; its lifecycle operations are
 delegated to the selected backend.
 
+With the default `openyuanrong-sandbox` backend, `handle.wait(timeout)` returns
+`CommandResult(exit_code=None, status="RUNNING", error_code="WAIT_TIMEOUT")`
+when the wait deadline expires. The command keeps running; a later `wait()` can
+observe its completion. `handle.kill()` and `sandbox.commands.kill(pid)` return
+`False` when the command does not exist or has already finished.
+
 ## Filesystem
 
 ```python
@@ -732,7 +738,7 @@ not part of the default test suite.
 
 | Type | Fields |
 |---|---|
-| `CommandResult` | `stdout`, `stderr`, `exit_code` |
+| `CommandResult` | `stdout`, `stderr`, `exit_code` (optional), `status`, `error_code`, `error_message` (optional) |
 | `CommandInfo` | `pid`, `command`, `running` |
 | `EntryInfo` | `name`, `path`, `type`, `size`, `permissions`, `modified_time` |
 | `SandboxInfo` | `id`, `state`, `cpu`, `memory`, `image`, `xpu`, `storage_mb` |

@@ -431,11 +431,14 @@ class EntryInfo:
 
 @dataclass(frozen=True)
 class CommandResult:
-    """Result returned by a completed command."""
+    """Command output; a wait timeout has no exit code and carries an error code."""
 
     stdout: str
     stderr: str
-    exit_code: int
+    exit_code: int | None
+    status: str | None = None
+    error_code: str | None = None
+    error_message: str | None = None
 
 
 @dataclass(frozen=True)
