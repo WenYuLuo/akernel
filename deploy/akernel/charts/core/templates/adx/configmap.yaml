@@ -13,10 +13,10 @@ metadata:
   name: akernel-adx-config
   namespace: {{ .Release.Namespace }}
 data:
-  control.yaml: |
+  master.yaml: |
     schema_version: 1
     package_dir: /opt/adx/current
-    state_dir: /var/lib/adx
+    state_dir: /home/akernel/adx/run/master
     redis_url: ${ADX_REDIS_URL}
     namespace: {{ .Values.adx.namespace | quote }}
     restart_limit: 3
@@ -27,7 +27,7 @@ data:
         role: master
         config:
           listen: 0.0.0.0:19000
-          advertised_address: http://akernel-adx-control.{{ .Release.Namespace }}.svc.cluster.local:19000
+          advertised_address: http://akernel-adx-master.{{ .Release.Namespace }}.svc.cluster.local:19000
           scheduler_shards: {{ .Values.adx.schedulerShards }}
           placement: {{ eq (.Values.master.schedulePlacementPolicy | default "spread") "binpack" | ternary "pack" "spread" | quote }}
           rpc_timeout_seconds: 30
@@ -41,6 +41,24 @@ data:
               tenant_id: admin
               administrator: true
               expires_at_unix_seconds: 0
+    logging:
+      enabled: true
+      max_file_bytes: 104857600
+      rotate_seconds: 86400
+      compress: true
+      max_files: 5
+      max_age_seconds: 604800
+      max_total_bytes: 1073741824
+  gateway.yaml: |
+    schema_version: 1
+    package_dir: /opt/adx/current
+    state_dir: /home/akernel/adx/run/gateway
+    redis_url: ${ADX_REDIS_URL}
+    namespace: {{ .Values.adx.namespace | quote }}
+    restart_limit: 3
+    restart_delay_ms: 1000
+    stop_timeout_seconds: 90
+    services:
       - id: api-server
         role: api-server
         config:
@@ -96,7 +114,7 @@ data:
   node.yaml: |
     schema_version: 1
     package_dir: /opt/adx/current
-    state_dir: /home/akernel/adx/run
+    state_dir: /home/akernel/adx/run/node
     redis_url: ${ADX_REDIS_URL}
     namespace: {{ .Values.adx.namespace | quote }}
     restart_limit: 3
@@ -111,7 +129,7 @@ data:
           advertised_address: ${INSTANCE_IP}:19001
           proxy_address: ${INSTANCE_IP}:19002
           sandboxd_socket: /run/sandboxd/sandboxd.sock
-          proxy_socket: /home/akernel/adx/run/route.sock
+          proxy_socket: /home/akernel/adx/run/node/route.sock
           report_interval_seconds: {{ .Values.adx.node.reportIntervalSeconds }}
           rpc_timeout_seconds: 30
           rrt_port: 50090
@@ -127,7 +145,7 @@ data:
           tls:
             mode: network
         env:
-          ADX_DATA_PLANE_NODE_PROXY_ACTIVITY_UDS_DIR: /home/akernel/adx/run
+          ADX_DATA_PLANE_NODE_PROXY_ACTIVITY_UDS_DIR: /home/akernel/adx/run/node
           ADX_DATA_PLANE_NODE_PROXY_BIND: 0.0.0.0:19002
           ADX_DATA_PLANE_NODE_PROXY_ADVERTISE_ADDRESS: ${INSTANCE_IP}:19002
           ADX_DATA_PLANE_ALLOWED_TARGET_CIDRS: {{ .Values.adx.node.allowedTargetCidrs | quote }}

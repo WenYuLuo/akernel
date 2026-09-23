@@ -55,8 +55,25 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.node.initContainers }}
       initContainers:
+        - name: migrate-adx-state
+          image: "{{ include "core.image" (dict "root" . "image" .Values.node.image) }}"
+          imagePullPolicy: {{ include "core.image.pullPolicy" (dict "root" . "image" .Values.node.image) }}
+          command:
+            - /bin/bash
+            - -ec
+            - |
+              rm -rf -- /home/akernel/adx/run/control
+              for path in /home/akernel/adx/run/config-[0-9]*; do
+                [[ -d "${path}" ]] || continue
+                suffix="${path##*/config-}"
+                [[ -n "${suffix}" && "${suffix}" != *[!0-9]* ]] || continue
+                rm -rf -- "${path}"
+              done
+          volumeMounts:
+            - mountPath: /home/akernel
+              name: home-disk
+      {{- with .Values.node.initContainers }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:

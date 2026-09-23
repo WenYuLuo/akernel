@@ -63,7 +63,7 @@ data:
           entryPoints:
             - websecure
           rule: "Path(`/`) || Path(`/healthz`) || PathPrefix(`/api/instances`) || PathPrefix(`/api/sandbox`) || PathPrefix(`/api/admin/v1/keys`)"
-          service: akernel-adx-control
+          service: akernel-adx-gateway
           tls: {}
         adx-data:
           entryPoints:
@@ -71,15 +71,15 @@ data:
           rule: "PathPrefix(`/`)"
           service: akernel-adx-data
       services:
-        akernel-adx-control:
+        akernel-adx-gateway:
           loadBalancer:
             serversTransport: adx-transport
             servers:
-              - url: "https://akernel-adx-control:8443"
+              - url: "https://akernel-adx-gateway:8443"
         akernel-adx-data:
           loadBalancer:
             servers:
-              - url: "http://akernel-adx-control:8080"
+              - url: "http://akernel-adx-gateway:8080"
       serversTransports:
         adx-transport:
           insecureSkipVerify: true

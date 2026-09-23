@@ -139,8 +139,7 @@ receivers:
 
   filelog/adx:
     include:
-      - /opt/adx/run/control/logs/*.log
-      - /home/akernel/adx/run/logs/*.log
+      - /home/akernel/adx/run/node/logs/*.log
     exclude:
       - "**/*.gz"
     start_at: end

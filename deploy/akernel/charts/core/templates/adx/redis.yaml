@@ -128,7 +128,7 @@ spec:
             matchExpressions:
               - key: app
                 operator: In
-                values: [akernel-adx-control, node]
+                values: [akernel-adx-master, akernel-adx-gateway, node]
       ports:
         - protocol: TCP
           port: 6379

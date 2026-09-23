@@ -207,10 +207,11 @@ even though the Pod declares a node configuration.
 
 The managed Kubernetes Redis uses its own Helm-generated authentication Secret,
 preserved by live lookup during upgrades. Its NetworkPolicy is additional
-isolation and requires CNI enforcement. Control health probes cover both Master
-and Edge. Generated control supervisor state is container-local, while Redis
-persists authoritative state; do not retain PID-named rendered configuration
-across control container restarts.
+isolation and requires CNI enforcement. Master and Gateway run in separate
+Deployments with independent `adxctl` supervisors and health probes. Their
+generated state is container-local, while Redis persists authoritative state.
+Node Manager uses its own state subtree under `/home/akernel/adx/run/node`;
+never start Master, Gateway, or Redis in a node Pod.
 
 Aliyun's aggregate Pod PID budget is configurable independently of the
 per-sandbox limit; see `deploy/terraform/aliyun/README.md#pod-pid-budget`.

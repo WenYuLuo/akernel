@@ -245,13 +245,13 @@ export AKERNEL_TOKEN="$(kubectl -n akernel get secret akernel-adx-tls -o jsonpat
 ```
 
 Generate a replacement without changing the public HTTPS certificate, then
-restart the control Deployment so Master reads the mounted `key_file` again:
+restart the Master Deployment so it reads the mounted `key_file` again:
 
 ```bash
 python3 -c 'import json,secrets; print(json.dumps({"stringData":{"admin-key":secrets.token_hex(32)}}))' \
   | kubectl -n akernel patch secret akernel-adx-tls --type merge --patch-file /dev/stdin
-kubectl -n akernel rollout restart deployment/akernel-adx-control
-kubectl -n akernel rollout status deployment/akernel-adx-control
+kubectl -n akernel rollout restart deployment/akernel-adx-master
+kubectl -n akernel rollout status deployment/akernel-adx-master
 ```
 
 Read the new key again using the command above (or `make token`) and update SDK
@@ -269,16 +269,20 @@ Managed mode is the default. It creates one Redis StatefulSet with AOF enabled,
 `appendfsync=everysec`, and a persistent volume. Helm generates an independent
 64-character Redis password in `akernel-adx-redis-auth` and reuses it on upgrades
 through a live Secret lookup. Use `helm install/upgrade` against the cluster;
-offline `helm template` cannot recover an existing password. Control and node
-Pods receive the password through Secret references. Redis requires authentication
-for Pod connections. An ingress NetworkPolicy also limits port 6379 to the control
-and node Pods in the same namespace when the CNI enforces NetworkPolicy. Redis
-is exposed only by a ClusterIP Service. Control readiness and liveness check
-both the Master listener and Edge health endpoint, so an exited Master cannot
-leave the control Pod marked healthy. Generated control configuration and local
-supervisor state use the container filesystem and reset on container restart;
-the authoritative cluster state remains in Redis. Control log files are also
-container-local and should be collected before restarting for diagnosis.
+offline `helm template` cannot recover an existing password. Master, Gateway,
+and node Pods receive the password through Secret references. Redis requires
+authentication for Pod connections. An ingress NetworkPolicy also limits port 6379 to the
+Master, Gateway, and node Pods in the same namespace when the CNI enforces
+NetworkPolicy. Redis is exposed only by a ClusterIP Service. Master and Gateway
+have independent readiness/liveness checks and independent `adxctl` supervisors.
+Their generated configuration and logs are container-local under
+`/home/akernel/adx/run/<role>` and reset on Pod replacement; the authoritative cluster
+state remains in Redis. Node state and logs use the persistent
+`/home/akernel/adx/run/node` subtree. During an upgrade from the retired
+all-in-one control layout, the node init container removes only the obsolete
+`/home/akernel/adx/run/control` subtree and root-level numeric
+`/home/akernel/adx/run/config-<pid>` directories. Checkpoints, the degradation
+journal, and the new `run/node` subtree are preserved.
 A minimal values file is:
 
 ```yaml
@@ -379,16 +383,25 @@ comes from `akernel-adx-tls`; this connection does not require client certificat
 
 ```bash
 kubectl -n akernel rollout status statefulset/akernel-adx-redis  # managed mode
-kubectl -n akernel rollout status deployment/akernel-adx-control
+kubectl -n akernel rollout status deployment/akernel-adx-master
+kubectl -n akernel rollout status deployment/akernel-adx-gateway
 kubectl -n akernel rollout status daemonset/akernel-node
 kubectl -n akernel get pods -o wide
-kubectl -n akernel logs deployment/akernel-adx-control --tail=200
+kubectl -n akernel logs deployment/akernel-adx-master --tail=200
+kubectl -n akernel logs deployment/akernel-adx-gateway --tail=200
+kubectl -n akernel exec deployment/akernel-adx-master -- \
+  tail -n 200 /home/akernel/adx/run/master/logs/master.log
+kubectl -n akernel exec deployment/akernel-adx-gateway -- \
+  tail -n 200 /home/akernel/adx/run/gateway/logs/api-server.log
 ```
 
 There must be one ready `akernel-node` Pod for every eligible Kubernetes node.
-The control Deployment becomes ready only after its Edge health endpoint is
-available. In external Redis mode, verify that Redis is reachable from the
-control Pod and every node Pod before diagnosing ADX discovery.
+The Master and Gateway Deployments become ready independently. In external
+Redis mode, verify that Redis is reachable from both deployments and every node
+Pod before diagnosing ADX discovery. `kubectl logs` shows the `adxctl`
+supervisor stream; component output is stored under each role's
+`state_dir/logs`. The node-local Collector reads
+`/home/akernel/adx/run/node/logs/*.log` when log export is configured.
 
 ## 3. Multi-Cloud (Terraform)
 
@@ -411,9 +424,9 @@ Per-vendor details are in
 [`terraform/huaweicloud/README.md`](./terraform/huaweicloud/README.md).
 
 The Alibaba Cloud Terraform defaults follow the recommended public layout:
-one ADX control Deployment, one Node Manager DaemonSet, managed Redis,
-Traefik `websecure:443` plus `web:80`, and Grafana exposed through its own
-LoadBalancer when `install_monitor=true`. Set
+separate ADX Master and Gateway Deployments, one Node Manager DaemonSet,
+managed Redis, Traefik `websecure:443` plus `web:80`, and Grafana exposed
+through its own LoadBalancer when `install_monitor=true`. Set
 `install_dragonfly=true` to install the pinned official Dragonfly chart and
 inject its seed-client proxy into the node runtime configuration.
 

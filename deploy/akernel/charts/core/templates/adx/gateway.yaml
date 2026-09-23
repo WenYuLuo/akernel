@@ -1,41 +1,33 @@
-{{- if ne (int .Values.adx.control.replicas) 1 }}
-{{- fail "adx.control.replicas must be 1 while ADX uses a single active Master" }}
-{{- end }}
 apiVersion: v1
 kind: Service
 metadata:
-  name: akernel-adx-control
+  name: akernel-adx-gateway
   namespace: {{ .Release.Namespace }}
 spec:
   selector:
-    app: akernel-adx-control
+    app: akernel-adx-gateway
   ports:
-    - name: master
-      port: 19000
-      targetPort: master
-    - name: edge-control
+    - name: control
       port: 8443
-      targetPort: edge-control
-    - name: edge-data
+      targetPort: control
+    - name: data
       port: 8080
-      targetPort: edge-data
+      targetPort: data
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: akernel-adx-control
+  name: akernel-adx-gateway
   namespace: {{ .Release.Namespace }}
 spec:
-  replicas: {{ .Values.adx.control.replicas }}
-  strategy:
-    type: Recreate
+  replicas: {{ .Values.adx.gateway.replicas }}
   selector:
     matchLabels:
-      app: akernel-adx-control
+      app: akernel-adx-gateway
   template:
     metadata:
       labels:
-        app: akernel-adx-control
+        app: akernel-adx-gateway
       annotations:
         checksum/adx-config: {{ include (print $.Template.BasePath "/adx/configmap.yaml") . | sha256sum }}
     spec:
@@ -44,15 +36,11 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
-        - name: control
+        - name: gateway
           image: "{{ include "core.image" (dict "root" . "image" .Values.master.image) }}"
           imagePullPolicy: {{ include "core.image.pullPolicy" (dict "root" . "image" .Values.master.image) }}
-          command:
-            - /opt/adx/current/bin/adxctl
-          args:
-            - --config
-            - /etc/akernel/adx-control.yaml
-            - run
+          command: [/opt/adx/current/bin/adxctl]
+          args: [--config, /etc/akernel/adx-gateway.yaml, run]
           env:
             {{- if eq .Values.adx.redis.mode "managed" }}
             - name: ADX_REDIS_PASSWORD
@@ -71,40 +59,32 @@ spec:
                   key: {{ .Values.adx.redis.external.urlKey | quote }}
               {{- end }}
           ports:
-            - name: master
-              containerPort: 19000
-            - name: edge-control
+            - name: control
               containerPort: 8443
-            - name: edge-data
+            - name: data
               containerPort: 8080
             - name: health
               containerPort: 18080
-            - name: master-metrics
-              containerPort: 19090
           readinessProbe:
-            exec:
-              command:
-                - /bin/bash
-                - -ec
-                - 'exec 3<>/dev/tcp/127.0.0.1/19000; curl --fail --silent --max-time 2 http://127.0.0.1:18080/healthz >/dev/null'
+            httpGet:
+              path: /healthz
+              port: health
             timeoutSeconds: 3
             periodSeconds: 5
             failureThreshold: 2
           livenessProbe:
-            exec:
-              command:
-                - /bin/bash
-                - -ec
-                - 'exec 3<>/dev/tcp/127.0.0.1/19000; curl --fail --silent --max-time 2 http://127.0.0.1:18080/healthz >/dev/null'
+            httpGet:
+              path: /healthz
+              port: health
             timeoutSeconds: 3
             initialDelaySeconds: 15
             periodSeconds: 10
           resources:
-            {{- toYaml .Values.adx.control.resources | nindent 12 }}
+            {{- toYaml .Values.adx.gateway.resources | nindent 12 }}
           volumeMounts:
             - name: config
-              mountPath: /etc/akernel/adx-control.yaml
-              subPath: control.yaml
+              mountPath: /etc/akernel/adx-gateway.yaml
+              subPath: gateway.yaml
               readOnly: true
             - name: credentials
               mountPath: /etc/adx
@@ -120,4 +100,3 @@ spec:
             items:
               - {key: public.pem, path: tls/public.pem}
               - {key: public.key, path: tls/public.key}
-              - {key: admin-key, path: secrets/admin-key}
