@@ -30,12 +30,12 @@ class CommandHandle:
         self._driver = driver
 
     def wait(self, timeout: int | None = None) -> CommandResult:
-        """Wait for the process to finish and return its captured output."""
+        """Wait for completion; the default backend returns a timeout result."""
 
         return self._driver.wait(self.pid, timeout)
 
     def kill(self) -> bool:
-        """Terminate the process and return whether it was found."""
+        """Return whether a live process was signalled."""
 
         return self._driver.kill(self.pid)
 
@@ -107,7 +107,7 @@ class Commands:
         return self._driver.list()
 
     def kill(self, pid: int) -> bool:
-        """Terminate a tracked process and return whether it was found."""
+        """Return whether a live process was signalled."""
 
         return self._driver.kill(pid)
 

@@ -125,10 +125,19 @@ def _supports_keyword(callable_value: Any, name: str) -> bool:
 
 
 def _command_result(value: Any) -> CommandResult:
+    exit_code = value.exit_code
+    native_status = getattr(value, "status", None)
     return CommandResult(
         stdout=str(value.stdout),
         stderr=str(value.stderr),
-        exit_code=int(value.exit_code),
+        exit_code=int(exit_code) if exit_code is not None else None,
+        status=(
+            str(getattr(native_status, "value", native_status))
+            if exit_code is None and native_status is not None
+            else None
+        ),
+        error_code=getattr(value, "error_code", None),
+        error_message=getattr(value, "error_message", None),
     )
 
 
