@@ -736,6 +736,10 @@ class SandboxTest(unittest.TestCase):
                 sandbox.get_port_url(8080),
                 "http://gateway.example.com/physical-id/8080",
             )
+            self.assertEqual(
+                sandbox.get_port_url(8080, internal=True),
+                "http://gateway.example.com/physical-id/8080",
+            )
             with self.assertRaisesRegex(ValueError, "not in port_forwardings"):
                 sandbox.get_port_url(9090)
             sandbox.kill()

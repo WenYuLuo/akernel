@@ -16,19 +16,12 @@
 
 from __future__ import annotations
 
-import os
 import shlex
-import ssl
 import threading
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from ._addresses import exec_endpoint_from_env
-from ._pty_transport import (
-    _build_pty_uri,
-    _PtyConnection,
-    _PtyTransportError,
-)
+from ._backends.registry import load_backend
 
 
 class PtyError(RuntimeError):
@@ -57,16 +50,6 @@ def _normalize_command(command: str | Sequence[str]) -> list[str]:
     ):
         raise ValueError("command must contain at least one non-empty argument")
     return arguments
-
-
-def _ssl_context(endpoint_tls: bool) -> ssl.SSLContext | None:
-    if not endpoint_tls:
-        return None
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    context.minimum_version = ssl.TLSVersion.TLSv1_2
-    context.check_hostname = False
-    context.verify_mode = ssl.CERT_NONE
-    return context
 
 
 class PtySession:
@@ -206,63 +189,24 @@ class Pty:
         if timeout <= 0:
             raise ValueError("timeout must be greater than zero")
 
-        if self._driver is not None:
-            try:
-                connection = self._driver.create(
-                    arguments,
-                    rows=rows,
-                    cols=cols,
-                    on_data=on_data,
-                    timeout=timeout,
-                )
-            except TimeoutError:
-                raise
-            except Exception as error:
-                raise PtyError(str(error)) from error
-            session = PtySession(connection, remove=self._remove)
-            with self._lock:
-                self._sessions.add(session)
-            return session
-
-        token = os.environ.get("AKERNEL_TOKEN", "").strip()
-        if not token:
-            raise RuntimeError("AKERNEL_TOKEN is not set")
-        endpoint = exec_endpoint_from_env()
-        uri = _build_pty_uri(
-            endpoint,
-            instance_id=self._instance_id,
-            token=token,
-            command=arguments,
-            rows=rows,
-            cols=cols,
-        )
-
-        session_ref: list[PtySession] = []
-
-        def on_done() -> None:
-            if session_ref:
-                self._remove(session_ref[0])
-
-        connection = _PtyConnection(
-            uri,
-            ssl_context=_ssl_context(endpoint.use_tls),
-            rows=rows,
-            cols=cols,
-            on_data=on_data,
-            on_done=on_done,
-        )
+        driver = self._driver
+        if driver is None:
+            driver = load_backend().pty_for(self._instance_id)
+        try:
+            connection = driver.create(
+                arguments,
+                rows=rows,
+                cols=cols,
+                on_data=on_data,
+                timeout=timeout,
+            )
+        except TimeoutError:
+            raise
+        except Exception as error:
+            raise PtyError(str(error)) from error
         session = PtySession(connection, remove=self._remove)
-        session_ref.append(session)
         with self._lock:
             self._sessions.add(session)
-        try:
-            connection.start(float(timeout))
-        except (TimeoutError, _PtyTransportError) as error:
-            connection.close()
-            self._remove(session)
-            if isinstance(error, TimeoutError):
-                raise
-            raise PtyError(str(error)) from error
         return session
 
     def _remove(self, session: PtySession) -> None:

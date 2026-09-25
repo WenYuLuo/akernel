@@ -49,6 +49,18 @@ _DEFAULT_LISTEN_PORT = 8766
 logger = logging.getLogger(__name__)
 
 
+def _control_pty_connection(connection: Any) -> Any:
+    """PTY direct routing uses the control TLS entrypoint, not the data port."""
+
+    return adx_sandbox.ConnectionConfig(
+        server_address=connection.server_address,
+        token=connection.token,
+        use_tls=connection.use_tls,
+        verify_tls=connection.verify_tls,
+        token_provider=connection.token_provider,
+    )
+
+
 def _native_port_range(value: PortRange | int | None) -> Any:
     if value is None:
         return None
@@ -106,6 +118,20 @@ def _convert_error(operation: str, error: Exception) -> BackendOperationError:
     return BackendOperationError(f"{operation} failed: {error}")
 
 
+def _route_read_retryable(error: Exception) -> bool:
+    cause: BaseException | None = error
+    for _ in range(4):
+        if cause is None:
+            break
+        if (
+            isinstance(cause, adx_sandbox.SandboxError)
+            and getattr(cause, "status_code", None) in (409, 503)
+        ):
+            return getattr(cause, "retry", None) != "never"
+        cause = cause.__cause__
+    return False
+
+
 def _command_result(value: Any) -> CommandResult:
     return CommandResult(
         stdout=str(value.stdout),
@@ -153,9 +179,15 @@ class _CommandsDriver:
                 cwd=cwd,
                 timeout=timeout,
             )
-            return _command_result(value)
+            result = _command_result(value)
         except Exception as error:
             raise _convert_error("command execution", error) from error
+        if getattr(value, "error_code", None) == "COMMAND_TIMEOUT" or (
+            result.exit_code == -1
+            and result.stderr.startswith("Command timed out after ")
+        ):
+            raise BackendOperationError(f"command execution failed: {result.stderr}")
+        return result
 
     def start(
         self,
@@ -288,14 +320,9 @@ class _Session:
         self.id = str(sandbox.id)
         self.commands = _CommandsDriver(sandbox.commands)
         self.files = _FilesystemDriver(sandbox.files)
-        pty_connection = adx_sandbox.ConnectionConfig(
-            server_address=connection.server_address,
-            token=connection.token,
-            use_tls=connection.use_tls,
-            verify_tls=connection.verify_tls,
-            token_provider=connection.token_provider,
+        self.pty = adx_sandbox.Pty(
+            self.id, connection=_control_pty_connection(connection)
         )
-        self.pty = adx_sandbox.Pty(self.id, connection=pty_connection)
         self._sandbox = sandbox
         self._spec = spec
         self._connection = connection
@@ -468,16 +495,23 @@ class AdxBackend:
             gateway_use_tls=config.gateway_endpoint.use_tls,
         )
 
+    def pty_for(self, instance_id: str) -> Any:
+        """Attach a PTY to an existing sandbox with the backend connection."""
+
+        return adx_sandbox.Pty(
+            instance_id, connection=_control_pty_connection(self._connection)
+        )
+
     def _validate(self, spec: SandboxSpec) -> None:
         tunnel = spec.reverse_tunnel
         if tunnel is not None and tunnel.reverse_port != tunnel.listen_port - 1:
             raise UnsupportedBackendFeatureError(
-                "Backend 'adx' requires reverse_port to equal "
-                "listen_port - 1."
+                "Backend 'adx' requires reverse_port to equal listen_port - 1."
             )
 
     def create(self, spec: SandboxSpec) -> BackendSession:
         self._validate(spec)
+        create_started = time.monotonic()
         rootfs = None
         if spec.rootfs is not None:
             rootfs = adx_sandbox.S3Config(
@@ -526,9 +560,7 @@ class AdxBackend:
             port_forwardings=list(spec.port_forwardings),
             mounts=mounts,
             upstream=(
-                spec.reverse_tunnel.target
-                if spec.reverse_tunnel is not None
-                else None
+                spec.reverse_tunnel.target if spec.reverse_tunnel is not None else None
             ),
             tunnel_connect_timeout=(
                 spec.reverse_tunnel.connect_timeout
@@ -564,7 +596,17 @@ class AdxBackend:
             # Creation is authoritative before Edge necessarily applies the
             # next route-stream delta. A read-only direct operation closes
             # that gap so the first caller operation does not observe 503.
-            session.commands.list()
+            deadline = min(create_started + create_timeout, time.monotonic() + 10)
+            retry_delay = 0.1
+            while True:
+                try:
+                    session.commands.list()
+                    break
+                except BackendOperationError as error:
+                    if not _route_read_retryable(error) or time.monotonic() >= deadline:
+                        raise
+                    time.sleep(min(retry_delay, max(0, deadline - time.monotonic())))
+                    retry_delay = min(retry_delay * 2, 1.0)
         except Exception:
             try:
                 session.terminate()

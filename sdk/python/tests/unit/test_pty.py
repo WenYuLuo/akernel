@@ -64,9 +64,7 @@ class PtyTest(unittest.TestCase):
             on_done=lambda: None,
         )
         connection._handle_control(
-            json.dumps(
-                {"version": 1, "type": "started", "session_id": "session-1"}
-            )
+            json.dumps({"version": 1, "type": "started", "session_id": "session-1"})
         )
         self.assertEqual(connection.session_id, "session-1")
         connection._handle_control(
@@ -128,21 +126,16 @@ class PtyTest(unittest.TestCase):
         with self.assertRaisesRegex(PtyError, "broken"):
             session.wait(timeout=1)
 
-    @patch.dict(
-        "os.environ",
-        {
-            "AKERNEL_TOKEN": "token",
-            "AKERNEL_SERVER_ADDRESS": "127.0.0.1:8080",
-        },
-        clear=False,
-    )
-    @patch("akernel_sdk.pty._PtyConnection")
-    def test_manager_waits_for_started_connection(self, connection_type):
-        connection = connection_type.return_value
+    @patch("akernel_sdk.pty.load_backend")
+    def test_manager_resolves_backend_for_detached_instance(self, load_backend):
+        connection = load_backend.return_value.pty_for.return_value.create.return_value
         connection.session_id = "session-4"
         session = Pty("sandbox-4").create(["/bin/bash"], timeout=2)
 
-        connection.start.assert_called_once_with(2.0)
+        load_backend.return_value.pty_for.assert_called_once_with("sandbox-4")
+        load_backend.return_value.pty_for.return_value.create.assert_called_once_with(
+            ["/bin/bash"], rows=24, cols=80, on_data=None, timeout=2
+        )
         self.assertEqual(session.session_id, "session-4")
 
     def test_manager_delegates_to_backend_native_pty(self):

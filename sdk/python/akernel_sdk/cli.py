@@ -23,6 +23,7 @@ import threading
 from collections.abc import Sequence
 from urllib import request
 from urllib.error import HTTPError, URLError
+from urllib.parse import quote
 
 from ._addresses import Endpoint, api_endpoint_from_env
 from ._resource_api import (
@@ -73,22 +74,17 @@ def _make_get_request(url: str, token: str, ssl_context: ssl.SSLContext) -> dict
         sys.exit(1)
 
 
-def _make_json_request(
+def _make_delete_request(
     url: str,
     token: str,
     ssl_context: ssl.SSLContext,
-    payload: dict,
 ) -> dict:
-    """Send an authenticated JSON request and return status and body."""
+    """Delete a sandbox through the public API and return status and body."""
 
     req = request.Request(
         url,
-        data=json.dumps(payload).encode("utf-8"),
-        method="POST",
-        headers={
-            "Content-Type": "application/json",
-            "X-Auth": token,
-        },
+        method="DELETE",
+        headers={"X-Auth": token},
     )
     try:
         with request.urlopen(req, context=ssl_context) as response:
@@ -286,7 +282,7 @@ def handle_resources(debug: bool = False):
 
 
 def handle_list(quiet: bool = False):
-    """List all running instances.
+    """List visible running instances from the API Server directory.
 
     When *quiet* is set, print only instance IDs (one per line) so the output
     pipes cleanly into ``xargs ak delete``.
@@ -295,7 +291,7 @@ def handle_list(quiet: bool = False):
     token = _get_auth_token()
     ssl_context = _create_ssl_context()
 
-    list_url = f"{endpoint.base_url()}/api/instances?tenant_id=default"
+    list_url = f"{endpoint.base_url()}/api/instances"
     result = _make_get_request(list_url, token, ssl_context)
 
     if result["status"] != 200:
@@ -335,7 +331,7 @@ def handle_list(quiet: bool = False):
 
 
 def handle_delete(instance_ids: list[str]) -> None:
-    """Terminate sandbox instances through the frontend actor API."""
+    """Terminate sandbox instances through the public Sandbox API."""
 
     endpoint = _get_endpoint(api_endpoint_from_env)
     token = _get_auth_token()
@@ -343,26 +339,16 @@ def handle_delete(instance_ids: list[str]) -> None:
     failed = []
     for instance_id in instance_ids:
         try:
-            result = _make_json_request(
-                f"{endpoint.base_url()}/frontend/v1/instance/kill",
+            result = _make_delete_request(
+                f"{endpoint.base_url()}/api/sandbox/v1/sandboxes/"
+                f"{quote(instance_id, safe='')}",
                 token,
                 ssl_context,
-                {"instanceID": instance_id, "signal": 1},
             )
-            if result["status"] != 200:
+            if result["status"] not in (200, 202, 204, 404):
                 raise RuntimeError(
                     f"server returned status {result['status']}: {result['body']}"
                 )
-            try:
-                body = json.loads(result["body"])
-            except json.JSONDecodeError as error:
-                raise RuntimeError(f"invalid server response: {error}") from error
-            if not isinstance(body, dict):
-                raise RuntimeError("invalid server response: expected a JSON object")
-            code = int(body.get("code", -1))
-            if code != 0:
-                message = body.get("message") or "unknown error"
-                raise RuntimeError(f"server returned code {code}: {message}")
             print(f"deleted: {instance_id}")
         except Exception as error:
             print(f"failed to delete {instance_id}: {error}", file=sys.stderr)

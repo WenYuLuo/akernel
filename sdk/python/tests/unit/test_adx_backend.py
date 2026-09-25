@@ -22,6 +22,7 @@ from adx_sandbox._transport import SandboxHTTPError
 from akernel_sdk._addresses import Endpoint
 from akernel_sdk._backends import adx
 from akernel_sdk._backends.base import BackendConfig, SandboxSpec
+from akernel_sdk._backends.errors import BackendOperationError
 from akernel_sdk.types import HttpReverseTunnel, Mount, NetworkPolicy, S3Config
 
 
@@ -63,6 +64,38 @@ class AdxBackendTest(unittest.TestCase):
             token="secret",
         )
 
+    def test_detached_pty_uses_the_backend_connection(self):
+        backend = adx.AdxBackend(self.config)
+        with patch.object(adx.adx_sandbox, "Pty") as pty_type:
+            driver = backend.pty_for("default-worker")
+        self.assertIs(driver, pty_type.return_value)
+        pty_type.assert_called_once()
+        args, kwargs = pty_type.call_args
+        self.assertEqual(args, ("default-worker",))
+        connection = kwargs["connection"]
+        self.assertEqual(connection.server_address, "api.example:443")
+        self.assertTrue(connection.use_tls)
+        self.assertIsNone(connection.gateway_address)
+
+    def test_foreground_command_timeout_is_an_operation_error(self):
+        native = MagicMock()
+        native.run.return_value = SimpleNamespace(
+            stdout="", stderr="Command timed out after 1 seconds", exit_code=-1
+        )
+        driver = adx._CommandsDriver(native)
+
+        with self.assertRaisesRegex(BackendOperationError, "timed out"):
+            driver.run("sleep 3", envs=None, cwd=None, timeout=1)
+
+        ordinary_failure = SimpleNamespace(
+            stdout="", stderr="application failed", exit_code=7
+        )
+        native.run.return_value = ordinary_failure
+        self.assertEqual(
+            driver.run("exit 7", envs=None, cwd=None, timeout=1).exit_code,
+            7,
+        )
+
     def test_reload_waits_for_new_data_route_without_repeating_reload(self):
         backend = adx.AdxBackend(self.config)
         native = MagicMock(id="default-worker")
@@ -70,7 +103,8 @@ class AdxBackendTest(unittest.TestCase):
             session = backend.create(_spec())
         native.commands.list.reset_mock()
         native.commands.list.side_effect = [
-            SandboxHTTPError(409, {}, "stale route"), []
+            SandboxHTTPError(409, {}, "stale route"),
+            [],
         ]
         native.reload.return_value = True
         self.assertTrue(session.reload())
@@ -101,6 +135,89 @@ class AdxBackendTest(unittest.TestCase):
         self.assertFalse(session.reload())
         native.reload.assert_called_once_with()
         native.commands.list.assert_called_once_with()
+
+    def test_create_waits_for_transient_route_503(self):
+        backend = adx.AdxBackend(self.config)
+        native = MagicMock(id="default-worker")
+        exhausted = adx.adx_sandbox.SandboxError("direct invoke outcome unknown")
+        exhausted.__cause__ = SandboxHTTPError(
+            503, {}, "route absent from synchronized cache"
+        )
+        native.commands.list.side_effect = [
+            exhausted,
+            [],
+        ]
+        with (
+            patch.object(adx, "_OwnedSandbox", return_value=native) as create,
+            patch.object(adx.time, "sleep") as sleep,
+            patch.object(adx.adx_sandbox.Sandbox, "delete"),
+        ):
+            session = backend.create(_spec())
+        self.assertEqual(session.id, "default-worker")
+        create.assert_called_once()
+        self.assertEqual(native.commands.list.call_count, 2)
+        sleep.assert_called_once()
+        native.close.assert_not_called()
+
+    def test_create_route_retries_back_off_and_cap_at_one_second(self):
+        backend = adx.AdxBackend(self.config)
+        native = MagicMock(id="default-worker")
+        native.commands.list.side_effect = [
+            SandboxHTTPError(503, {}, "route pending") for _ in range(6)
+        ] + [[]]
+        with (
+            patch.object(adx, "_OwnedSandbox", return_value=native) as create,
+            patch.object(adx.time, "sleep") as sleep,
+        ):
+            session = backend.create(_spec())
+
+        self.assertEqual(session.id, "default-worker")
+        create.assert_called_once()
+        self.assertEqual(native.commands.list.call_count, 7)
+        self.assertEqual(
+            [call.args[0] for call in sleep.call_args_list],
+            [0.1, 0.2, 0.4, 0.8, 1.0, 1.0],
+        )
+
+    def test_create_route_backoff_stops_at_existing_deadline(self):
+        backend = adx.AdxBackend(self.config)
+        native = MagicMock(id="default-worker")
+        native.commands.list.side_effect = SandboxHTTPError(503, {}, "route pending")
+        clock = [0.0]
+        sleeps = []
+
+        def advance(seconds):
+            sleeps.append(seconds)
+            clock[0] += seconds
+
+        with (
+            patch.object(adx, "_OwnedSandbox", return_value=native) as create,
+            patch.object(adx.time, "monotonic", side_effect=lambda: clock[0]),
+            patch.object(adx.time, "sleep", side_effect=advance),
+            patch.object(adx.adx_sandbox.Sandbox, "delete"),
+        ):
+            with self.assertRaises(BackendOperationError):
+                backend.create(_spec())
+
+        create.assert_called_once()
+        self.assertAlmostEqual(sum(sleeps), 10.0)
+        self.assertLessEqual(max(sleeps), 1.0)
+        native.close.assert_called_once()
+
+    def test_create_does_not_retry_terminal_route_error(self):
+        backend = adx.AdxBackend(self.config)
+        native = MagicMock(id="default-worker")
+        native.commands.list.side_effect = SandboxHTTPError(403, {}, "forbidden")
+        with (
+            patch.object(adx, "_OwnedSandbox", return_value=native),
+            patch.object(adx.time, "sleep") as sleep,
+            patch.object(adx.adx_sandbox.Sandbox, "delete"),
+        ):
+            with self.assertRaises(BackendOperationError):
+                backend.create(_spec())
+        sleep.assert_not_called()
+        native.commands.list.assert_called_once()
+        native.close.assert_called_once()
 
     def test_connection_is_explicit_and_does_not_mutate_environment(self):
         with patch.dict(os.environ, {}, clear=True):
@@ -235,9 +352,7 @@ class AdxBackendTest(unittest.TestCase):
             image="worker:v1",
         )
         with patch.object(adx, "_OwnedSandbox", return_value=native):
-            session = backend.create(
-                _spec(xpu="gpu:A100:1", storage_mb=10240)
-            )
+            session = backend.create(_spec(xpu="gpu:A100:1", storage_mb=10240))
 
         info = session.get_info()
         self.assertEqual(info.xpu, "gpu:A100:1")
