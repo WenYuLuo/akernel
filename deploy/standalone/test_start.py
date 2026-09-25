@@ -192,35 +192,31 @@ class StartScriptTest(unittest.TestCase):
                 text=True,
             )
 
-    def test_node_health_probe_executes_inside_node_container(self) -> None:
+    def test_startup_uses_adx_control_and_data_readiness(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            fake_docker = root / "docker"
-            captured = root / "docker-args"
-            fake_docker.write_text(
-                '#!/bin/sh\nprintf \'%s\\n\' "$@" > "$CAPTURED_DOCKER_ARGS"\n',
-                encoding="utf-8",
-            )
-            fake_docker.chmod(0o755)
-            environment = os.environ.copy()
-            environment["CAPTURED_DOCKER_ARGS"] = str(captured)
+            captured = Path(directory) / "endpoints"
             command = (
                 f"source {SCRIPT!s}; "
-                f"DOCKER_CMD={fake_docker!s}; "
-                "NODE_CONTAINER_NAME=test-node; "
-                "probe_node_health http://127.0.0.1:18080/healthz"
+                "AKERNEL_ENDPOINT_HOST=127.0.0.1; "
+                "AKERNEL_CONTROL_PORT=18443; AKERNEL_DATA_PORT=18080; "
+                "for name in check_prerequisites cleanup_existing ensure_image "
+                "configure_container_proxy configure_gpu configure_network "
+                "prepare_host_network_modules configure_auth start_node_container "
+                "show_status log_info; do eval \"$name() { :; }\"; done; "
+                "wait_for_ready() { return 1; }; "
+                f"wait_for_endpoints() {{ printf '%s\\n' \"$@\" > {captured!s}; }}; "
+                "main"
             )
             subprocess.run(
                 ["bash", "-c", command],
                 check=True,
-                env=environment,
                 capture_output=True,
                 text=True,
             )
-
-            arguments = captured.read_text(encoding="utf-8")
-            self.assertTrue(arguments.startswith("exec\ntest-node\ncurl\n"))
-            self.assertIn("http://127.0.0.1:18080/healthz", arguments)
+            self.assertEqual(
+                captured.read_text().splitlines(),
+                ["https://127.0.0.1:18443", "http://127.0.0.1:18080"],
+            )
 
 
 if __name__ == "__main__":

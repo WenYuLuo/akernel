@@ -111,13 +111,6 @@ probe_adx_data_listener() {
     [[ "${status}" == "426" ]]
 }
 
-probe_node_health() {
-    local url="$1"
-
-    "${DOCKER_PREFIX[@]}" "${DOCKER_CMD}" exec "${NODE_CONTAINER_NAME}" \
-        curl --noproxy '*' -fSs "${url}" > /dev/null
-}
-
 # Check prerequisites
 check_prerequisites() {
     log_info "Checking prerequisites..."
@@ -455,28 +448,6 @@ start_node_container() {
         "${IMAGE}"
 }
 
-# Wait for container to be ready
-wait_for_ready() {
-    log_info "Waiting for container to be ready..."
-
-    local retries=30
-    local delay=2
-
-    for i in $(seq 1 $retries); do
-        if probe_node_health http://127.0.0.1:18080/healthz; then
-            log_info "AKernel container is ready"
-            return 0
-        fi
-
-        if [[ $i -eq $retries ]]; then
-            log_warn "AKernel may not be fully ready; check ${DOCKER_CMD} logs ${NODE_CONTAINER_NAME}"
-            return 1
-        fi
-
-        sleep $delay
-    done
-}
-
 wait_for_endpoints() {
     local control_url="$1"
     local data_url="$2"
@@ -577,7 +548,6 @@ main() {
     prepare_host_network_modules
     configure_auth
     start_node_container
-    wait_for_ready
     CONTROL_URL="https://${AKERNEL_ENDPOINT_HOST}:${AKERNEL_CONTROL_PORT}"
     DATA_URL="http://${AKERNEL_ENDPOINT_HOST}:${AKERNEL_DATA_PORT}"
     wait_for_endpoints "${CONTROL_URL}" "${DATA_URL}"
