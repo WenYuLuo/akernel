@@ -17,9 +17,10 @@
 import os
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 
-from akernel_sdk import Sandbox, resources
+from akernel_sdk import BackendOperationError, Sandbox, resources
 
 _ENABLED = (
     os.environ.get("AKERNEL_RUN_INTEGRATION") == "1"
@@ -54,7 +55,7 @@ class SandboxPublicContractIntegrationTest(unittest.TestCase):
 
     def test_command_environment_cwd_stderr_and_nonzero_exit(self):
         result = self.sandbox.commands.run(
-            "printf '%s|%s' \"$AKERNEL_SANDBOX_ENV\" \"$AKERNEL_COMMAND_ENV\"; "
+            'printf \'%s|%s\' "$AKERNEL_SANDBOX_ENV" "$AKERNEL_COMMAND_ENV"; '
             "printf 'command-stderr' >&2; exit 7",
             envs={"AKERNEL_COMMAND_ENV": "command-value"},
         )
@@ -94,6 +95,14 @@ class SandboxPublicContractIntegrationTest(unittest.TestCase):
             if process.pid == handle.pid
         )
         self.assertFalse(completed.running)
+
+    def test_foreground_command_timeout_preserves_sandbox(self):
+        with self.assertRaises(BackendOperationError):
+            self.sandbox.commands.run("sleep 3", timeout=1)
+        self.assertEqual(
+            self.sandbox.commands.run("printf after-timeout").stdout,
+            "after-timeout",
+        )
 
     def test_filesystem_binary_metadata_list_rename_remove_and_copy(self):
         root = "/tmp/akernel-sdk-contract"
@@ -146,6 +155,15 @@ class SandboxPublicContractIntegrationTest(unittest.TestCase):
         self.assertEqual(info.memory, 2048)
         self.assertEqual(info.image, _IMAGE)
         self.assertTrue(info.state)
+
+    def test_missing_file_operations_report_errors_without_creating_file(self):
+        missing = f"/tmp/akernel-missing-{uuid.uuid4().hex}"
+        self.assertFalse(self.sandbox.files.exists(missing))
+        with self.assertRaises(BackendOperationError):
+            self.sandbox.files.read(missing)
+        with self.assertRaises(BackendOperationError):
+            self.sandbox.files.get_info(missing)
+        self.assertFalse(self.sandbox.files.exists(missing))
 
     def test_cluster_resources_include_a_schedulable_node(self):
         nodes = resources()
