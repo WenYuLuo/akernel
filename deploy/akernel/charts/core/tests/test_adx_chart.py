@@ -64,6 +64,44 @@ class AdxChartTest(unittest.TestCase):
         self.assertNotIn("role: api-server", self.rendered)
         self.assertNotIn("role: edge", self.rendered)
 
+    def test_port_host_domain_is_only_sent_to_ingress_when_configured(self) -> None:
+        default_config = self.resource("ConfigMap", "akernel-adx-config")["data"]
+        self.assertNotIn(
+            "ADX_DATA_PLANE_INGRESS_PORT_HOST_DOMAIN", default_config["ingress-api.yaml"]
+        )
+        result = subprocess.run(
+            [
+                "helm", "template", "akernel", str(CHART),
+                "--set", "adx.ingressApi.portHostDomain=sandbox.example.test",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        config = next(
+            item["data"]
+            for item in yaml.safe_load_all(result.stdout)
+            if item and item.get("kind") == "ConfigMap"
+            and item["metadata"]["name"] == "akernel-adx-config"
+        )
+        ingress_api = yaml.safe_load(config["ingress-api.yaml"])
+        ingress = next(service for service in ingress_api["services"] if service["role"] == "ingress")
+        self.assertEqual(
+            ingress["env"]["ADX_DATA_PLANE_INGRESS_PORT_HOST_DOMAIN"],
+            "sandbox.example.test",
+        )
+        self.assertNotIn("ADX_DATA_PLANE_INGRESS_PORT_HOST_DOMAIN", config["node.yaml"])
+
+    def test_ingress_routes_scheduler_administration_to_api_server(self) -> None:
+        config = self.resource("ConfigMap", "akernel-adx-config")["data"]
+        ingress_api = yaml.safe_load(config["ingress-api.yaml"])
+        ingress = next(
+            service for service in ingress_api["services"]
+            if service["role"] == "ingress"
+        )
+        routes = ingress["env"]["ADX_DATA_PLANE_INGRESS_CONTROL_PLANE_ROUTES"]
+        self.assertIn("prefix:/global-scheduler", routes.split(","))
+
     def test_default_replaces_legacy_control_plane(self) -> None:
         self.resource("StatefulSet", "akernel-adx-redis")
         self.resource("Deployment", "akernel-adx-coordinator")

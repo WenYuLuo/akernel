@@ -16,6 +16,7 @@ service_overrides:
     env:
       ADX_DATA_PLANE_INGRESS_PLAIN_BIND: 0.0.0.0:8080
       ADX_DATA_PLANE_INGRESS_ALLOWED_CLIENT_CIDRS: 0.0.0.0/0
+      ADX_DATA_PLANE_INGRESS_PORT_HOST_DOMAIN: localhost
 runtime_profile:
   rootfs:
     runtime_class: runsc

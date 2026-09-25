@@ -61,6 +61,7 @@ adx:
         memory: 1Gi
   ingressApi:
     replicas: 1
+    portHostDomain: ""
     resources:
       requests:
         cpu: 250m

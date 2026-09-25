@@ -228,6 +228,14 @@ This configuration requires the ADX internal-network-mode update; the current
 For custom host port mappings, use the additional gateway override printed by
 `start.sh`; the default deployment does not require it.
 
+The bundled standalone Ingress accepts Host-subdomain port forwarding under
+`localhost`: `<sandbox-id>-<port>.localhost`. The SDK continues to return its
+existing path URL; a client may send that URL with the corresponding `Host`
+header. This avoids relying on wildcard DNS during local tests. For a public
+domain, set `ADX_DATA_PLANE_INGRESS_PORT_HOST_DOMAIN` in the Ingress `env` of
+`builder/config/adx-standalone.yaml` before building, and configure matching
+wildcard DNS and TLS for the public listener.
+
 ### Read and rotate the administrator key
 
 Run these commands from `deploy/standalone/`:
