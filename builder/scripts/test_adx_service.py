@@ -15,6 +15,8 @@ class AdxServiceTest(unittest.TestCase):
                 b"AKERNEL_ADX_MANAGED_CREDENTIALS=external\0"
                 b"ADX_REDIS_URL=redis://example/\0"
                 b"NODE_NAME=node-from-pod\0INSTANCE_IP=192.0.2.10\0"
+                b"AWS_ACCESS_KEY_ID=test-access\0AWS_SECRET_ACCESS_KEY=test-secret\0"
+                b"AWS_SESSION_TOKEN=test-session\0AWS_EC2_METADATA_DISABLED=true\0"
                 b"UNRELATED_PRIVATE_SETTING=must-not-inherit\0"
             )
             environment = {
@@ -34,6 +36,10 @@ class AdxServiceTest(unittest.TestCase):
             self.assertEqual(inherited["ADX_REDIS_URL"], "redis://example/")
             self.assertEqual(inherited["NODE_NAME"], "explicit-node")
             self.assertEqual(inherited["INSTANCE_IP"], "192.0.2.10")
+            self.assertEqual(inherited["AWS_ACCESS_KEY_ID"], "test-access")
+            self.assertEqual(inherited["AWS_SECRET_ACCESS_KEY"], "test-secret")
+            self.assertEqual(inherited["AWS_SESSION_TOKEN"], "test-session")
+            self.assertEqual(inherited["AWS_EC2_METADATA_DISABLED"], "true")
             self.assertNotIn("UNRELATED_PRIVATE_SETTING", inherited)
 
     def test_only_generates_and_reuses_public_https_identity(self):
