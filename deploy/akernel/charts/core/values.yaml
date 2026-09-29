@@ -62,6 +62,12 @@ adx:
   ingressApi:
     replicas: 1
     portHostDomain: ""
+    publicService:
+      enabled: false
+      type: LoadBalancer
+      annotations: {}
+      loadBalancerIP: ""
+      externalTrafficPolicy: Cluster
     resources:
       requests:
         cpu: "2"

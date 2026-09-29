@@ -278,6 +278,55 @@ class AdxChartTest(unittest.TestCase):
         self.assertEqual(ports["control"], 8443)
         self.assertEqual(ports["data"], 8080)
 
+    def test_public_ingress_service_is_opt_in(self) -> None:
+        names = {
+            item["metadata"]["name"]
+            for item in self.resources
+            if item.get("kind") == "Service"
+        }
+        self.assertNotIn("akernel-adx-public", names)
+
+    def test_public_ingress_service_exposes_standard_sdk_ports(self) -> None:
+        result = subprocess.run(
+            [
+                "helm",
+                "template",
+                "akernel",
+                str(CHART),
+                "--namespace",
+                "akernel-system",
+                "--set",
+                "adx.ingressApi.publicService.enabled=true",
+                "--set",
+                "adx.ingressApi.publicService.type=LoadBalancer",
+                "--set-string",
+                "adx.ingressApi.publicService.annotations.example\\.com/exposure=trial",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        service = next(
+            item
+            for item in yaml.safe_load_all(result.stdout)
+            if item
+            and item.get("kind") == "Service"
+            and item["metadata"]["name"] == "akernel-adx-public"
+        )
+        self.assertEqual(service["spec"]["type"], "LoadBalancer")
+        self.assertEqual(
+            service["metadata"]["annotations"]["example.com/exposure"],
+            "trial",
+        )
+        self.assertEqual(
+            service["spec"]["selector"], {"app": "akernel-adx-ingress-api"}
+        )
+        ports = {port["name"]: port for port in service["spec"]["ports"]}
+        self.assertEqual(ports["control"]["port"], 443)
+        self.assertEqual(ports["control"]["targetPort"], "control")
+        self.assertEqual(ports["data"]["port"], 80)
+        self.assertEqual(ports["data"]["targetPort"], "data")
+
     def test_adx_keeps_both_ports_when_legacy_single_entry_is_disabled(self) -> None:
         result = subprocess.run(
             [
