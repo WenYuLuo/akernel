@@ -134,12 +134,14 @@ e2e:
 sdk-test:
 	@PYTHONPATH=sdk/python python3 -m unittest discover \
 		-s sdk/python/tests/unit -t sdk/python -v
+	@PYTHONPATH=sdk/python python3 -m unittest discover \
+		-s sdk/python/benchmarks/tests -v
 
 .PHONY: sdk-check
 sdk-check: sdk-test
 	@set -e; \
 	cd sdk/python; \
-	python3 -m ruff check akernel_sdk tests; \
+	python3 -m ruff check akernel_sdk tests benchmarks; \
 	python3 -m mypy akernel_sdk
 
 .PHONY: deploy-script-check
