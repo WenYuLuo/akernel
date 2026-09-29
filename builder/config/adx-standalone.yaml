@@ -1,0 +1,24 @@
+schema_version: 1
+profile: standalone
+internal_security: network
+namespace: akernel
+service_overrides:
+  coordinator:
+    config:
+      placement: spread
+  adxlet:
+    config:
+      execd_env:
+        ADX_EXECD_CONTROL_SOCKET_PATH: /run/akernel
+      resource_source:
+        disk_path: /home/akernel
+  ingress:
+    env:
+      ADX_DATA_PLANE_INGRESS_PLAIN_BIND: 0.0.0.0:8080
+      ADX_DATA_PLANE_INGRESS_ALLOWED_CLIENT_CIDRS: 0.0.0.0/0
+      ADX_DATA_PLANE_INGRESS_PORT_HOST_DOMAIN: localhost
+runtime_profile:
+  rootfs:
+    path: /opt/akernel/runtime/akernel-runtime-rootfs.img
+  bootstrap:
+    root: /opt/akernel/runtime/akernel-runtime-rootfs.img
