@@ -342,3 +342,7 @@ clear this prerequisite. Deleted records without reservations are terminal
 history. Revoked API Key records are permanent revocation tombstones that
 prevent bootstrap replay from restoring a revoked key; they are not active
 credentials or resource reservations.
+
+## PR78 command and PTY regressions
+
+The standalone IO group requires a short background-command wait to return a running result with `exit_code=None`, `status=RUNNING`, and `error_code=WAIT_TIMEOUT`; a later wait must return the final output and exit code. The PTY group retains 100 completed session wrappers and verifies that completed waits remove them from the manager, then checks that the same Sandbox still serves commands. These use the selected real runtime and do not infer runsc or Kata coverage from a runc run.

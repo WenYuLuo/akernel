@@ -51,6 +51,22 @@ class CommandAndFilesystemIntegrationTest(unittest.TestCase):
         self.assertTrue(result.stdout.startswith("/tmp\n"))
         self.assertEqual(result.stdout[5:], "x" * 65536)
 
+    def test_background_wait_timeout_preserves_running_result(self):
+        handle = self.sandbox.commands.run(
+            "sleep 3; printf finished", background=True
+        )
+        try:
+            pending = handle.wait(timeout=0.01)
+            self.assertIsNone(pending.exit_code)
+            self.assertEqual(pending.status, "RUNNING")
+            self.assertEqual(pending.error_code, "WAIT_TIMEOUT")
+            self.assertTrue(pending.error_message)
+            completed = handle.wait(timeout=15)
+            self.assertEqual(completed.exit_code, 0, completed.stderr)
+            self.assertEqual(completed.stdout, "finished")
+        finally:
+            handle.kill()
+
     def test_background_process_kill_releases_process(self):
         handle = self.sandbox.commands.run("sleep 60", background=True)
         self.assertTrue(

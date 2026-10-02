@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import shlex
 import threading
+import weakref
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -63,6 +64,15 @@ class PtySession:
     ) -> None:
         self._connection = connection
         self._remove = remove
+        self._released = False
+        self._release_lock = threading.Lock()
+
+    def _release(self) -> None:
+        with self._release_lock:
+            if self._released:
+                return
+            self._released = True
+        self._remove(self)
 
     @property
     def session_id(self) -> str:
@@ -119,7 +129,9 @@ class PtySession:
         if timeout is not None and timeout <= 0:
             raise ValueError("timeout must be greater than zero")
         try:
-            return self._connection.wait(timeout)
+            result = self._connection.wait(timeout)
+            self._release()
+            return result
         except Exception as error:
             if isinstance(error, TimeoutError):
                 raise
@@ -133,7 +145,7 @@ class PtySession:
         except Exception as error:
             raise PtyError(str(error)) from error
         finally:
-            self._remove(self)
+            self._release()
 
     def __enter__(self) -> PtySession:
         return self
@@ -148,7 +160,7 @@ class Pty:
     def __init__(self, instance_id: str, *, driver: Any | None = None) -> None:
         self._instance_id = instance_id
         self._driver = driver
-        self._sessions: set[PtySession] = set()
+        self._sessions: weakref.WeakSet[PtySession] = weakref.WeakSet()
         self._lock = threading.Lock()
 
     def create(
@@ -207,6 +219,8 @@ class Pty:
         session = PtySession(connection, remove=self._remove)
         with self._lock:
             self._sessions.add(session)
+        if connection.done:
+            session._release()
         return session
 
     def _remove(self, session: PtySession) -> None:

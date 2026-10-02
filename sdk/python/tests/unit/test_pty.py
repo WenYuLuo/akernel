@@ -12,8 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import gc
 import json
 import unittest
+import weakref
 from unittest.mock import MagicMock, patch
 from urllib.parse import parse_qs, urlparse
 
@@ -125,6 +127,31 @@ class PtyTest(unittest.TestCase):
         connection.wait.side_effect = _PtyTransportError("broken")
         with self.assertRaisesRegex(PtyError, "broken"):
             session.wait(timeout=1)
+
+    def test_wait_releases_completed_session_but_not_pending_session(self):
+        driver = MagicMock()
+        driver.create.return_value.done = False
+        manager = Pty("sandbox", driver=driver)
+        session = manager.create(["/bin/sh"])
+        driver.create.return_value.wait.side_effect = TimeoutError("still running")
+        with self.assertRaises(TimeoutError):
+            session.wait(0.1)
+        self.assertIn(session, manager._sessions)
+        driver.create.return_value.wait.side_effect = None
+        driver.create.return_value.wait.return_value = 0
+        self.assertEqual(session.wait(1), 0)
+        self.assertNotIn(session, manager._sessions)
+
+    def test_factory_does_not_own_unreferenced_session_wrappers(self):
+        driver = MagicMock()
+        driver.create.return_value.done = False
+        manager = Pty("sandbox", driver=driver)
+        session = manager.create(["/bin/sh"])
+        reference = weakref.ref(session)
+        del session
+        gc.collect()
+        self.assertIsNone(reference())
+        self.assertEqual(len(manager._sessions), 0)
 
     @patch("akernel_sdk.pty.load_backend")
     def test_manager_resolves_backend_for_detached_instance(self, load_backend):

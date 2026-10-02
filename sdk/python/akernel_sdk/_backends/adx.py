@@ -133,12 +133,14 @@ def _route_read_retryable(error: Exception) -> bool:
 
 
 def _command_result(value: Any) -> CommandResult:
-    if value.exit_code is None:
-        raise ValueError("command result did not include an exit code")
+    status = getattr(value, "status", None)
     return CommandResult(
         stdout=str(value.stdout),
         stderr=str(value.stderr),
-        exit_code=int(value.exit_code),
+        exit_code=int(value.exit_code) if value.exit_code is not None else None,
+        status=getattr(status, "value", status),
+        error_code=getattr(value, "error_code", None),
+        error_message=getattr(value, "error_message", None),
     )
 
 

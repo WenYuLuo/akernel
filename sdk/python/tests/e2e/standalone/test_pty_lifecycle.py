@@ -31,6 +31,24 @@ _RUNTIME = os.environ.get("AKERNEL_TEST_RUNTIME", "runsc")
 
 @unittest.skipUnless(_ENABLED, "set AKERNEL_RUN_INTEGRATION=1 and SDK credentials")
 class PtyLifecycleIntegrationTest(unittest.TestCase):
+    def test_completed_pty_sessions_do_not_accumulate(self):
+        sessions = []
+        with Sandbox(runtime=_RUNTIME, cpu=1000, memory=2048) as sandbox:
+            try:
+                for _ in range(100):
+                    session = sandbox.pty.create(
+                        command=("/bin/sh", "-c", "exit 7")
+                    )
+                    sessions.append(session)
+                    self.assertEqual(session.wait(timeout=10), 7)
+                self.assertEqual(len(sandbox.pty._sessions), 0)
+                self.assertEqual(
+                    sandbox.commands.run("printf PTY_READY").stdout, "PTY_READY"
+                )
+            finally:
+                for session in sessions:
+                    session.close()
+
     def test_close_terminates_guest_process_and_preserves_sandbox(self):
         marker = f"/tmp/akernel-pty-{uuid.uuid4().hex}.pid"
         with Sandbox(runtime=_RUNTIME, cpu=1000, memory=2048) as sandbox:

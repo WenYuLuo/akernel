@@ -370,11 +370,16 @@ Foreground commands return a backend-neutral `CommandResult`. Background
 commands return an AKernel `CommandHandle`; its lifecycle operations are
 delegated to the selected backend.
 
-With the default `openyuanrong-sandbox` backend, `handle.wait(timeout)` returns
+With the ADX backend, `handle.wait(timeout)` returns
 `CommandResult(exit_code=None, status="RUNNING", error_code="WAIT_TIMEOUT")`
 when the wait deadline expires. The command keeps running; a later `wait()` can
 observe its completion. `handle.kill()` and `sandbox.commands.kill(pid)` return
 `False` when the command does not exist or has already finished.
+
+PTY session wrappers are not retained by the factory after the caller releases
+them. A successful `wait()` also removes the completed session from its tracked
+sessions. A wait timeout keeps the session active; use `close()` or a context
+manager to terminate an interactive session explicitly.
 
 ## Filesystem
 
@@ -462,7 +467,7 @@ non-retryable errors, or an expired wait return `False`.
 
 Recovery points are local and follow the source sandbox lifecycle. They are
 created by sandbox workloads through RRT's internal `POST /checkpoint`
-endpoint on `/run/akernel/rrt.sock`. A successful request returns
+endpoint on `/run/akernel/execd.sock`. A successful request returns
 `{"status":"completed"}`; a concurrent checkpoint request returns HTTP 409.
 This Unix-socket protocol is experimental and is not a stable public AKernel
 SDK interface. The SDK deliberately does not expose checkpoint identifiers,

@@ -59,7 +59,7 @@ default.
 
 Sandbox checkpoints for runsc and Firecracker are local to the node. Checkpoint state is kept under the persistent
 `/home/akernel/adx/checkpoints` data mount. Workloads trigger an anonymous recovery
-point through `POST /checkpoint` on `/run/akernel/rrt.sock`, and the SDK can
+point through `POST /checkpoint` on `/run/akernel/execd.sock`, and the SDK can
 reload the same logical sandbox from the latest usable point. Recovery points
 follow the source sandbox lifecycle; they are not exposed as reusable SDK
 objects.

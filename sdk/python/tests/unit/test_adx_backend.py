@@ -108,6 +108,28 @@ class AdxBackendTest(unittest.TestCase):
         with self.assertRaisesRegex(BackendOperationError, "timed out"):
             driver.run("sleep 3", envs=None, cwd=None, timeout=1)
 
+    def test_wait_preserves_running_result_and_error_metadata(self):
+        native = MagicMock()
+        handle = native.run.return_value
+        handle.pid = 12
+        driver = adx._CommandsDriver(native)
+        driver.start("sleep 3", envs=None, cwd=None, stdin=False)
+        handle.wait.return_value = SimpleNamespace(
+            stdout="partial", stderr="", exit_code=None,
+            status=adx.adx_sandbox.CommandStatus.RUNNING,
+            error_code="WAIT_TIMEOUT", error_message="process remains running",
+        )
+        result = driver.wait(12, timeout=0.1)
+        self.assertIsNone(result.exit_code)
+        self.assertEqual(result.stdout, "partial")
+        self.assertEqual(result.status, "RUNNING")
+        self.assertEqual(result.error_code, "WAIT_TIMEOUT")
+        self.assertEqual(result.error_message, "process remains running")
+        handle.wait.return_value = SimpleNamespace(
+            stdout="finished", stderr="", exit_code=0
+        )
+        self.assertEqual(driver.wait(12, timeout=10).exit_code, 0)
+
     def test_reload_waits_for_new_data_route_without_repeating_reload(self):
         backend = adx.AdxBackend(self.config)
         native = MagicMock(id="default-worker")

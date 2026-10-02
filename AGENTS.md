@@ -366,7 +366,7 @@ with Sandbox(failover=True) as sb:
 The current functional integration deliberately leaves anonymous local
 checkpoint creation inside the workload through EXECD's internal Unix socket.
 The node sets `ADX_EXECD_CONTROL_SOCKET_PATH=/run/akernel`, making the socket
-available at `/run/akernel/rrt.sock`. Do not present that socket protocol as a
+available at `/run/akernel/execd.sock`. Do not present that socket protocol as a
 stable public SDK interface or add public checkpoint catalog methods to the
 SDK.
 
@@ -473,7 +473,7 @@ The bundled node enables ADX local recovery points and
 stores checkpoint state under the persistent `/home/akernel/adx/checkpoints`
 mount. EXECD receives
 `ADX_EXECD_CONTROL_SOCKET_PATH=/run/akernel` so sandbox workloads can trigger
-their local checkpoint handoff through `/run/akernel/rrt.sock`. Recovery points
+their local checkpoint handoff through `/run/akernel/execd.sock`. Recovery points
 follow the source sandbox lifecycle. The public SDK exposes only failover and
 reload, not checkpoint identifiers, restore, list, delete, or snapshot TTLs.
 Keep local-only snapshot mode and the persistent checkpoint directory
