@@ -66,7 +66,7 @@ Schedule 的沙箱日志搜索面板只查询 `adx-runtime` 主进程 stdout/std
 日志面板默认独立查看最近 6 小时，绝对时间选择仍生效；近期没有主进程输出时为空是正常情况。
 运行记录下拉候选来自所选时间范围内的原生资源采样 `runtime_id` 标签，
 可搜索 Sandbox ID 选择对应运行记录；缺少采样的运行记录通过 All 查看。
-关键词按原文包含关系匹配，区分大小写，留空不限制。运行 ID 仍为 Loki 结构化元数据，
+关键词按原文包含关系匹配，区分大小写，留空不限制。查询使用 `${log_search:doublequote}`，空关键词生成 `|= ""`，双引号关键词按字符串转义。运行 ID 仍为 Loki 结构化元数据，
 不增加逐实例索引；控制面日志仍可在 Loki Explore 查询。
 Collector 从文件采集完整记录并跟踪偏移，包含未压缩的滚动文件，不重复扫描
 压缩归档。单条组件日志上限为 64 KiB，压缩延迟为 300 秒。
@@ -82,11 +82,18 @@ runtime 主进程输出与通过 SDK 返回的 command stdout/stderr 是不同�
 三份看板同步自 ADX 子仓的
 `build/observability/grafana/dashboards/`；AKernel 保持相同查询表达式：
 
-- `adx-schedule`：CPU/内存/磁盘容量、预留、可用和分配率，实例数量与分布、队列、节点健康、沙箱日志搜索和 Trace。
+- `adx-schedule`：CPU/内存/磁盘调度容量、已分配和分配率，实例数量与分布、队列、节点健康、沙箱日志搜索和 Trace。
 - `adx-data-plane`：Ingress/Relay 数据面。
 - `adx-process-resources`：组件 CPU、内存、FD、线程。
 
-Schedule 增加“接口请求链路”列表，只查询 API Server/Ingress 的 HTTP 方法和接口模板 Span，避开
+节点健康、准入与资源采样状态以表格展示，每个环境、节点一行，附 CPU（核）、内存与磁盘调度容量和分配率；缺少观测
+显示 `Unknown`。Coordinator 使用 `node_id`，节点 Collector 的 `k8s_node_name`
+映射到同一节点标识；资源采样超过 45 秒后不作为当前状态（默认 15 秒采集）。
+调度容量对暂停准入节点计为 0；已分配仍包含可达节点上启动中与运行中的
+实例账本，暂停准入不会释放。集群分配率面板只计算可调度节点，不表示实际使用率。
+集群运行中沙箱趋势隐藏图例。容量趋势图仅展示调度容量与已分配。
+
+Schedule 增加`HTTP Request Traces`列表，只查询 API Server/Ingress 的 HTTP 方法和接口模板 Span，避开
 健康探测及其他非 HTTP Trace。列表只展示开始时间、接口、实际 Span 组件、响应状态、Span 耗时和 Trace ID 六列，
 过滤未识别的 `/unmatched` 接口及健康探测，不依赖上游根 Span 存在；点击 Trace ID 查看整条链路。
 表格每行是一个匹配的 HTTP Span，同一 Trace 的不同处理阶段可以出现多行。
@@ -99,7 +106,7 @@ Loki 的 `trace_id` 元数据字段提供 Tempo 跳转；历史 Span 保留历�
 
 ### Explore 查看接口链路
 
-ADX Schedule 顶部的 **Explore 接口查询** 直接打开原生 Tempo Explore，带入当前 `adx_env`，
+ADX Schedule 顶部的 **Explore Requests** 直接打开原生 Tempo Explore，带入当前 `adx_env`，
 默认查看最近 6 小时、50 条 Trace，每条最多显示 3 个匹配 Span；需要时在 Search Options 调整。
 预设使用 **Table Format → Spans**，选出接口名 `Name`、组件 `service.name`、
 `http.response.status_code` 和 Execd 的 `rpc.method`，不显示 Traces 表的 `nested` JSON。
@@ -147,3 +154,14 @@ Tempo trace、Grafana provisioning，以及 SDK 创建、命令和删除。
 Collector 配置校验或 Helm 渲染通过不能代替后端接收和真实 SDK 验收。
 
 本次集群部署与验收记录见 [2026-10-08 验收记录](observability-validation-20261008.md)。
+
+ADX Schedule 的标题、列名、图例、状态值和筛选说明统一使用英文。节点容量表列为
+`Node (Env / ID)`、`Reachability`、`Admission`、`Resource Sample`、
+`CPU Capacity (cores)`、`CPU Allocation`、`Memory Capacity`、
+`Memory Allocation`、`Disk Capacity`、`Disk Allocation`。
+
+节点表的 CPU、内存、磁盘分配率列使用横向条形及百分比显示，按可达节点的
+`reserved / capacity` 计算，包含启动中和运行中的实例。分母使用原始容量，
+暂停准入后仍能显示已有分配比例；容量列的调度容量为 0。原始容量为 0 或
+缺少观测时显示 `Unknown`。条形固定以 100% 为满格，超过 100% 的数值仍显示；
+低于 70% 为绿色，70%–90% 为黄色，达到 90% 为红色。分配率不是实际使用率。
