@@ -28,12 +28,14 @@ ARG FIRECRACKER_AMD64_URL
 ARG VIRTIOFSD_BUILD_IMAGE=rust:1.90.0-bookworm
 # virtiofsd v1.14.0, including the release Cargo.lock.
 ARG VIRTIOFSD_REVISION=c2540f8db14caba81c1e37fba23fc7bf2cd7f0dd
+# Upstream publishes the contrib 0.120.1 binary in the v0.120.0 archive.
 ARG OTELCOL_CONTRIB_VERSION=0.120.0
 ARG OTELCOL_CONTRIB_URL=https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${OTELCOL_CONTRIB_VERSION}/otelcol-contrib_${OTELCOL_CONTRIB_VERSION}_linux_amd64.tar.gz
+ARG OTELCOL_CONTRIB_SHA256=81bf885bc9a86705feb3c113c5a356571390e3601eb651ffcf2b3428f6571adb
 ARG AKERNEL_VERSION=unknown
 ARG AKERNEL_REVISION=unknown
-ARG ADX_RELEASE_URL=https://openyuanrong.obs.cn-southwest-2.myhuaweicloud.com/adx/daily/20260929023150-5e62b9f3fd57/linux/amd64/adx-release.tar.gz
-ARG ADX_RELEASE_SHA256=0afb22ba4c970d891a7271b09fca57906ef4fe84252e4106a04b8cf972bf2a31
+ARG ADX_RELEASE_URL=https://openyuanrong.obs.cn-southwest-2.myhuaweicloud.com/adx/daily/20261008024007-4d6d3f1bb88c/linux/amd64/adx-release.tar.gz
+ARG ADX_RELEASE_SHA256=8edb13837b8949493dba1e1e91cb80eb254370732a3e6538b6119253bb063aa5
 
 FROM ${AKERNEL_NODE_BASE_IMAGE} AS adx-release
 ARG ADX_RELEASE_URL
@@ -251,6 +253,7 @@ ARG RUNC_VERSION
 ARG FIRECRACKER_RELEASE
 ARG LIBNVIDIA_CONTAINER_VERSION
 ARG OTELCOL_CONTRIB_URL
+ARG OTELCOL_CONTRIB_SHA256
 ARG TARGETARCH
 ARG PIP_INDEX_URL=https://pypi.org/simple
 ENV DEBIAN_FRONTEND=noninteractive
@@ -349,6 +352,7 @@ RUN if [ "${AKERNEL_ENABLE_KATA}" = "true" ]; then \
 
 COPY ./builder/scripts/akernel-entrypoint.sh /usr/local/bin/akernel-entrypoint
 COPY ./builder/scripts/adx-service.sh /usr/local/bin/adx-service
+COPY ./builder/scripts/otel-collector-service.sh /usr/local/bin/otel-collector-service
 COPY ./builder/scripts/sandboxd_network_prepare.sh /usr/local/bin/sandboxd-network-prepare
 COPY ./builder/config/adx-standalone.yaml /etc/akernel/adx-standalone.yaml
 RUN chmod 0755 \
@@ -369,14 +373,18 @@ RUN if [ "${AKERNEL_ENABLE_RUNC}" = "true" ]; then \
     fi
 
 COPY ./builder/config/otel-collector-config.yaml /etc/akernel/otel_config.yaml
+RUN chmod 0755 /usr/local/bin/otel-collector-service
 COPY ./builder/config/logrotate.d/gvisor /etc/logrotate.d/gvisor
 COPY ./builder/scripts/*.sh /root/
 COPY ./builder/systemd_services/*.service /etc/systemd/system/
 
-RUN curl -fSL --retry 10 --retry-delay 2 --retry-all-errors \
-        "${OTELCOL_CONTRIB_URL}" \
-    | tar -xz -C /usr/local/bin otelcol-contrib && \
-    chmod 0755 /usr/local/bin/otelcol-contrib
+RUN set -eux; \
+    curl -fSL --retry 10 --retry-delay 2 --retry-all-errors \
+      "${OTELCOL_CONTRIB_URL}" -o /tmp/otelcol-contrib.tar.gz; \
+    echo "${OTELCOL_CONTRIB_SHA256}  /tmp/otelcol-contrib.tar.gz" | sha256sum -c -; \
+    tar -xzf /tmp/otelcol-contrib.tar.gz -C /usr/local/bin otelcol-contrib; \
+    chmod 0755 /usr/local/bin/otelcol-contrib; \
+    rm -f /tmp/otelcol-contrib.tar.gz
 
 RUN chmod 0644 /etc/logrotate.d/gvisor && \
     systemctl mask getty-static.service && \

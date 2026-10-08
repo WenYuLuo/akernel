@@ -649,3 +649,13 @@ image manager. The pinned distill-fs supports RAFS v5; use
 - Keep unrelated dirty files out of commits, especially local deployment state,
   generated binaries, Terraform state, kubeconfigs, tokens, and private
   registry configuration.
+
+## ADX observability
+
+Keep the node Collector configuration in `builder/config/` and the core
+chart synchronized. Collect node-local metrics and logs within the node
+container; control-role collectors read shared local logs. Copy the three ADX
+dashboards from the pinned ADX revision and preserve their UIDs and queries.
+Update `deploy/observability.md` whenever collection, labels, or log paths
+change. Validate backend receipt with real SDK requests, not Helm rendering
+alone.

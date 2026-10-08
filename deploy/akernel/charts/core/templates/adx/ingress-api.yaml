@@ -29,6 +29,7 @@ spec:
       labels:
         app: akernel-adx-ingress-api
       annotations:
+        checksum/otel-collector-config: {{ include (print $.Template.BasePath "/otel-configmap.yaml") . | sha256sum }}
         checksum/adx-config: {{ include (print $.Template.BasePath "/adx/configmap.yaml") . | sha256sum }}
     spec:
       {{- with .Values.imagePullSecrets }}
@@ -82,6 +83,10 @@ spec:
           resources:
             {{- toYaml .Values.adx.ingressApi.resources | nindent 12 }}
           volumeMounts:
+            {{- if or .Values.monitoring.prometheusEndpoint .Values.monitoring.lokiEndpoint .Values.monitoring.tempoEndpoint }}
+            - name: adx-logs
+              mountPath: /home/akernel/adx/run/ingress-api/logs
+            {{- end }}
             - name: config
               mountPath: /etc/akernel/adx-ingress-api.yaml
               subPath: ingress-api.yaml
@@ -89,7 +94,43 @@ spec:
             - name: credentials
               mountPath: /etc/adx
               readOnly: true
+        {{- if or .Values.monitoring.prometheusEndpoint .Values.monitoring.lokiEndpoint .Values.monitoring.tempoEndpoint }}
+        - name: otel-collector
+          image: "{{ include "core.image" (dict "root" . "image" .Values.coordinator.image) }}"
+          imagePullPolicy: {{ include "core.image.pullPolicy" (dict "root" . "image" .Values.coordinator.image) }}
+          command: [/usr/local/bin/otelcol-contrib]
+          args: [--config=/etc/otel/control.yaml]
+          env:
+            - {name: ADX_METRICS_TARGET, value: "127.0.0.1:18080"}
+            - {name: ADX_METRICS_COMPONENT, value: adx-ingress}
+            - {name: AKERNEL_ENV, value: {{ .Values.monitoring.akernelEnv | default "default" | quote }}}
+            - {name: PROMETHEUS_ENDPOINT, value: {{ .Values.monitoring.prometheusEndpoint | quote }}}
+            - {name: LOKI_ENDPOINT, value: {{ .Values.monitoring.lokiEndpoint | quote }}}
+            - {name: TEMPO_ENDPOINT, value: {{ .Values.monitoring.tempoEndpoint | quote }}}
+            - name: NODE_NAME
+              valueFrom: {fieldRef: {fieldPath: spec.nodeName}}
+            - name: POD_NAME
+              valueFrom: {fieldRef: {fieldPath: metadata.name}}
+            - name: POD_NAMESPACE
+              valueFrom: {fieldRef: {fieldPath: metadata.namespace}}
+          resources:
+            requests: {cpu: 100m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+          volumeMounts:
+            - {name: adx-logs, mountPath: /logs, readOnly: true}
+            - {name: collector-state, mountPath: /collector-state}
+            - {name: otel-config, mountPath: /etc/otel, readOnly: true}
+        {{- end }}
       volumes:
+        {{- if or .Values.monitoring.prometheusEndpoint .Values.monitoring.lokiEndpoint .Values.monitoring.tempoEndpoint }}
+        - name: adx-logs
+          emptyDir: {}
+        - name: collector-state
+          emptyDir: {}
+        - name: otel-config
+          configMap:
+            name: akernel-otel-collector-config
+        {{- end }}
         - name: config
           configMap:
             name: akernel-adx-config

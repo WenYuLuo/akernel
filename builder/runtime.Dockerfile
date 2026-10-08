@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 ARG AKERNEL_RUNTIME_BASE_IMAGE=ubuntu:24.04
-ARG ADX_EXECD_URL=https://openyuanrong.obs.cn-southwest-2.myhuaweicloud.com/adx/daily/20260929023150-5e62b9f3fd57/linux/amd64/adx-execd.tar.gz
-ARG ADX_EXECD_SHA256=98a9870af612a059e8c31469b18a8b3368b13844165f696f85cca7ef11010fcd
+ARG ADX_EXECD_URL=https://openyuanrong.obs.cn-southwest-2.myhuaweicloud.com/adx/daily/20261008024007-4d6d3f1bb88c/linux/amd64/adx-execd.tar.gz
+ARG ADX_EXECD_SHA256=cfeb04b54e3daa0db78d7e5088e51060167134dae430d941b8bef83fafb6c497
 
 FROM ${AKERNEL_RUNTIME_BASE_IMAGE} AS adx-execd
 ARG ADX_EXECD_URL

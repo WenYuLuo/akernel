@@ -56,6 +56,9 @@ Built-in OpenTelemetry (OTEL) integration provides complete observability out of
 - **Dashboards**: Pre-configured Grafana dashboards for real-time cluster monitoring
 - **Tracing & Logging**: End-to-end request tracing and centralized log aggregation
 
+See [ADX collection configuration](./deploy/observability.md) for node-local
+Collector wiring, log paths, trace settings and the imported ADX dashboards.
+
 ## Quick Start
 
 ### Quick Navigation

@@ -98,8 +98,12 @@ receivers:
         from: attributes.extra
         to: attributes["structured.fields"]
 
-  # gVisor glog-style runtime logs. Rotated gzip files stay local and are not
-  # ingested again.
+  # ─────────────────────────────────────────────────────────────────────
+  # filelog/runsc: gVisor glog-style runtime logs
+  # The active file is shared by runsc create, boot, and gofer processes.
+  # Rotated gzip files are retained locally for debugging and are not read
+  # again by the collector.
+  # ─────────────────────────────────────────────────────────────────────
   filelog/runsc:
     include:
       - /home/akernel/logs/runsc/runsc.log
@@ -137,18 +141,107 @@ receivers:
         from: attributes.body
         to: body
 
+  prometheus/adx:
+    config:
+      scrape_configs:
+        - job_name: adxlet
+          scrape_interval: 15s
+          static_configs:
+            - targets: [127.0.0.1:19091]
+              labels: {component_name: adxlet}
+        - job_name: adx-relay
+          scrape_interval: 15s
+          static_configs:
+            - targets: [127.0.0.1:18443]
+              labels: {component_name: adx-relay}
+
+  hostmetrics/process:
+    collection_interval: 15s
+    scrapers:
+      process:
+        include:
+          names: ["^(sandboxd|adxctl|redis-server|otelcol-contrib)$"]
+          match_type: regexp
+        mute_process_exe_error: true
+        mute_process_io_error: true
+        mute_process_user_error: true
+        metrics:
+          process.open_file_descriptors: {enabled: true}
+          process.threads: {enabled: true}
+          process.uptime: {enabled: true}
+
+  filelog/runtime:
+    include:
+      - /home/akernel/adx/run/node/logs/runtime/*.out
+      - /home/akernel/adx/run/node/logs/runtime/*.err
+    start_at: beginning
+    storage: file_storage
+    include_file_name: true
+    include_file_path: true
+    operators:
+      - type: regex_parser
+        parse_from: attributes["log.file.name"]
+        regex: '^(?P<runtime_id>.+)\.(?P<stream>out|err)$'
+      - type: add
+        field: resource["service.name"]
+        value: adx-runtime
+      - type: add
+        field: resource["component_name"]
+        value: adx-runtime
+
   filelog/adx:
     include:
       - /home/akernel/adx/run/node/logs/*.log
-    exclude:
-      - "**/*.gz"
-    start_at: end
+      - /home/akernel/adx/run/node/logs/*.log.[0-9]*
+    exclude: ["**/*.gz", "**/*.tmp"]
+    start_at: beginning
+    storage: file_storage
+    include_file_name: true
+    include_file_path: true
+    fingerprint_size: 128
+    max_log_size: 1MiB
+    retry_on_failure: {enabled: true, max_elapsed_time: 0s}
     operators:
-      - type: add
-        field: resource["service.name"]
-        value: akernel
+      - type: json_parser
+        if: "body matches '^[[:space:]]*[{]'"
+        parse_to: body
+        on_error: send
+      - type: regex_parser
+        parse_from: attributes["log.file.name"]
+        regex: '^(?P<component_name>.+)\.log(?:\.[0-9]{20})?$'
+      - type: move
+        from: attributes.component_name
+        to: resource["component_name"]
+      - type: copy
+        from: resource["component_name"]
+        to: resource["service.name"]
+
+extensions:
+  file_storage:
+    directory: ${env:ADX_COLLECTOR_STATE:-/home/akernel/otel/state}
+    create_directory: true
 
 processors:
+  transform/adx_log_body:
+    error_mode: ignore
+    log_statements:
+    - context: log
+      conditions:
+      - IsMap(body) and IsMap(body["fields"]) and (IsString(body["fields"]["message"]) or IsString(body["fields"]["event"]))
+      statements:
+      - merge_maps(attributes, body, "upsert")
+      - merge_maps(attributes, body["fields"], "upsert")
+      - delete_key(attributes, "fields")
+      - set(severity_text, attributes["level"]) where IsString(attributes["level"])
+      - set(severity_number, SEVERITY_NUMBER_TRACE) where severity_text == "TRACE"
+      - set(severity_number, SEVERITY_NUMBER_DEBUG) where severity_text == "DEBUG"
+      - set(severity_number, SEVERITY_NUMBER_INFO) where severity_text == "INFO"
+      - set(severity_number, SEVERITY_NUMBER_WARN) where severity_text == "WARN"
+      - set(severity_number, SEVERITY_NUMBER_ERROR) where severity_text == "ERROR"
+      - set(time, Time(attributes["timestamp"], "%Y-%m-%dT%H:%M:%S.%fZ")) where IsString(attributes["timestamp"])
+      - set(body, attributes["event"]) where not IsString(attributes["message"]) and IsString(attributes["event"])
+      - set(body, attributes["message"]) where IsString(attributes["message"])
+      - delete_key(attributes, "message")
   batch:
     timeout: 5s
     send_batch_size: 200
@@ -159,10 +252,38 @@ processors:
     spike_limit_mib: 512
     check_interval: 5s
 
+  transform/adx:
+    error_mode: ignore
+    log_statements:
+      - context: resource
+        statements:
+          - set(attributes["component_name"], "adx-coordinator") where attributes["component_name"] == "coordinator"
+          - set(attributes["component_name"], "adx-apiserver") where attributes["component_name"] == "apiserver"
+          - set(attributes["component_name"], "adx-ingress") where attributes["component_name"] == "ingress"
+          - set(attributes["component_name"], "adx-relay") where attributes["component_name"] == "relay"
+          - set(attributes["service.name"], attributes["component_name"]) where attributes["component_name"] != nil
+    metric_statements:
+      - context: resource
+        statements:
+          - set(attributes["component_name"], attributes["process.executable.name"]) where attributes["process.executable.name"] != nil
+          - delete_key(attributes, "process.command_line")
+
   resource:
     attributes:
       - key: akernel_env
         value: ${env:AKERNEL_ENV:-default}
+        action: upsert
+      - key: adx_env
+        value: ${env:AKERNEL_ENV:-default}
+        action: upsert
+      - key: k8s.namespace.name
+        value: ${env:POD_NAMESPACE:-standalone}
+        action: upsert
+      - key: k8s.pod.name
+        value: ${env:POD_NAME:-standalone}
+        action: upsert
+      - key: k8s.node.name
+        value: ${env:NODE_NAME:-standalone}
         action: upsert
 
 exporters:
@@ -184,6 +305,7 @@ exporters:
       enabled: true
 
 service:
+  extensions: [file_storage]
   telemetry:
     logs:
       level: info
@@ -198,14 +320,14 @@ service:
 
   pipelines:
     logs:
-      receivers: [filelog/adx, filelog/distillfs, filelog/sandboxd, filelog/runsc, otlp]
-      processors: [memory_limiter, resource, batch]
+      receivers: [filelog/adx, filelog/runtime, filelog/distillfs, filelog/sandboxd, filelog/runsc, otlp]
+      processors: [memory_limiter, resource, transform/adx, transform/adx_log_body, batch]
       exporters: [otlphttp/loki]
     traces:
       receivers: [otlp]
       processors: [memory_limiter, resource, batch]
       exporters: [otlp/tempo]
     metrics:
-      receivers: [otlp]
-      processors: [memory_limiter, resource, batch]
+      receivers: [otlp, prometheus/adx, hostmetrics/process]
+      processors: [memory_limiter, resource, transform/adx, batch]
       exporters: [prometheusremotewrite]

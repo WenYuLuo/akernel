@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 import unittest
 from pathlib import Path
 
@@ -12,6 +13,40 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class RuntimeContractTest(unittest.TestCase):
+    def assert_artifact_pin(self, dockerfile: str, component: str) -> str:
+        prefix = "ADX_RELEASE" if component == "release" else "ADX_EXECD"
+        urls = re.findall(rf"^ARG {prefix}_URL=(.+)$", dockerfile, re.MULTILINE)
+        checksums = re.findall(
+            rf"^ARG {prefix}_SHA256=(.+)$", dockerfile, re.MULTILINE
+        )
+        self.assertEqual(len(urls), 1, f"missing or duplicate {prefix}_URL pin")
+        self.assertEqual(
+            len(checksums), 1, f"missing or duplicate {prefix}_SHA256 pin"
+        )
+        self.assertRegex(
+            urls[0],
+            rf"^https://openyuanrong\.obs\.cn-southwest-2\.myhuaweicloud\.com/"
+            rf"adx/daily/[0-9]{{14}}-[0-9a-f]{{12}}/linux/amd64/"
+            rf"adx-{component}\.tar\.gz$",
+        )
+        self.assertRegex(checksums[0], r"^[0-9a-f]{64}$")
+        self.assertIn(
+            f'"${{{prefix}_URL}}" -o /tmp/adx-{component}.tar.gz', dockerfile
+        )
+        self.assertIn(
+            f'echo "${{{prefix}_SHA256}}  /tmp/adx-{component}.tar.gz" '
+            "| sha256sum -c -;",
+            dockerfile,
+        )
+        return urls[0].rsplit("/", 1)[0]
+
+    def assert_matching_artifact_pins(self, node: str, runtime: str) -> None:
+        self.assertEqual(
+            self.assert_artifact_pin(node, "release"),
+            self.assert_artifact_pin(runtime, "execd"),
+            "Node and Execd archives must come from the same ADX build",
+        )
+
     def test_node_service_inherits_deployment_configuration(self) -> None:
         unit = (ROOT / "builder/systemd_services/adx.service").read_text()
         inherited = {
@@ -68,28 +103,8 @@ class RuntimeContractTest(unittest.TestCase):
     def test_dockerfiles_install_the_pinned_obs_release(self) -> None:
         node = (ROOT / "builder/node.Dockerfile").read_text(encoding="utf-8")
         runtime = (ROOT / "builder/runtime.Dockerfile").read_text(encoding="utf-8")
-        release_url = (
-            "https://openyuanrong.obs.cn-southwest-2.myhuaweicloud.com/adx/"
-            "daily/20260929023150-5e62b9f3fd57/linux/amd64/adx-release.tar.gz"
-        )
-        release_sha256 = (
-            "0afb22ba4c970d891a7271b09fca57906ef4fe84252e4106a04b8cf972bf2a31"
-        )
-        execd_url = (
-            "https://openyuanrong.obs.cn-southwest-2.myhuaweicloud.com/adx/"
-            "daily/20260929023150-5e62b9f3fd57/linux/amd64/adx-execd.tar.gz"
-        )
-        execd_sha256 = (
-            "98a9870af612a059e8c31469b18a8b3368b13844165f696f85cca7ef11010fcd"
-        )
-        self.assertIn(release_url, node)
-        self.assertIn(release_sha256, node)
+        self.assert_matching_artifact_pins(node, runtime)
         self.assertIn("install.sh", node)
-        self.assertIn("sha256sum -c", node)
-
-        self.assertIn(execd_url, runtime)
-        self.assertIn(execd_sha256, runtime)
-        self.assertIn("sha256sum -c", runtime)
         self.assertNotIn("adx-release.tar.gz", runtime)
         self.assertNotIn("install.sh", runtime)
 
@@ -97,6 +112,49 @@ class RuntimeContractTest(unittest.TestCase):
         self.assertFalse((ROOT / "builder/scripts/fetch_adx_release.py").exists())
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
         self.assertNotIn("ADX_RELEASE_ARCHIVE", makefile)
+
+    def test_artifact_contract_rejects_unpinned_or_mismatched_builds(self) -> None:
+        node = (ROOT / "builder/node.Dockerfile").read_text(encoding="utf-8")
+        runtime = (ROOT / "builder/runtime.Dockerfile").read_text(encoding="utf-8")
+        mutations = {
+            "mutable URL": re.sub(
+                r"daily/[0-9]{14}-[0-9a-f]{12}", "daily/latest", node
+            ),
+            "missing checksum": re.sub(
+                r"^ARG ADX_RELEASE_SHA256=.+\n", "", node, flags=re.MULTILINE
+            ),
+            "invalid checksum": re.sub(
+                r"^ARG ADX_RELEASE_SHA256=.+$",
+                "ARG ADX_RELEASE_SHA256=invalid",
+                node,
+                flags=re.MULTILINE,
+            ),
+            "mismatched build": re.sub(
+                r"daily/[0-9]{14}-[0-9a-f]{12}",
+                "daily/20000101000000-000000000000",
+                node,
+            ),
+            "unchecked checksum": node.replace("| sha256sum -c -;", "| cat;"),
+        }
+        for name, mutated_node in mutations.items():
+            with self.subTest(name=name), self.assertRaises(AssertionError):
+                self.assert_matching_artifact_pins(mutated_node, runtime)
+
+    def test_collector_archive_is_checksum_pinned_before_extraction(self) -> None:
+        node = (ROOT / "builder/node.Dockerfile").read_text(encoding="utf-8")
+        self.assertRegex(
+            node, r"(?m)^ARG OTELCOL_CONTRIB_SHA256=[0-9a-f]{64}$"
+        )
+        self.assertIn('"${OTELCOL_CONTRIB_URL}" -o /tmp/otelcol-contrib.tar.gz;', node)
+        self.assertIn(
+            'echo "${OTELCOL_CONTRIB_SHA256}  /tmp/otelcol-contrib.tar.gz" '
+            "| sha256sum -c -;",
+            node,
+        )
+        self.assertLess(
+            node.index('echo "${OTELCOL_CONTRIB_SHA256}'),
+            node.index("tar -xzf /tmp/otelcol-contrib.tar.gz"),
+        )
 
     def test_node_image_copies_from_the_verified_install_tree(self) -> None:
         node = (ROOT / "builder/node.Dockerfile").read_text(encoding="utf-8")

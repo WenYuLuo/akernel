@@ -8,6 +8,9 @@ AKernel ships in three deployment modes. Pick the one that matches your target.
 | **Kubernetes (Helm)** | Existing K8s cluster | [`akernel/`](./akernel/) |
 | **Multi-Cloud (Terraform)** | Alibaba Cloud ACK / Huawei Cloud CCE | [`terraform/`](./terraform/) |
 
+See [ADX observability](./observability.md) for local Collector configuration,
+metrics, logs, traces and Grafana dashboards.
+
 ## Guided deployment
 
 The image installs the complete gVisor bundle pinned by sandboxd's runtime manifest: runsc, the containerd shim, and adjacent `gvisor-bin/` helpers. Its SHA-512 verifies the archive, not a standalone runsc binary. Keep these executables together when building custom images; replacing only runsc can leave mismatched checkpoint/restore helpers.
@@ -36,6 +39,13 @@ AKernel then builds its own runtime rootfs with that binary; the prebuilt ADX
 runtime image is not copied into the all-in-one image. When advancing ADX,
 update `ADX_RELEASE_URL` and `ADX_RELEASE_SHA256` in `builder/node.Dockerfile`,
 and `ADX_EXECD_URL` and `ADX_EXECD_SHA256` in `builder/runtime.Dockerfile`.
+Keep both archives on the same immutable OBS build directory. The CI release
+contract reads these Dockerfile pins and checks the URL format, SHA-256 pins,
+checksum verification commands, and matching builds; tests do not duplicate
+the selected release's version or checksum.
+The Collector archive URL and SHA-256 are also pinned in `builder/node.Dockerfile`.
+Upstream's `v0.120.0` archive contains the Collector Contrib `0.120.1` binary;
+the download tag and archive name use `0.120.0`, not the binary's version.
 The published release is linux/amd64, so `make build` explicitly targets
 `linux/amd64`; Mac ARM builds require Docker's amd64 emulation.
 
