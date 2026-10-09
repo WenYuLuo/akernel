@@ -63,7 +63,9 @@ class MixedProfileTest(unittest.TestCase):
             def __init__(self, name):
                 self.id = name
                 self.content = ""
-                self.files = SimpleNamespace(write=self.write, read=lambda _path: self.content)
+                self.files = SimpleNamespace(
+                    write=self.write, read=lambda _path: self.content
+                )
                 self.commands = SimpleNamespace(run=self.command)
 
             def write(self, _path, content):

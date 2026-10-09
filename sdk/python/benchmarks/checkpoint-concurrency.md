@@ -32,8 +32,9 @@ ADX API/PTY 修复已发布至 `community/refactor` 的 `aac7bfd`。
 四个节点均就绪。API Server 限额 8 CPU / 1 GiB；客户端限额 4 CPU / 2 GiB。
 每种 profile 准备三个常驻服务沙箱和 N 个 checkpoint 沙箱，每个请求
 1 CPU / 2 GiB，checkpoint 实例另请求 256 MiB 存储。测试镜像沿用固定 SWR
-OCI digest；入口使用正常 TLS 证书校验。实际集群运行的驱动 SHA256 与本分支
-`mixed_profile.py` 文件一致。
+OCI digest；入口使用正常 TLS 证书校验。实际集群运行的驱动 SHA256 与
+`cd5a94d` 的 `mixed_profile.py` 文件一致。接入 PR 时仅修正超长行格式，
+没有改变运行逻辑；修正后的 Ruff 与 35 项驱动测试均通过。
 
 ## 结果
 

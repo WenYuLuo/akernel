@@ -355,8 +355,12 @@ def main() -> None:
     parser.add_argument("--profile", choices=tuple(PROFILES), default="interactive")
     parser.add_argument("--duration", type=float, default=30)
     parser.add_argument("--target-rps", type=float, default=2)
-    parser.add_argument("--checkpoint-concurrency", type=int, default=1,
-                        help="independent checkpoint Sandboxes and maximum in-flight transactions")
+    parser.add_argument(
+        "--checkpoint-concurrency",
+        type=int,
+        default=1,
+        help="independent checkpoint Sandboxes and maximum in-flight transactions",
+    )
     parser.add_argument("--runtime", default="runsc")
     parser.add_argument("--image", default=os.getenv("AKERNEL_TEST_HTTP_IMAGE", ""))
     parser.add_argument("--port", type=int, default=18081)
@@ -407,8 +411,10 @@ def main() -> None:
             "error": safe_error(error),
         }
     _write_result(args.output, result)
-    print(f"mixed profile status={result['status']} "
-          f"target_load_met={result.get('target_load_met', False)} result={args.output}")
+    print(
+        f"mixed profile status={result['status']} "
+        f"target_load_met={result.get('target_load_met', False)} result={args.output}"
+    )
     if result["status"] != "passed":
         raise SystemExit(1)
 
