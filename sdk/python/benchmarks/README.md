@@ -6,6 +6,30 @@
 
 ## 1. 测什么、放在哪一层
 
+七类复合负载支持 `--checkpoint-concurrency N`，默认 1。它同时控制
+checkpoint 类的客户端在途数和独立 Sandbox 池大小；每个 worker 独占一个
+Sandbox 完成 checkpoint、reload 和文件回滚验证，结束或失败后归还。
+普通 command / HTTP / file / lifecycle / PTY / tunnel 保留原在途上限。
+例如在具备相应 CPU、内存和存储容量的测试集群中执行：
+
+```bash
+PYTHONPATH=sdk/python python -m benchmarks.mixed_profile \
+  --profile io-heavy --duration 120 --target-rps 10 \
+  --checkpoint-concurrency 12 --runtime runsc \
+  --image "$AKERNEL_TEST_HTTP_IMAGE" --output out/mixed-io-heavy.json
+```
+
+本例准备 3 个常驻服务 Sandbox 和 12 个 checkpoint Sandbox，每个请求
+1 CPU / 2 GiB，checkpoint 实例还请求 256 MiB 存储。提高并发会增加
+真实资源消耗，需先确认集群可准入。默认单路模式适合与历史结果比较。
+JSON 的 `status` 表示已提交事务及清理是否成功；`target_load_met` 仅在各类
+均有提交、零执行失败、零 `rejected_inflight` 和零 `missed_deadline` 时为 true。
+这表示计划到达槽位均成功执行，不是产品容量 SLA。总时长包含在途 drain，
+成功吞吐应按实际 `duration_seconds` 计算，并单列客户端未提交数量。
+
+独立沙箱池的 cn-north-4 短时验证、制品身份及未达标项见
+[checkpoint 并发压力验证](checkpoint-concurrency.md)。
+
 以 AKernel 公开 SDK → Edge/API Server → ADX Master/Node Manager → sandboxd/RRT
 的真实端到端操作为验收对象。调度库、Redis、网关独立基准用于解释瓶颈，不能替代端到端结果。
 

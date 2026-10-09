@@ -3,6 +3,7 @@
 import argparse
 import itertools
 import os
+import queue
 import re
 import socketserver
 import threading
@@ -53,8 +54,8 @@ PROFILES = {
     },
 }
 
-# Each logical class has its own in-flight budget. Checkpoint is serialized
-# because it rewinds its dedicated Sandbox while other classes continue.
+# Each logical class has its own in-flight budget. Each checkpoint worker owns
+# a separate Sandbox so reload cannot rewind another worker's operation.
 CLASS_LIMITS = {
     "command": 4,
     "http": 4,
@@ -75,12 +76,16 @@ def run_profile(
     duration: float,
     target_rps: float,
     operations: dict,
+    checkpoint_concurrency: int = 1,
 ) -> dict:
     """Run all seven logical classes concurrently and retain per-class results."""
     if profile not in PROFILES:
         raise ValueError(f"unknown mixed profile: {profile}")
     if duration <= 0 or target_rps <= 0:
         raise ValueError("duration and target_rps must be positive")
+    if checkpoint_concurrency < 1:
+        raise ValueError("checkpoint_concurrency must be positive")
+    limits = {**CLASS_LIMITS, "checkpoint": checkpoint_concurrency}
     missing = set(PROFILES[profile]) - set(operations)
     if missing:
         raise ValueError(f"missing operations: {', '.join(sorted(missing))}")
@@ -109,13 +114,13 @@ def run_profile(
         arrivals = run_open_loop(
             duration=duration,
             target_rps=target_rps * weight / 100,
-            max_inflight=CLASS_LIMITS[name],
+            max_inflight=limits[name],
             operation=operation,
         )
         return name, {
             "weight_percent": weight,
             "target_rps": target_rps * weight / 100,
-            "max_inflight": CLASS_LIMITS[name],
+            "max_inflight": limits[name],
             "arrival": vars(arrivals),
             "succeeded": succeeded,
             "failed": failed,
@@ -143,12 +148,19 @@ def run_profile(
         ),
         "profile": profile,
         "target_rps": target_rps,
+        "target_load_met": all(
+            result["arrival"]["rejected_inflight"] == 0
+            and result["arrival"]["missed_deadline"] == 0
+            and result["failed"] == 0
+            and result["arrival"]["submitted"] > 0
+            for result in classes.values()
+        ),
         "classes": classes,
     }
 
 
 class _MixedFixtures:
-    """Own four independent Sandboxes and the two network services."""
+    """Own three serving Sandboxes, a checkpoint pool and two network services."""
 
     def __init__(
         self,
@@ -159,6 +171,7 @@ class _MixedFixtures:
         port: int,
         socket_path: str,
         profile: str,
+        checkpoint_concurrency: int = 1,
     ) -> None:
         self.run_id = run_id
         self.runtime = runtime
@@ -168,7 +181,10 @@ class _MixedFixtures:
         self.profile = profile
         self._stack = ExitStack()
         self._sequences = {name: itertools.count() for name in CLASS_LIMITS}
-        self._checkpoint_lock = threading.Lock()
+        if checkpoint_concurrency < 1:
+            raise ValueError("checkpoint_concurrency must be positive")
+        self.checkpoint_concurrency = checkpoint_concurrency
+        self._checkpoint_pool: queue.Queue = queue.Queue(maxsize=checkpoint_concurrency)
         self._cleanup_errors: list[str] = []
 
     def __enter__(self):
@@ -222,17 +238,18 @@ class _MixedFixtures:
             self._tunnel_marker = marker
             self._wait_ready(lambda: probe_guest(self.tunnel_sandbox, marker))
 
-            self.checkpoint_sandbox = self._stack.enter_context(
-                Sandbox(
-                    image=self.image,
-                    runtime=self.runtime,
-                    cpu=1000,
-                    memory=2048,
-                    storage_mb=256,
-                    failover=True,
+            for _ in range(self.checkpoint_concurrency):
+                sandbox = self._stack.enter_context(
+                    Sandbox(
+                        image=self.image,
+                        runtime=self.runtime,
+                        cpu=1000,
+                        memory=2048,
+                        storage_mb=256,
+                        failover=True,
+                    )
                 )
-            )
-            self._checkpoint_id = self.checkpoint_sandbox.id
+                self._checkpoint_pool.put(sandbox)
         except Exception:
             self._stack.close()
             raise
@@ -307,26 +324,30 @@ class _MixedFixtures:
         probe_guest(self.tunnel_sandbox, self._tunnel_marker)
 
     def checkpoint(self) -> None:
-        with self._checkpoint_lock:
+        sandbox = self._checkpoint_pool.get()
+        try:
+            original_id = sandbox.id
             sequence = next(self._sequences["checkpoint"])
             path = f"/tmp/mixed-checkpoint-{self.run_id}"
             marker = f"MIXED_CP_{self.run_id}_{sequence}"
             content = marker + "K" * CHECKPOINT_BYTES[self.profile]
-            self.checkpoint_sandbox.files.write(path, content)
-            result = self.checkpoint_sandbox.commands.run(
+            sandbox.files.write(path, content)
+            result = sandbox.commands.run(
                 checkpoint_command(self.socket_path), timeout=300
             )
             if result.exit_code != 0:
                 raise AssertionError("mixed checkpoint command failed")
             verify_checkpoint_response(result.stdout)
-            self.checkpoint_sandbox.files.write(path, "after-checkpoint")
-            if not self.checkpoint_sandbox.reload():
+            sandbox.files.write(path, "after-checkpoint")
+            if not sandbox.reload():
                 raise AssertionError("mixed reload returned false")
             if (
-                self.checkpoint_sandbox.id != self._checkpoint_id
-                or self.checkpoint_sandbox.files.read(path) != content
+                sandbox.id != original_id
+                or sandbox.files.read(path) != content
             ):
                 raise AssertionError("mixed checkpoint restore mismatch")
+        finally:
+            self._checkpoint_pool.put(sandbox)
 
 
 def main() -> None:
@@ -334,6 +355,8 @@ def main() -> None:
     parser.add_argument("--profile", choices=tuple(PROFILES), default="interactive")
     parser.add_argument("--duration", type=float, default=30)
     parser.add_argument("--target-rps", type=float, default=2)
+    parser.add_argument("--checkpoint-concurrency", type=int, default=1,
+                        help="independent checkpoint Sandboxes and maximum in-flight transactions")
     parser.add_argument("--runtime", default="runsc")
     parser.add_argument("--image", default=os.getenv("AKERNEL_TEST_HTTP_IMAGE", ""))
     parser.add_argument("--port", type=int, default=18081)
@@ -352,6 +375,8 @@ def main() -> None:
             raise ValueError("HTTP OCI image and valid port are required")
         if not args.socket_path.startswith("/"):
             raise ValueError("checkpoint socket must be absolute")
+        if args.checkpoint_concurrency < 1:
+            raise ValueError("checkpoint_concurrency must be positive")
         with _MixedFixtures(
             run_id=args.run_id,
             runtime=args.runtime,
@@ -359,12 +384,14 @@ def main() -> None:
             port=args.port,
             socket_path=args.socket_path,
             profile=args.profile,
+            checkpoint_concurrency=args.checkpoint_concurrency,
         ) as fixtures:
             result = run_profile(
                 profile=args.profile,
                 duration=args.duration,
                 target_rps=args.target_rps,
                 operations=fixtures.operations(),
+                checkpoint_concurrency=args.checkpoint_concurrency,
             )
         result["run_id"] = args.run_id
         result["runtime"] = args.runtime
@@ -380,7 +407,8 @@ def main() -> None:
             "error": safe_error(error),
         }
     _write_result(args.output, result)
-    print(f"mixed profile status={result['status']} result={args.output}")
+    print(f"mixed profile status={result['status']} "
+          f"target_load_met={result.get('target_load_met', False)} result={args.output}")
     if result["status"] != "passed":
         raise SystemExit(1)
 
