@@ -31,20 +31,21 @@ make print-env
 make e2e
 ```
 
-The node image downloads the pinned ADX `v0.1.0rc1` Linux AMD64 release from
-[GitHub Releases](https://github.com/openJiuwen-ai/agent-dx/releases/tag/v0.1.0rc1),
-verifies the archive SHA-256, and runs the release's own `install.sh`, which
-verifies its internal manifest before installation. The runtime build downloads
-the separately published `adx-execd` component archive and verifies its SHA-256.
-AKernel then builds its own runtime rootfs with that binary; the prebuilt ADX
-runtime image is not copied into the all-in-one image. When advancing ADX,
-update `ADX_VERSION` in both Dockerfiles, `ADX_RELEASE_SHA256` in
-`builder/node.Dockerfile`, and `ADX_EXECD_SHA256` in `builder/runtime.Dockerfile`.
-The download URLs derive the tag and archive name from `ADX_VERSION`.
-Keep both archives on the same release tag and architecture. The CI release
-contract reads these Dockerfile pins and checks the URL format, SHA-256 pins,
-checksum verification commands, and matching releases; tests do not duplicate
-the selected release's version or checksum.
+The node image installs the ADX `v0.1.0rc1` Linux AMD64 package from
+[Buildkite #152](https://buildkite.com/agent-dx/agent-dx/builds/152), commit
+`9a7924658fbcf04a34d76bfcecb0935ed850923a`. Both Dockerfiles pin the immutable
+OBS build path and archive SHA-256. The node build runs the release's
+`install.sh`, which also verifies its internal manifest. The runtime build
+uses the independent `adx-execd` archive from the same build to produce
+AKernel's own runtime rootfs; it does not use the prebuilt ADX runtime image.
+The refreshed platform release retains `v0.1.0rc1`; the SDK dependency is
+`adx-sandbox==0.1.0rc2` from the configured Python package index.
+
+When advancing ADX, update the URL, checksum and `ADX_VERSION` in both
+Dockerfiles together. The CI contract checks matching build paths and release
+labels, immutable URL format, checksum pins and verification commands. A
+release tag alone is insufficient to identify a refreshed prerelease archive.
+
 The Collector archive URL and SHA-256 are also pinned in `builder/node.Dockerfile`.
 Upstream's `v0.120.0` archive contains the Collector Contrib `0.120.1` binary;
 the download tag and archive name use `0.120.0`, not the binary's version.
