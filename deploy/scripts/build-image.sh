@@ -14,13 +14,12 @@ repository=""
 tag=""
 env_name=""
 runtime_image=""
-runtime_profile="${RUNTIME_PROFILE:-rrt}"
 runtime_versions_file="${ROOT}/src/sandboxd/third_party/runtime-versions.env"
 distill_fs_versions_file="${ROOT}/builder/distill-fs-versions.env"
-open_yr_core_wheel_url="${OPEN_YR_CORE_WHEEL_URL:-}"
-open_yr_core_wheel_sha256="${OPEN_YR_CORE_WHEEL_SHA256:-}"
-rrt_runtime_url="${RRT_RUNTIME_URL:-}"
-rrt_runtime_sha256="${RRT_RUNTIME_SHA256:-}"
+adx_release_url="${ADX_RELEASE_URL:-}"
+adx_release_sha256="${ADX_RELEASE_SHA256:-}"
+adx_execd_url="${ADX_EXECD_URL:-}"
+adx_execd_sha256="${ADX_EXECD_SHA256:-}"
 otelcol_contrib_url="${OTELCOL_CONTRIB_URL:-}"
 otelcol_contrib_sha256="${OTELCOL_CONTRIB_SHA256:-}"
 # Download routing is caller-local, independent of cloud profiles.
@@ -68,10 +67,7 @@ component_version() {
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --env|--repository|--tag|--runtime-image|--runtime-profile|\
-    --open-yr-core-wheel-url|--open-yr-core-wheel-sha256|\
-    --rrt-runtime-url|--rrt-runtime-sha256|\
-    --otelcol-contrib-url|--otelcol-contrib-sha256)
+    --env|--repository|--tag|--runtime-image|--adx-release-url|--adx-release-sha256|--adx-execd-url|--adx-execd-sha256|--otelcol-contrib-url|--otelcol-contrib-sha256)
       [[ $# -ge 2 ]] || die "$1 requires a value"
       ;;
   esac
@@ -92,24 +88,20 @@ while [[ $# -gt 0 ]]; do
       runtime_image="$2"
       shift 2
       ;;
-    --runtime-profile)
-      runtime_profile="$2"
+    --adx-release-url)
+      adx_release_url="$2"
       shift 2
       ;;
-    --open-yr-core-wheel-url)
-      open_yr_core_wheel_url="$2"
+    --adx-release-sha256)
+      adx_release_sha256="$2"
       shift 2
       ;;
-    --open-yr-core-wheel-sha256)
-      open_yr_core_wheel_sha256="$2"
+    --adx-execd-url)
+      adx_execd_url="$2"
       shift 2
       ;;
-    --rrt-runtime-url)
-      rrt_runtime_url="$2"
-      shift 2
-      ;;
-    --rrt-runtime-sha256)
-      rrt_runtime_sha256="$2"
+    --adx-execd-sha256)
+      adx_execd_sha256="$2"
       shift 2
       ;;
     --otelcol-contrib-url)
@@ -130,10 +122,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-case "${runtime_profile}" in
-  rrt|python) ;;
-  *) die "unsupported runtime profile: ${runtime_profile}; expected rrt or python" ;;
-esac
 
 # Select the caller's platform before loading saved deployment settings.
 if [[ -n "${AKERNEL_TARGETARCH+x}" ]]; then
@@ -228,6 +216,7 @@ case "${target_arch}" in
   *) die "unsupported image architecture: ${target_arch}" ;;
 esac
 
+
 repository="${repository:-akernel-all-in-one}"
 tag="${tag:-$(git -C "${AKERNEL_REPO_ROOT}" rev-parse --short HEAD)-$(date +%Y%m%d%H%M%S)}"
 
@@ -270,9 +259,6 @@ if [[ "${target_arch}" == arm64 ]]; then
   if [[ "${AKERNEL_ENABLE_GPU:-false}" != false ]]; then
     die "linux/arm64 does not support the NVIDIA GPU payload"
   fi
-  if [[ "${runtime_profile}" != rrt ]]; then
-    die "linux/arm64 currently requires the rrt runtime profile"
-  fi
 fi
 
 # Fail before building either image if the release has not been published/pinned.
@@ -306,8 +292,11 @@ validate_override() {
     fi
   fi
 }
-validate_override RRT_RUNTIME "${rrt_runtime_url}" "${rrt_runtime_sha256}"
-validate_override OPEN_YR_CORE_WHEEL "${open_yr_core_wheel_url}" "${open_yr_core_wheel_sha256}"
+validate_override ADX_RELEASE "${adx_release_url}" "${adx_release_sha256}"
+validate_override ADX_EXECD "${adx_execd_url}" "${adx_execd_sha256}"
+if [[ "${target_arch}" == arm64 && ( -z "${adx_release_url}" || -z "${adx_execd_url}" ) ]]; then
+  die "linux/arm64 requires architecture-matched ADX_RELEASE and ADX_EXECD URL/checksum pairs"
+fi
 validate_override OTELCOL_CONTRIB "${otelcol_contrib_url}" "${otelcol_contrib_sha256}"
 
 case "${build_mirror}" in
@@ -348,7 +337,7 @@ require_cmd docker
 runtime_build_args=(
   --platform "linux/${target_arch}"
   -f builder/runtime.Dockerfile
-  --target "runtime-${runtime_profile}"
+  --target runtime-execd
 )
 if [[ ${#mirror_build_args[@]} -gt 0 ]]; then
   runtime_build_args+=("${mirror_build_args[@]}")
@@ -364,14 +353,12 @@ if [[ "${build_proxy}" == true ]]; then
     runtime_build_args+=(--build-arg "${proxy_name}")
   done
 fi
-if [[ -n "${rrt_runtime_url}" || -n "${rrt_runtime_sha256}" ]]; then
-  runtime_build_args+=(
-    --build-arg "RRT_RUNTIME_URL=${rrt_runtime_url}"
-    --build-arg "RRT_RUNTIME_SHA256=${rrt_runtime_sha256}"
-  )
+
+if [[ -n "${adx_execd_url}" ]]; then
+  runtime_build_args+=(--build-arg "ADX_EXECD_URL=${adx_execd_url}" --build-arg "ADX_EXECD_SHA256=${adx_execd_sha256}")
 fi
 
-info "building ${runtime_image} with runtime profile ${runtime_profile}"
+info "building ${runtime_image} with the EXECD runtime profile"
 docker build \
   "${runtime_build_args[@]}" \
   -t "${runtime_image}" \
@@ -383,7 +370,6 @@ node_build_args=(
   --build-arg "DISTILL_FS_URL=${distill_fs_url}"
   --build-arg "DISTILL_FS_SHA256=${distill_fs_sha256}"
   --build-arg "AKERNEL_RUNTIME_IMAGE=${runtime_image}"
-  --build-arg "AKERNEL_RUNTIME_PROFILE=${runtime_profile}"
   --build-arg "AKERNEL_ENABLE_KATA=${AKERNEL_ENABLE_KATA}"
   --build-arg "AKERNEL_ENABLE_RUNC=${AKERNEL_ENABLE_RUNC}"
   --build-arg "AKERNEL_ENABLE_FIRECRACKER=${AKERNEL_ENABLE_FIRECRACKER}"
@@ -413,17 +399,14 @@ if [[ "${build_proxy}" == true ]]; then
     node_build_args+=(--build-arg "${proxy_name}")
   done
 fi
-if [[ -n "${open_yr_core_wheel_url}" || -n "${open_yr_core_wheel_sha256}" ]]; then
-  node_build_args+=(
-    --build-arg "OPEN_YR_CORE_WHEEL_URL=${open_yr_core_wheel_url}"
-    --build-arg "OPEN_YR_CORE_WHEEL_SHA256=${open_yr_core_wheel_sha256}"
-  )
-fi
 if [[ -n "${otelcol_contrib_url}" || -n "${otelcol_contrib_sha256}" ]]; then
   node_build_args+=(
     --build-arg "OTELCOL_CONTRIB_URL=${otelcol_contrib_url}"
     --build-arg "OTELCOL_CONTRIB_SHA256=${otelcol_contrib_sha256}"
   )
+fi
+if [[ -n "${adx_release_url}" ]]; then
+  node_build_args+=(--build-arg "ADX_RELEASE_URL=${adx_release_url}" --build-arg "ADX_RELEASE_SHA256=${adx_release_sha256}")
 fi
 docker build \
   --platform "linux/${target_arch}" \
