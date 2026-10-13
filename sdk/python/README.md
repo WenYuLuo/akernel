@@ -759,10 +759,7 @@ checkpoint test's curl and CA certificate installation. Omit
 `AKERNEL_TEST_IMAGE` to test the deployed default EROFS root.
 
 Load and transfer benchmarks live under [`benchmarks/`](./benchmarks) and are
-not part of the default test suite. See the [performance and stability test
-plan](./benchmarks/README.md) for current coverage, measurement gaps, workload
-profiles and the proposed staged CI rollout. Proposed profiles are not yet
-implemented commands.
+not part of the default test suite.
 
 ## Public value types
 

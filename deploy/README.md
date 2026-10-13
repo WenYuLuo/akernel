@@ -8,9 +8,6 @@ AKernel ships in three deployment modes. Pick the one that matches your target.
 | **Kubernetes (Helm)** | Existing K8s cluster | [`akernel/`](./akernel/) |
 | **Multi-Cloud (Terraform)** | Alibaba Cloud ACK / Huawei Cloud CCE | [`terraform/`](./terraform/) |
 
-See [ADX observability](./observability.md) for local Collector configuration,
-metrics, logs, traces and Grafana dashboards.
-
 ## Guided deployment
 
 The image installs the complete gVisor bundle pinned by sandboxd's runtime manifest: runsc, the containerd shim, and adjacent `gvisor-bin/` helpers. Its SHA-512 verifies the archive, not a standalone runsc binary. Keep these executables together when building custom images; replacing only runsc can leave mismatched checkpoint/restore helpers.
@@ -236,15 +233,10 @@ The umbrella chart in [`akernel/`](./akernel/) deploys AKernel's control
 service, persistent state store, one worker Pod per eligible node, and the
 public ingress. They use the same AKernel all-in-one image.
 
-The default chart runs the public Gateway and ADX API Server in one
-`akernel-adx-ingress-api` Pod. Because that Pod handles both TLS ingress and
-create requests, it reserves 2 CPUs and may burst to 8 CPUs. This is the
-deployment baseline for the create-latency gates: one concurrent create must
-keep P99 below 200 ms, and 100 concurrent creates must keep P99 at or below
-1 second. Results above 100 concurrent creates are capacity measurements and
-may exceed 1 second. These targets must be verified on the target cluster;
-operators can override `core.adx.ingressApi.resources` for a different node
-shape or workload.
+The default chart runs ADX Ingress and API Server in one
+`akernel-adx-ingress-api` Pod, with 2 CPU requested and an 8 CPU limit.
+Override `core.adx.ingressApi.resources` for your node shape and workload.
+Measure capacity with the [Create benchmark](../sdk/python/benchmarks/create_throughput/README.md).
 
 The `monitor` subchart remains optional and contains Prometheus, Grafana, Loki,
 and Tempo. Kubernetes nodes must support privileged Pods and the runtime
