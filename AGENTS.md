@@ -44,6 +44,7 @@ tunnels. The project overview and deployment quick start are in
 - `deploy/` - Helm charts, standalone scripts, Terraform modules, and deployment helper scripts.
 - `deploy/standalone/manage.py` - source-build standalone lifecycle shared by Linux and Apple Silicon Mac with OrbStack.
 - `assets/` - static images used by the root README.
+- `src/agent-dx/` - Agent DX source pinned to the upstream release commit by a Git submodule.
 
 The open-source AKernel repository contains the SDK, deployment configuration,
 build tooling, and examples. Node runtime components such as `sandboxd` and
@@ -53,6 +54,9 @@ checksum-pinned static distill-fs release recorded in
 `builder/distill-fs-versions.env`. The distill-fs submodule is an optional
 source reference, not a build input. See the Build section below for runtime
 payloads.
+
+ADX platform and Execd binaries come from the release archives pinned in the
+Dockerfiles; `src/agent-dx/` provides the tagged source for inspection.
 
 ## Common Commands
 
