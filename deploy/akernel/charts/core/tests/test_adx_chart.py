@@ -24,8 +24,6 @@ def render() -> tuple[list[dict], str]:
             "akernel-system",
             "--set",
             "adx.tls.existingSecret=adx-test-tls",
-            "--set",
-            "traefik.enabled=true",
         ],
         check=True,
         capture_output=True,
@@ -45,6 +43,11 @@ class AdxChartTest(unittest.TestCase):
                 return resource
         self.fail(f"missing {kind}/{name}")
 
+    def test_direct_ingress_has_no_external_proxy_resources(self) -> None:
+        names = {item["metadata"]["name"] for item in self.resources}
+        self.assertFalse(any("traefik" in name for name in names))
+        self.assertFalse((CHART / "templates" / "traefik").exists())
+
     def test_supervisor_retries_without_a_restart_budget(self) -> None:
         configs = self.resource("ConfigMap", "akernel-adx-config")["data"]
         for name in ("coordinator.yaml", "ingress-api.yaml", "node.yaml"):
@@ -63,9 +66,7 @@ class AdxChartTest(unittest.TestCase):
         self.assertIn("role: adxlet", config["node.yaml"])
         self.assertIn("ADX_EXECD_CONTROL_SOCKET_PATH", config["node.yaml"])
         self.assertIn("ADX_DATA_PLANE_RELAY_BIND", config["node.yaml"])
-        self.assertIn(
-            "ADX_DATA_PLANE_ALLOWED_INGRESS_CIDRS", config["node.yaml"]
-        )
+        self.assertIn("ADX_DATA_PLANE_ALLOWED_INGRESS_CIDRS", config["node.yaml"])
         self.assertIn("/__adx/usr/local/bin/adx-execd", config["node.yaml"])
         self.assertNotIn("role: master", self.rendered)
         self.assertNotIn("role: node-manager", self.rendered)
@@ -75,12 +76,17 @@ class AdxChartTest(unittest.TestCase):
     def test_port_host_domain_is_only_sent_to_ingress_when_configured(self) -> None:
         default_config = self.resource("ConfigMap", "akernel-adx-config")["data"]
         self.assertNotIn(
-            "ADX_DATA_PLANE_INGRESS_PORT_HOST_DOMAIN", default_config["ingress-api.yaml"]
+            "ADX_DATA_PLANE_INGRESS_PORT_HOST_DOMAIN",
+            default_config["ingress-api.yaml"],
         )
         result = subprocess.run(
             [
-                "helm", "template", "akernel", str(CHART),
-                "--set", "adx.ingressApi.portHostDomain=sandbox.example.test",
+                "helm",
+                "template",
+                "akernel",
+                str(CHART),
+                "--set",
+                "adx.ingressApi.portHostDomain=sandbox.example.test",
             ],
             check=True,
             capture_output=True,
@@ -89,11 +95,16 @@ class AdxChartTest(unittest.TestCase):
         config = next(
             item["data"]
             for item in yaml.safe_load_all(result.stdout)
-            if item and item.get("kind") == "ConfigMap"
+            if item
+            and item.get("kind") == "ConfigMap"
             and item["metadata"]["name"] == "akernel-adx-config"
         )
         ingress_api = yaml.safe_load(config["ingress-api.yaml"])
-        ingress = next(service for service in ingress_api["services"] if service["role"] == "ingress")
+        ingress = next(
+            service
+            for service in ingress_api["services"]
+            if service["role"] == "ingress"
+        )
         self.assertEqual(
             ingress["env"]["ADX_DATA_PLANE_INGRESS_PORT_HOST_DOMAIN"],
             "sandbox.example.test",
@@ -104,7 +115,8 @@ class AdxChartTest(unittest.TestCase):
         config = self.resource("ConfigMap", "akernel-adx-config")["data"]
         ingress_api = yaml.safe_load(config["ingress-api.yaml"])
         ingress = next(
-            service for service in ingress_api["services"]
+            service
+            for service in ingress_api["services"]
             if service["role"] == "ingress"
         )
         routes = ingress["env"]["ADX_DATA_PLANE_INGRESS_CONTROL_PLANE_ROUTES"]
@@ -149,9 +161,11 @@ class AdxChartTest(unittest.TestCase):
         )
         resources = [item for item in yaml.safe_load_all(result.stdout) if item]
         for name in ("akernel-adx-coordinator", "akernel-adx-ingress-api"):
-            deployment = next(item for item in resources
-                              if item["kind"] == "Deployment"
-                              and item["metadata"]["name"] == name)
+            deployment = next(
+                item
+                for item in resources
+                if item["kind"] == "Deployment" and item["metadata"]["name"] == name
+            )
             image = deployment["spec"]["template"]["spec"]["containers"][0]["image"]
             self.assertEqual(image, "example.test/control:release")
 
@@ -178,7 +192,9 @@ class AdxChartTest(unittest.TestCase):
     def test_node_migrates_only_retired_adx_supervisor_state(self) -> None:
         pod = self.resource("DaemonSet", "akernel-node")["spec"]["template"]["spec"]
         migration = next(
-            item for item in pod["initContainers"] if item["name"] == "migrate-adx-state"
+            item
+            for item in pod["initContainers"]
+            if item["name"] == "migrate-adx-state"
         )
         command = migration["command"][2]
         self.assertIn("/home/akernel/adx/run/control", command)
@@ -217,12 +233,10 @@ class AdxChartTest(unittest.TestCase):
         self.assertNotIn("/home/akernel/adx/run/logs/*.log", collector)
 
     def test_retired_templates_are_removed(self) -> None:
-        for directory in ("etcd", "frontend", "master"):
+        for directory in ("etcd", "frontend", "master", "traefik"):
             self.assertFalse((CHART / "templates" / directory).exists())
         self.assertNotIn("ETCD_ADDRESS", self.rendered)
         self.assertNotIn("YR_IMAGE_PROCESS_CONFIG", self.rendered)
-        static = self.resource("ConfigMap", "traefik-static")["data"]["traefik.yml"]
-        self.assertIn("file:", static)
 
     def test_internal_rpc_uses_network_identity_without_node_certificates(self) -> None:
         config = self.resource("ConfigMap", "akernel-adx-config")["data"]
@@ -258,15 +272,15 @@ class AdxChartTest(unittest.TestCase):
         self.assertNotIn("adx-credentials", volumes)
         coordinator = self.resource("Deployment", "akernel-adx-coordinator")
         coordinator_secret = next(
-            v["secret"] for v in coordinator["spec"]["template"]["spec"]["volumes"]
+            v["secret"]
+            for v in coordinator["spec"]["template"]["spec"]["volumes"]
             if v["name"] == "credentials"
         )
-        self.assertEqual(
-            {i["key"] for i in coordinator_secret["items"]}, {"admin-key"}
-        )
+        self.assertEqual({i["key"] for i in coordinator_secret["items"]}, {"admin-key"})
         ingress_api = self.resource("Deployment", "akernel-adx-ingress-api")
         ingress_secret = next(
-            v["secret"] for v in ingress_api["spec"]["template"]["spec"]["volumes"]
+            v["secret"]
+            for v in ingress_api["spec"]["template"]["spec"]["volumes"]
             if v["name"] == "credentials"
         )
         self.assertEqual(
@@ -274,13 +288,6 @@ class AdxChartTest(unittest.TestCase):
         )
 
     def test_ingress_api_keeps_control_and_data_ports_separate(self) -> None:
-        dynamic = self.resource("ConfigMap", "traefik-dynamic")["data"]["config.yml"]
-        self.assertIn('url: "https://akernel-adx-ingress-api:8443"', dynamic)
-        self.assertIn('url: "http://akernel-adx-ingress-api:8080"', dynamic)
-        self.assertIn("- websecure", dynamic)
-        self.assertIn("- web", dynamic)
-        self.assertNotIn("akernel-frontend:8888", dynamic)
-
         service = self.resource("Service", "akernel-adx-ingress-api")
         ports = {port["name"]: port["port"] for port in service["spec"]["ports"]}
         self.assertEqual(ports["control"], 8443)
@@ -335,35 +342,70 @@ class AdxChartTest(unittest.TestCase):
         self.assertEqual(ports["data"]["port"], 80)
         self.assertEqual(ports["data"]["targetPort"], "data")
 
-    def test_adx_keeps_both_ports_when_legacy_single_entry_is_disabled(self) -> None:
-        result = subprocess.run(
-            [
-                "helm",
-                "template",
-                "akernel",
-                str(CHART),
-                "--namespace",
-                "akernel-system",
-                "--set",
-                "adx.tls.existingSecret=adx-test-tls",
-                "--set",
-                "traefik.enabled=true",
-                "--set",
-                "traefik.enableWebEntrypoint=false",
-            ],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        resources = [item for item in yaml.safe_load_all(result.stdout) if item]
-        traefik = next(
+    def test_public_ingress_accepts_custom_ports_and_rejects_conflicts(self) -> None:
+        arguments = [
+            "helm",
+            "template",
+            "akernel",
+            str(CHART),
+            "--set",
+            "adx.ingressApi.publicService.enabled=true",
+            "--set",
+            "adx.ingressApi.publicService.controlPort=9443",
+            "--set",
+            "adx.ingressApi.publicService.dataPort=9080",
+        ]
+        result = subprocess.run(arguments, check=True, capture_output=True, text=True)
+        service = next(
             item
-            for item in resources
-            if item["kind"] == "Service" and item["metadata"]["name"] == "traefik"
+            for item in yaml.safe_load_all(result.stdout)
+            if item
+            and item["kind"] == "Service"
+            and item["metadata"]["name"] == "akernel-adx-public"
         )
-        ports = {port["name"] for port in traefik["spec"]["ports"]}
-        self.assertIn("websecure", ports)
-        self.assertIn("web", ports)
+        ports = {p["name"]: p["port"] for p in service["spec"]["ports"]}
+        self.assertEqual(ports, {"control": 9443, "data": 9080})
+        for port in ("9443", "0", "65536", "9080.5"):
+            with self.subTest(data_port=port):
+                invalid = subprocess.run(
+                    arguments
+                    + ["--set", f"adx.ingressApi.publicService.dataPort={port}"],
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertNotEqual(invalid.returncode, 0)
+                self.assertIn("distinct ports", invalid.stderr)
+
+    def test_public_service_handles_private_and_nodeport_exposure(self) -> None:
+        for service_type in ("ClusterIP", "NodePort"):
+            with self.subTest(service_type=service_type):
+                result = subprocess.run(
+                    [
+                        "helm",
+                        "template",
+                        "akernel",
+                        str(CHART),
+                        "--set",
+                        "adx.ingressApi.publicService.enabled=true",
+                        "--set",
+                        f"adx.ingressApi.publicService.type={service_type}",
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                service = next(
+                    item
+                    for item in yaml.safe_load_all(result.stdout)
+                    if item
+                    and item["kind"] == "Service"
+                    and item["metadata"]["name"] == "akernel-adx-public"
+                )
+                self.assertEqual(service["spec"]["type"], service_type)
+                self.assertEqual(
+                    "externalTrafficPolicy" in service["spec"],
+                    service_type == "NodePort",
+                )
 
     def test_redis_is_single_member_aof_with_persistent_storage(self) -> None:
         redis = self.resource("StatefulSet", "akernel-adx-redis")
@@ -380,16 +422,30 @@ class AdxChartTest(unittest.TestCase):
         self.assertIn("--protected-mode", args)
         self.assertEqual(args[args.index("--protected-mode") + 1], "no")
         policy = self.resource("NetworkPolicy", "akernel-adx-redis")
-        self.assertEqual(policy["spec"]["podSelector"]["matchLabels"], {"app": "akernel-adx-redis"})
+        self.assertEqual(
+            policy["spec"]["podSelector"]["matchLabels"], {"app": "akernel-adx-redis"}
+        )
         rule = policy["spec"]["ingress"][0]
         self.assertEqual(rule["ports"], [{"protocol": "TCP", "port": 6379}])
         self.assertEqual(
             rule["from"],
-            [{"podSelector": {"matchExpressions": [
-                {"key": "app", "operator": "In", "values": [
-                    "akernel-adx-coordinator", "akernel-adx-ingress-api", "node"
-                ]}
-            ]}}],
+            [
+                {
+                    "podSelector": {
+                        "matchExpressions": [
+                            {
+                                "key": "app",
+                                "operator": "In",
+                                "values": [
+                                    "akernel-adx-coordinator",
+                                    "akernel-adx-ingress-api",
+                                    "node",
+                                ],
+                            }
+                        ]
+                    }
+                }
+            ],
         )
 
     def test_managed_redis_requires_a_separate_secret(self) -> None:
@@ -398,21 +454,33 @@ class AdxChartTest(unittest.TestCase):
         secret = self.resource("Secret", "akernel-adx-redis-auth")
         password = base64.b64decode(secret["data"]["password"]).decode()
         self.assertRegex(password, r"^[A-Za-z0-9]{64}$")
-        redis = self.resource("StatefulSet", "akernel-adx-redis")["spec"]["template"]["spec"]["containers"][0]
+        redis = self.resource("StatefulSet", "akernel-adx-redis")["spec"]["template"][
+            "spec"
+        ]["containers"][0]
         self.assertIn("--requirepass", " ".join(redis["command"]))
-        self.assertEqual(redis["env"][0]["valueFrom"]["secretKeyRef"],
-                         {"name": "akernel-adx-redis-auth", "key": "password"})
+        self.assertEqual(
+            redis["env"][0]["valueFrom"]["secretKeyRef"],
+            {"name": "akernel-adx-redis-auth", "key": "password"},
+        )
         for kind, name in (
             ("Deployment", "akernel-adx-coordinator"),
             ("Deployment", "akernel-adx-ingress-api"),
             ("DaemonSet", "akernel-node"),
         ):
-            env = self.resource(kind, name)["spec"]["template"]["spec"]["containers"][0]["env"]
-            auth = next(i for i, item in enumerate(env) if item["name"] == "ADX_REDIS_PASSWORD")
-            url = next(i for i, item in enumerate(env) if item["name"] == "ADX_REDIS_URL")
+            env = self.resource(kind, name)["spec"]["template"]["spec"]["containers"][
+                0
+            ]["env"]
+            auth = next(
+                i for i, item in enumerate(env) if item["name"] == "ADX_REDIS_PASSWORD"
+            )
+            url = next(
+                i for i, item in enumerate(env) if item["name"] == "ADX_REDIS_URL"
+            )
             self.assertLess(auth, url)
-            self.assertEqual(env[auth]["valueFrom"]["secretKeyRef"],
-                             {"name": "akernel-adx-redis-auth", "key": "password"})
+            self.assertEqual(
+                env[auth]["valueFrom"]["secretKeyRef"],
+                {"name": "akernel-adx-redis-auth", "key": "password"},
+            )
             self.assertIn(":$(ADX_REDIS_PASSWORD)@", env[url]["value"])
 
     def test_coordinator_and_ingress_api_have_independent_probes(self) -> None:
@@ -457,7 +525,8 @@ class AdxChartTest(unittest.TestCase):
         names = {item["metadata"]["name"] for item in resources}
         self.assertNotIn("akernel-adx-redis", names)
         deployments = [
-            item for item in resources
+            item
+            for item in resources
             if item["kind"] == "Deployment"
             and item["metadata"]["name"]
             in {"akernel-adx-coordinator", "akernel-adx-ingress-api"}

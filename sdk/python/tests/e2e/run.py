@@ -34,6 +34,12 @@ CASES = (
         300,
     ),
     Case(
+        "direct-ingress",
+        "standalone",
+        ("-m", "unittest", "-v", "tests.e2e.standalone.test_direct_ingress"),
+        180,
+    ),
+    Case(
         "lifecycle",
         "standalone",
         ("-m", "unittest", "-v", "tests.e2e.standalone.test_lifecycle_features"),

@@ -39,7 +39,7 @@ def _request(method: str, path: str, token: str) -> dict:
     request = urllib.request.Request(
         endpoint.base_url() + path,
         method=method,
-        headers={"Authorization": "Bearer " + token},
+        headers={"Authorization": "Bearer " + token.strip()},
     )
     context = None
     if endpoint.use_tls:

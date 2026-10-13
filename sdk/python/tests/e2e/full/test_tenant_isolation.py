@@ -56,7 +56,7 @@ def _list_instances(token: str) -> list[dict]:
             endpoint.base_url()
             + "/api/instances?"
             + urllib.parse.urlencode(query),
-            headers={"Authorization": "Bearer " + token},
+            headers={"Authorization": "Bearer " + token.strip()},
         )
         with urllib.request.urlopen(
             request, timeout=20, context=context

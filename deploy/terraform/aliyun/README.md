@@ -186,26 +186,23 @@ image registry settings before applying the plan.
 
 ## Public endpoint model
 
-The default cloud deployment uses ADX API Server with embedded Edge behind a
-two-entrypoint Traefik LoadBalancer:
+The default cloud deployment exposes the embedded ADX Ingress directly through
+`akernel-adx-public`, a two-port LoadBalancer Service:
 
-- `websecure:443` routes the Sandbox API and exec websocket traffic over TLS.
-- `web:80` routes function port-forwarding traffic over plain HTTP/WS.
+- HTTPS 443 forwards API, command/file and PTY traffic to control port 8443.
+- HTTP 80 forwards sandbox port-forwarding traffic to data port 8080.
 
-Use the Traefik LoadBalancer host or IP directly with the SDK:
+ADX terminates HTTPS with the certificate in `akernel-adx-tls`. Use the
+LoadBalancer host or IP with the existing SDK variables:
 
 ```bash
-export AKERNEL_SERVER_ADDRESS=<traefik-load-balancer-ip>
-export AKERNEL_GATEWAY_ADDRESS=http://<traefik-load-balancer-ip>
+export AKERNEL_SERVER_ADDRESS=<adx-load-balancer-address>
 ```
 
-`traefik_tls_enabled` is only for mounting a custom default certificate. It is
-not required for the `websecure` router on port 443; Traefik serves its default
-certificate when the variable is `false`.
-
-`traefik_enable_web_entrypoint=false` selects the legacy single-entrypoint mode
-only when the legacy control plane is deployed. ADX deployments always expose
-the separate `websecure` control and `web` data ports.
+`adx_public_service_enabled` controls exposure; `adx_service_annotations`
+retains cloud load-balancer and security-group settings. `adx_control_port`
+and `adx_data_port` select distinct external ports. `make print-env` reads
+them from the public Service and generates a gateway override for custom ports.
 
 Enable OSS auth injection for AKernel node secret:
 

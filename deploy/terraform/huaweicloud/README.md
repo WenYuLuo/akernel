@@ -3,7 +3,7 @@
 This Terraform module creates a Huawei Cloud CCE cluster and installs the
 AKernel core and optional monitor charts. It follows the same deployment
 contract as the Aliyun module: one all-in-one AKernel image, an Agent DX
-identity Secret, managed Redis, dual-entrypoint Traefik, optional public
+identity Secret, managed Redis, a direct ADX public Service, optional public
 Grafana, and local state under `.akernel/<env>/`.
 
 ## Pod PID budget
@@ -74,17 +74,23 @@ login is required. The two settings are mutually exclusive.
 
 The generated profile enables the public CCE API endpoint and node-subnet SNAT
 so Terraform can reach the cluster and worker nodes can pull public images.
-Traefik is exposed through a public ELB with two entrypoints:
+ADX is exposed directly through a public ELB with two ports:
 
-- `websecure:443` serves the authenticated ADX Edge API and exec websocket.
-- `web:80` serves sandbox port-forwarding traffic.
+- HTTPS 443 forwards API, command/file and PTY traffic to ADX control port 8443.
+- HTTP 80 forwards sandbox-port traffic to ADX data port 8080.
 
-Configure the SDK with both logical entrypoints on the Traefik ELB:
+The generated ADX Secret provides the HTTPS certificate and API key.
+`adx_public_service_enabled` controls public Service creation;
+`adx_public_access` controls public ELB auto-provisioning. Configure an existing
+load balancer with `adx_service_annotations` / `adx_load_balancer_ip` when required.
+`adx_control_port` and `adx_data_port` select distinct external ports.
 
 ```bash
-export AKERNEL_SERVER_ADDRESS=<traefik-elb-address>
-export AKERNEL_GATEWAY_ADDRESS=http://<traefik-elb-address>
+export AKERNEL_SERVER_ADDRESS=<adx-elb-address>
 ```
+
+For custom ports, `make print-env VENDOR=huaweicloud` discovers the Service
+ports and writes the corresponding gateway override.
 
 Grafana uses a separate public ELB when monitoring and public Grafana access
 are enabled. Its generated administrator password is stored at
@@ -93,7 +99,7 @@ are enabled. Its generated administrator password is stored at
 ## Images
 
 ADX control and node workloads use the same configured AKernel all-in-one
-image. Managed Redis, Traefik, Grafana, Prometheus, Loki, Tempo, and BusyBox
+image. Managed Redis, Grafana, Prometheus, Loki, Tempo, and BusyBox
 use pinned public images by default. Use the component image variables or
 `monitor_image_registry` only when the cluster requires private mirrors.
 

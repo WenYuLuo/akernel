@@ -606,13 +606,22 @@ templates, and Python deployment helpers with:
 make deploy-script-check
 ```
 
-For Helm SDK routing changes, exercise the rendered configuration with the
-chart's Traefik image. This requires Helm, PyYAML and a local Docker daemon;
-it uses an unprivileged disposable container on a random loopback port:
+For Kubernetes SDK ingress changes, validate the rendered ADX public Service,
+cloud-provider templates and generated SDK endpoints:
 
 ```bash
-python deploy/akernel/charts/core/tests/test_adx_traefik.py -v
+python deploy/akernel/charts/core/tests/test_adx_chart.py -v
+python deploy/terraform/test_adx_contract.py -v
+python deploy/scripts/test_print_sdk_env.py -v
 ```
+
+ADX directly terminates HTTPS control/API/PTY on its 8443 listener and exposes
+HTTP sandbox traffic on 8080. Public Services map these to configurable external
+ports (443/80 by default). Preserve both ports and the existing SDK variables.
+Validate real TLS authentication, PTY and HTTP port access with the
+`direct-ingress` standalone E2E group; PR CI discovers this group alongside the
+other standalone tests. Keep ADX public certificates and remove redundant
+external-proxy certificates and cloud-profile settings.
 
 For standalone lifecycle or launch changes, also run the helper tests without starting containers:
 

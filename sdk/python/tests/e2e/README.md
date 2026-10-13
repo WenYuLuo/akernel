@@ -54,9 +54,16 @@ resource names and clean up in `finally`/context managers.
 | Level | Independently reported groups | Main assertions |
 |---|---|---|
 | L0 | `sdk-contracts` | Create, command/env/cwd/timeout, stdin/process state, binary filesystem and missing-path errors, info/resources, repeatable delete |
-| Standalone | `lifecycle`, `auth`, `cli-contract`, `io`, `pty-close`, `network-url`, `network-tunnel`, `network-policy`, `runtime-integration`, `storage-quota`, `network-policy-matrix` | Detached name and conflicting spec, bad API key, CLI resources/list/exec/delete, no-checkpoint reload, output and directory copy, PTY resize and connection-close cleanup in the guest, checkpoint/reload, declared-port URL, reverse tunnel, dynamic policy, quota, ACL replacement |
+| Standalone | `direct-ingress`, `lifecycle`, `auth`, `cli-contract`, `io`, `pty-close`, `network-url`, `network-tunnel`, `network-policy`, `runtime-integration`, `storage-quota`, `network-policy-matrix` | Detached name and conflicting spec, bad API key, CLI resources/list/exec/delete, no-checkpoint reload, output and directory copy, PTY resize and connection-close cleanup in the guest, checkpoint/reload, declared-port URL, reverse tunnel, dynamic policy, quota, ACL replacement |
 | Multi-VM | `node-placement` | Two distinct pinned nodes can execute isolated sandboxes; unknown node is rejected |
 | Full | `redis-lifecycle`, `placement-affinity`, `admission`, `concurrent-claim`, `unknown-create-result`, `create-transport-disconnect`, `custom-image`, `dockerfile`, `port-forward`, `storage-sources`, `tenant-isolation`, `key-lifecycle`, `scheduler-admin`, `scheduler-maintenance`, `fault-process-restart`, `fault-node-loss`, `fault-checkpoint-shared`, `fault-checkpoint-local` | Persisted node assignment, runtime-aware placement, deletion/idle resource release, activity extending idle lifetime, failed-create cleanup, same-spec concurrent claim, lost create result with same-ID retry, real TCP reply loss after confirmed create, actual HTTP over a published port and route withdrawal after deletion, OCI and Dockerfile launch, OCI private writes and inherited entrypoint, OCI/S3 read-only mounts, S3 rootfs, GPU, cross-tenant denial, key expiry/revocation, scheduler-administration permissions and opt-in node maintenance, opt-in process restart, node loss, and checkpoint storage matrix |
+
+`direct-ingress` validates the HTTPS ADX resources API (401 without a key,
+200 with a key), a real PTY with resize/output/exit status, and a guest HTTP
+server through the separate data port. It runs against the direct ADX listeners;
+set `AKERNEL_TEST_HTTP_IMAGE` to a reachable Python 3 image for private networks
+(default `python:3.12-slim`). It requires distinct control/data ports and writes
+no cloud configuration. The normal standalone CI discovery includes it.
 
 `redis-lifecycle` needs a test-only Redis endpoint via `AKERNEL_REDIS_HOST`,
 optional `AKERNEL_REDIS_PORT`, `AKERNEL_REDIS_PASSWORD`, and
