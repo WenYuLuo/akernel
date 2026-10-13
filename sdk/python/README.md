@@ -448,7 +448,7 @@ with Sandbox(port_forwardings=[8080]) as sandbox:
 ```
 
 `get_port_url()` rejects undeclared ports. Pass `internal=True` only when a
-deployment operator explicitly wants the direct Traefik address instead of the
+deployment operator explicitly wants the direct ADX Ingress address instead of the
 public gateway.
 
 ## Local failover and reload
@@ -505,7 +505,7 @@ with Sandbox(reverse_tunnel=tunnel) as sandbox:
     )
 ```
 
-`reverse_port` carries the WebSocket tunnel through Traefik. `listen_port` is
+`reverse_port` carries the WebSocket tunnel through ADX Ingress. `listen_port` is
 the loopback HTTP listener used inside the sandbox. Consequently,
 `sandbox.reverse_tunnel.url` is always
 `http://127.0.0.1:<listen_port>`, even when `target` uses HTTPS.
@@ -759,10 +759,7 @@ checkpoint test's curl and CA certificate installation. Omit
 `AKERNEL_TEST_IMAGE` to test the deployed default EROFS root.
 
 Load and transfer benchmarks live under [`benchmarks/`](./benchmarks) and are
-not part of the default test suite. See the [performance and stability test
-plan](./benchmarks/README.md) for current coverage, measurement gaps, workload
-profiles and the proposed staged CI rollout. Proposed profiles are not yet
-implemented commands.
+not part of the default test suite.
 
 ## Public value types
 

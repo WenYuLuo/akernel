@@ -44,6 +44,3 @@ Driver tests do not require Kubernetes:
 PYTHONPATH=sdk/python python3 -m unittest discover \
   -s sdk/python/benchmarks/apiserver/tests -v
 ```
-
-The first cn-north-4 baseline is recorded in
-[`cn4-baseline-20260927.md`](./cn4-baseline-20260927.md).

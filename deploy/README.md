@@ -8,9 +8,6 @@ AKernel ships in three deployment modes. Pick the one that matches your target.
 | **Kubernetes (Helm)** | Existing K8s cluster | [`akernel/`](./akernel/) |
 | **Multi-Cloud (Terraform)** | Alibaba Cloud ACK / Huawei Cloud CCE | [`terraform/`](./terraform/) |
 
-See [ADX observability](./observability.md) for local Collector configuration,
-metrics, logs, traces and Grafana dashboards.
-
 ## Guided deployment
 
 The image installs the complete gVisor bundle pinned by sandboxd's runtime manifest: runsc, the containerd shim, and adjacent `gvisor-bin/` helpers. Its SHA-512 verifies the archive, not a standalone runsc binary. Keep these executables together when building custom images; replacing only runsc can leave mismatched checkpoint/restore helpers.
@@ -236,15 +233,10 @@ The umbrella chart in [`akernel/`](./akernel/) deploys AKernel's control
 service, persistent state store, one worker Pod per eligible node, and the
 public ingress. They use the same AKernel all-in-one image.
 
-The default chart runs the public Gateway and ADX API Server in one
-`akernel-adx-ingress-api` Pod. Because that Pod handles both TLS ingress and
-create requests, it reserves 2 CPUs and may burst to 8 CPUs. This is the
-deployment baseline for the create-latency gates: one concurrent create must
-keep P99 below 200 ms, and 100 concurrent creates must keep P99 at or below
-1 second. Results above 100 concurrent creates are capacity measurements and
-may exceed 1 second. These targets must be verified on the target cluster;
-operators can override `core.adx.ingressApi.resources` for a different node
-shape or workload.
+The default chart runs ADX Ingress and API Server in one
+`akernel-adx-ingress-api` Pod, with 2 CPU requested and an 8 CPU limit.
+Override `core.adx.ingressApi.resources` for your node shape and workload.
+Measure capacity with the [Create benchmark](../sdk/python/benchmarks/create_throughput/README.md).
 
 The `monitor` subchart remains optional and contains Prometheus, Grafana, Loki,
 and Tempo. Kubernetes nodes must support privileged Pods and the runtime
@@ -388,32 +380,50 @@ core:
 
 Changing this setting affects future placements.
 
-### Public Traefik entrypoint
+### Public ADX entrypoint
 
-For a public Kubernetes deployment, enable Traefik's web entrypoints:
+Expose the embedded ADX Ingress directly through its public Service:
 
 ```yaml
 core:
-  traefik:
-    enabled: true
-    enableWebEntrypoint: true
-    ports:
-      websecure: 443
-      web: 80
+  adx:
+    ingressApi:
+      publicService:
+        enabled: true
+        type: LoadBalancer
+        controlPort: 443
+        dataPort: 80
+        annotations: {}
 ```
 
-The public entrypoint exposes HTTPS on 443 and HTTP sandbox ports on 80.
-Use the existing SDK configuration, or run `make print-env`:
+`akernel-adx-public` selects the Ingress/API Server Pods. The Service forwards
+HTTPS control/API/PTY traffic from 443 to 8443 and HTTP sandbox-port traffic
+from 80 to 8080. ADX terminates TLS using `public.pem` and `public.key` in
+`core.adx.tls.existingSecret`; its bootstrap API key remains in the same Secret.
+Supply a certificate matching the public hostname when client verification is enabled.
+
+For the default ports, configure the SDK address and API key, or run
+`make print-env`. The generated environment clears any previous gateway override:
 
 ```bash
-export AKERNEL_SERVER_ADDRESS=<traefik-load-balancer-ip>
+kubectl -n akernel get service akernel-adx-public
+export AKERNEL_SERVER_ADDRESS=<adx-load-balancer-address>
+unset AKERNEL_GATEWAY_ADDRESS
 export AKERNEL_TOKEN="$(kubectl -n akernel get secret akernel-adx-tls \
   -o jsonpath='{.data.admin-key}' | base64 -d)"
 ```
 
-Set `traefik.tls.enabled` only when supplying a custom default certificate for
-the public entrypoint. The HTTPS certificate used between Traefik and Ingress
-comes from `akernel-adx-tls`; this connection does not require client certificates.
+Custom external ports use the same configuration fields. For control 9443 and
+data 9080, set `AKERNEL_SERVER_ADDRESS=<address>:9443` and
+`AKERNEL_GATEWAY_ADDRESS=http://<address>:9080`; `make print-env` discovers both
+ports from the Service. Disabling `publicService.enabled` leaves the internal
+8443/8080 Service available for private access or port forwarding.
+
+For existing deployments, replace retired ingress options in profile tfvars
+with the `adx_*` options in the provider examples, inspect the plan, and verify
+the new public Service address before updating SDK clients. Helm removes
+retired ingress resources during upgrade; load-balancer addresses may change.
+Cloud deployment and resource deletion require an approved plan.
 
 ### Verify the deployment
 
@@ -461,7 +471,7 @@ Per-vendor details are in
 
 The Alibaba Cloud Terraform defaults follow the recommended public layout:
 separate ADX Coordinator and Ingress/API Server Deployments, one Adxlet DaemonSet,
-managed Redis, Traefik `websecure:443` plus `web:80`, and Grafana exposed
+managed Redis, the ADX public Service on 443/80, and Grafana exposed
 through its own LoadBalancer when `install_monitor=true`. Set
 `install_dragonfly=true` to install the pinned official Dragonfly chart and
 inject its seed-client proxy into the node runtime configuration.
@@ -473,7 +483,7 @@ loop-backed filestore. See the Aliyun guide for capacity, opt-out, and node
 replacement details.
 
 Only the AKernel all-in-one image is pushed to the registry selected by
-`make config`. Managed Redis, Traefik, Grafana, Prometheus, Loki, Tempo, and
+`make config`. Managed Redis, Grafana, Prometheus, Loki, Tempo, and
 BusyBox use pinned public images by default. Set the per-component image
 overrides when a private cluster requires mirrored third-party images.
 

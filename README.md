@@ -56,9 +56,6 @@ Built-in OpenTelemetry (OTEL) integration provides complete observability out of
 - **Dashboards**: Pre-configured Grafana dashboards for real-time cluster monitoring
 - **Tracing & Logging**: End-to-end request tracing and centralized log aggregation
 
-See [ADX collection configuration](./deploy/observability.md) for node-local
-Collector wiring, log paths, trace settings and the imported ADX dashboards.
-
 ## Quick Start
 
 ### Quick Navigation
@@ -66,7 +63,6 @@ Collector wiring, log paths, trace settings and the imported ADX dashboards.
 - 💡 [Examples](./sdk/python/examples/) - AKernel SDK examples and use cases
 - 🏗️ [Architecture](#architecture) - System design and components
 - 🚀 [Deployment](./deploy/README.md) - Installation and configuration guide
-- 🧪 [Performance and stability test plan](./sdk/python/benchmarks/README.md) - Baselines, capacity and mixed-workload acceptance
 
 ### Run Locally from Source
 
@@ -198,12 +194,13 @@ Agent DX handles sandbox scheduling, lifecycle and request routing.
 - **Sandbox runtimes**: gVisor by default; Kata Containers and Firecracker on
   KVM-capable nodes; and an explicitly enabled native Linux runc backend
 - **sandboxd**: Sandbox lifecycle daemon with pluggable sandbox runtime integration
-- **RRT**: the Agent DX runtime transport packaged into AKernel's own runtime
+- **Execd**: the Agent DX runtime transport packaged into AKernel's own runtime
   rootfs
 - **distill-fs**: Rust-based FUSE filesystem for lazy rootfs access, chunk caching, and deduplication; packaged from a static GitHub Release with its version and checksum pinned in AKernel
 
 **Cluster-Wide Services**
-- **Traefik**: external TLS entrypoint in front of Agent DX Edge
+- **ADX Ingress**: HTTPS control/PTY and HTTP sandbox-data entrypoints, exposed
+  directly through a Kubernetes LoadBalancer Service
 - **Object Storage**: Raw and Nydus rootfs images and read-only sandbox mounts
 - **Cloud Provisioning**: Terraform modules for Alibaba Cloud ACK and Huawei Cloud CCE
 

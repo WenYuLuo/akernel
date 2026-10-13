@@ -44,11 +44,11 @@ locals {
 
   # When auto-creating ELB on Huawei Cloud CCE, inject required annotations
   # so the cloud-controller-manager provisions the ELB automatically.
-  huaweicloud_traefik_elb_annotations = var.traefik_public_access ? {
+  huaweicloud_adx_elb_annotations = var.adx_public_access ? {
     "kubernetes.io/elb.class" = "union"
     "kubernetes.io/elb.autocreate" = jsonencode({
       type                 = "public"
-      bandwidth_name       = "${var.cluster_name}-traefik-elb"
+      bandwidth_name       = "${var.cluster_name}-adx-elb"
       bandwidth_chargemode = var.master_elb_bandwidth_charge_mode
       bandwidth_size       = var.master_elb_bandwidth_size
       bandwidth_sharetype  = "PER"
@@ -87,23 +87,27 @@ locals {
   ]) : local.node_pool_bootstrap_script
 
   core_values = templatefile("${path.module}/values-akernel.yaml.tmpl", {
-    master_image_repository        = var.master_image_repository
-    master_image_tag               = var.master_image_tag
-    schedule_placement_policy      = var.schedule_placement_policy
-    node_image_repository          = var.node_image_repository
-    node_image_tag                 = var.node_image_tag
-    traefik_image_repository       = var.traefik_image_repository
-    traefik_image_tag              = var.traefik_image_tag
-    enable_kruise                  = var.install_prereqs
-    sandboxd_nat_backend           = var.sandboxd_nat_backend
-    chunk_db_size                  = var.chunk_db_size
-    enable_runc                    = var.enable_runc
-    node_secret_create             = var.node_secret_create
-    node_home_use_csi_ephemeral    = var.node_home_use_csi_ephemeral
-    node_home_csi_storage_class    = var.node_home_csi_storage_class
-    node_home_csi_size             = var.node_home_csi_size
-    oss_auths                      = local.oss_auths
-    registry_auths                 = local.registry_auths
+    adx_public_service_enabled  = var.adx_public_service_enabled
+    adx_service_type            = var.adx_service_type
+    adx_control_port            = var.adx_control_port
+    adx_data_port               = var.adx_data_port
+    adx_service_annotations     = merge(local.huaweicloud_adx_elb_annotations, var.adx_service_annotations)
+    adx_load_balancer_ip        = var.adx_load_balancer_ip
+    master_image_repository     = var.master_image_repository
+    master_image_tag            = var.master_image_tag
+    schedule_placement_policy   = var.schedule_placement_policy
+    node_image_repository       = var.node_image_repository
+    node_image_tag              = var.node_image_tag
+    enable_kruise               = var.install_prereqs
+    sandboxd_nat_backend        = var.sandboxd_nat_backend
+    chunk_db_size               = var.chunk_db_size
+    enable_runc                 = var.enable_runc
+    node_secret_create          = var.node_secret_create
+    node_home_use_csi_ephemeral = var.node_home_use_csi_ephemeral
+    node_home_csi_storage_class = var.node_home_csi_storage_class
+    node_home_csi_size          = var.node_home_csi_size
+    oss_auths                   = local.oss_auths
+    registry_auths              = local.registry_auths
 
     etcd_cpu         = var.etcd_resources.cpu
     etcd_memory      = var.etcd_resources.memory
@@ -124,24 +128,6 @@ locals {
     monitor_namespace = var.monitor_namespace
     akernel_env       = length(var.akernel_env) > 0 ? var.akernel_env : var.cluster_name
 
-
-    install_traefik                 = var.install_traefik
-    traefik_replicas                = var.traefik_replicas
-    traefik_tcp_port                = var.traefik_tcp_port
-    traefik_enable_web_entrypoint   = var.traefik_enable_web_entrypoint
-    traefik_web_port                = var.traefik_web_port
-    traefik_websecure_port          = var.traefik_websecure_port
-    traefik_service_type            = var.traefik_service_type
-    traefik_service_annotations     = local.huaweicloud_traefik_elb_annotations
-    traefik_service_loadbalancer_ip = ""
-    traefik_tls_enabled             = var.traefik_tls_enabled
-    traefik_tls_create_secret       = var.traefik_tls_create_secret
-    traefik_tls_cert                = var.traefik_tls_cert
-    traefik_tls_key                 = var.traefik_tls_key
-    traefik_internal_stats          = var.traefik_internal_stats_enabled
-    traefik_internal_stats_image    = var.traefik_internal_stats_image
-    traefik_grafana_enabled         = var.install_monitor
-    traefik_grafana_url             = var.install_monitor ? "http://grafana.${var.monitor_namespace}.svc:3000" : ""
   })
 
   monitor_values = templatefile("${path.module}/values-monitor.yaml.tmpl", {

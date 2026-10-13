@@ -331,15 +331,10 @@ master_image_tag        = "${image_tag}"
 node_image_repository   = "${image_repository}"
 node_image_tag          = "${image_tag}"
 
-traefik_enabled               = true
-install_traefik               = true
-traefik_service_type          = "LoadBalancer"
-traefik_enable_web_entrypoint = true
-traefik_websecure_port        = 443
-traefik_web_port              = 80
-traefik_tls_enabled           = false
-traefik_tls_create_secret     = false
-traefik_internal_stats_enabled = true
+adx_public_service_enabled = true
+adx_service_type           = "LoadBalancer"
+adx_control_port           = 443
+adx_data_port              = 80
 
 install_prereqs = false
 
@@ -382,14 +377,10 @@ master_image_tag        = "${image_tag}"
 node_image_repository   = "${image_repository}"
 node_image_tag          = "${image_tag}"
 
-install_traefik                  = true
-traefik_public_access            = true
-traefik_enable_web_entrypoint    = true
-traefik_websecure_port           = 443
-traefik_web_port                 = 80
-traefik_tls_enabled              = false
-traefik_tls_create_secret        = false
-traefik_internal_stats_enabled   = true
+adx_public_service_enabled = true
+adx_service_type           = "LoadBalancer"
+adx_control_port           = 443
+adx_data_port              = 80
 
 install_prereqs = false
 

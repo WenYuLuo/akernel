@@ -65,6 +65,8 @@ adx:
     publicService:
       enabled: false
       type: LoadBalancer
+      controlPort: 443
+      dataPort: 80
       annotations: {}
       loadBalancerIP: ""
       externalTrafficPolicy: Cluster
@@ -500,40 +502,3 @@ node:
         [plugin.node_resource]
         provider="kubernetes"
         sock_path="/var/run/resource.sock"
-
-traefik:
-  enabled: false
-  mode: "http"
-  enableTLS: false
-  # Legacy control-plane deployments may disable the separate web entrypoint.
-  # ADX always exposes websecure for control traffic and web for instance data,
-  # regardless of this compatibility setting.
-  enableWebEntrypoint: true
-  replicas: 1
-  image:
-    repository: traefik
-    tag: v3.6.8
-    pullPolicy: IfNotPresent
-  service:
-    type: LoadBalancer
-    clusterIP: ""
-    annotations: {}
-    loadBalancerIP: ""
-  ports:
-    tcp: 8888
-    websecure: 443
-    web: 80
-    dashboard: 9990
-  tls:
-    enabled: false
-    createSecret: false
-    secretName: "traefik-tls"
-    moduleCrt: ""
-    moduleKey: ""
-  internalStats:
-    enabled: false
-    image: busybox:1.37.0-musl
-    port: 8079
-  grafana:
-    enabled: false
-    url: "http://grafana.akernel-monitor.svc:3000"

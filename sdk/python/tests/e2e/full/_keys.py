@@ -21,7 +21,7 @@ def _request(method: str, path: str, body: dict | None = None) -> dict:
         data=data,
         method=method,
         headers={
-            "Authorization": "Bearer " + os.environ["AKERNEL_TOKEN"],
+            "Authorization": "Bearer " + os.environ["AKERNEL_TOKEN"].strip(),
             "Content-Type": "application/json",
         },
     )

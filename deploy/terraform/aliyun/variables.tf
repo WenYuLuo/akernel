@@ -402,18 +402,6 @@ variable "node_image_tag" {
   default     = ""
 }
 
-variable "traefik_image_repository" {
-  type        = string
-  description = "Image repository for Traefik. Empty uses the official traefik image."
-  default     = ""
-}
-
-variable "traefik_image_tag" {
-  type        = string
-  description = "Image tag for Traefik."
-  default     = "v3.6.8"
-}
-
 variable "monitor_image_registry" {
   type        = string
   description = "Optional mirror registry prefix for Grafana, Prometheus, Loki, Tempo, and BusyBox. Empty uses their official public images."
@@ -462,98 +450,6 @@ variable "dragonfly_dfinit_image_tag" {
   default     = ""
 }
 
-
-variable "traefik_enabled" {
-  type        = bool
-  description = "Whether to deploy Traefik as the cluster ingress. When true, akernel-master is kept ClusterIP and Traefik exposes port 8888 via LoadBalancer."
-  default     = true
-}
-
-variable "install_traefik" {
-  type        = bool
-  description = "Whether to enable Traefik ingress controller in the core chart."
-  default     = true
-}
-
-variable "traefik_replicas" {
-  type        = number
-  description = "Number of Traefik replicas."
-  default     = 1
-}
-
-variable "traefik_tcp_port" {
-  type        = number
-  description = "TCP port for Traefik websecure entrypoint (legacy single-entrypoint mode; ignored when traefik_enable_web_entrypoint=true)."
-  default     = 8888
-}
-
-variable "traefik_enable_web_entrypoint" {
-  type        = bool
-  description = "Enable dual entrypoints for the legacy control plane. ADX always exposes 'websecure' for control traffic and 'web' for instance data."
-  default     = true
-}
-
-variable "traefik_web_port" {
-  type        = number
-  description = "Port for Traefik 'web' (plain HTTP) data entrypoint. ADX always uses it."
-  default     = 80
-}
-
-variable "traefik_websecure_port" {
-  type        = number
-  description = "Port for Traefik 'websecure' (TLS) control entrypoint. ADX always uses it."
-  default     = 443
-}
-
-variable "traefik_service_type" {
-  type        = string
-  description = "Service type for Traefik. Use 'LoadBalancer' for cloud deployments."
-  default     = "LoadBalancer"
-}
-
-variable "traefik_tls_enabled" {
-  type        = bool
-  description = "Whether to mount a custom default certificate for Traefik. The websecure router still serves TLS when this is false."
-  default     = false
-}
-
-variable "traefik_tls_cert" {
-  type        = string
-  description = "TLS certificate content (PEM) for Traefik. Only used when traefik_tls_enabled=true and traefik_tls_create_secret=true."
-  default     = ""
-  sensitive   = true
-}
-
-variable "traefik_tls_key" {
-  type        = string
-  description = "TLS private key content (PEM) for Traefik. Only used when traefik_tls_enabled=true and traefik_tls_create_secret=true."
-  default     = ""
-  sensitive   = true
-}
-
-variable "traefik_tls_create_secret" {
-  type        = bool
-  description = "Whether to create TLS secret from traefik_tls_cert/traefik_tls_key."
-  default     = false
-}
-
-variable "traefik_service_annotations" {
-  type        = map(string)
-  description = "Extra annotations for Traefik LoadBalancer Service."
-  default     = {}
-}
-
-variable "traefik_internal_stats_enabled" {
-  type        = bool
-  description = "Whether to enable the /internal-stats endpoint on Traefik."
-  default     = true
-}
-
-variable "traefik_internal_stats_image" {
-  type        = string
-  description = "Optional BusyBox image for the Traefik /internal-stats sidecar. Empty uses the deployment ACR VPC endpoint."
-  default     = ""
-}
 
 variable "monitor_namespace" {
   type        = string
@@ -913,5 +809,53 @@ variable "chunk_db_size" {
   validation {
     condition     = var.chunk_db_size == "" || can(regex("^[0-9]+(B|KiB|MiB|GiB|TiB)?$", var.chunk_db_size))
     error_message = "chunk_db_size must be empty, whole bytes, or an integer with B/KiB/MiB/GiB/TiB."
+  }
+}
+
+variable "adx_public_service_enabled" {
+  type        = bool
+  description = "Expose ADX control and data listeners directly through a Kubernetes Service."
+  default     = true
+}
+
+variable "adx_service_type" {
+  type        = string
+  description = "Type of the ADX public Service."
+  default     = "LoadBalancer"
+  validation {
+    condition     = contains(["LoadBalancer", "NodePort", "ClusterIP"], var.adx_service_type)
+    error_message = "ADX service type must be LoadBalancer, NodePort or ClusterIP."
+  }
+}
+
+variable "adx_service_annotations" {
+  type        = map(string)
+  description = "Cloud load-balancer annotations for the ADX public Service."
+  default     = {}
+}
+
+variable "adx_load_balancer_ip" {
+  type        = string
+  description = "Optional address of an existing ADX load balancer."
+  default     = ""
+}
+
+variable "adx_control_port" {
+  type        = number
+  description = "ADX public HTTPS control and PTY port."
+  default     = 443
+  validation {
+    condition     = var.adx_control_port >= 1 && var.adx_control_port <= 65535 && floor(var.adx_control_port) == var.adx_control_port
+    error_message = "ADX control port must be an integer between 1 and 65535."
+  }
+}
+
+variable "adx_data_port" {
+  type        = number
+  description = "ADX public HTTP sandbox data port."
+  default     = 80
+  validation {
+    condition     = var.adx_data_port >= 1 && var.adx_data_port <= 65535 && floor(var.adx_data_port) == var.adx_data_port
+    error_message = "ADX data port must be an integer between 1 and 65535."
   }
 }

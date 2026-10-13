@@ -44,6 +44,7 @@ tunnels. The project overview and deployment quick start are in
 - `deploy/` - Helm charts, standalone scripts, Terraform modules, and deployment helper scripts.
 - `deploy/standalone/manage.py` - source-build standalone lifecycle shared by Linux and Apple Silicon Mac with OrbStack.
 - `assets/` - static images used by the root README.
+- `src/agent-dx/` - Agent DX source pinned to the upstream release commit by a Git submodule.
 
 The open-source AKernel repository contains the SDK, deployment configuration,
 build tooling, and examples. Node runtime components such as `sandboxd` and
@@ -53,6 +54,9 @@ checksum-pinned static distill-fs release recorded in
 `builder/distill-fs-versions.env`. The distill-fs submodule is an optional
 source reference, not a build input. See the Build section below for runtime
 payloads.
+
+ADX platform and Execd binaries come from the release archives pinned in the
+Dockerfiles; `src/agent-dx/` provides the tagged source for inspection.
 
 ## Common Commands
 
@@ -606,13 +610,21 @@ templates, and Python deployment helpers with:
 make deploy-script-check
 ```
 
-For Helm SDK routing changes, exercise the rendered configuration with the
-chart's Traefik image. This requires Helm, PyYAML and a local Docker daemon;
-it uses an unprivileged disposable container on a random loopback port:
+For Kubernetes SDK ingress changes, validate the rendered ADX public Service
+and cloud-provider templates:
 
 ```bash
-python deploy/akernel/charts/core/tests/test_adx_traefik.py -v
+python deploy/akernel/charts/core/tests/test_adx_chart.py -v
+python deploy/terraform/test_adx_contract.py -v
 ```
+
+ADX directly terminates HTTPS control/API/PTY on its 8443 listener and exposes
+HTTP sandbox traffic on 8080. Public Services map these to configurable external
+ports (443/80 by default). Preserve both ports and the existing SDK variables.
+Validate real TLS authentication, PTY and HTTP port access with the
+`direct-ingress` standalone E2E group; PR CI discovers this group alongside the
+other standalone tests. Keep ADX public certificates and remove redundant
+external-proxy certificates and cloud-profile settings.
 
 For standalone lifecycle or launch changes, also run the helper tests without starting containers:
 
@@ -676,10 +688,7 @@ image manager. The pinned distill-fs supports RAFS v5; use
 
 ## ADX observability
 
-Keep the node Collector configuration in `builder/config/` and the core
-chart synchronized. Collect node-local metrics and logs within the node
-container; control-role collectors read shared local logs. Copy the three ADX
-dashboards from the pinned ADX revision and preserve their UIDs and queries.
-Update `deploy/observability.md` whenever collection, labels, or log paths
-change. Validate backend receipt with real SDK requests, not Helm rendering
-alone.
+The node Collector runs inside the existing node container; control-role
+collectors read shared local logs. Keep `builder/config/` and Helm Collector
+configuration synchronized. Preserve the ADX dashboards' UIDs and query
+contracts. Verify real SDK traffic reaches the backends after collection changes.

@@ -39,6 +39,13 @@ adx:
         memory: "${master_memory}"
   ingressApi:
     replicas: 1
+    publicService:
+      enabled: ${adx_public_service_enabled}
+      type: "${adx_service_type}"
+      controlPort: ${adx_control_port}
+      dataPort: ${adx_data_port}
+      annotations: ${jsonencode(adx_service_annotations)}
+      loadBalancerIP: "${adx_load_balancer_ip}"
     resources:
       limits:
         cpu: "${master_cpu}"
@@ -185,42 +192,6 @@ node:
         [plugin.node_resource]
         provider="kubernetes"
         sock_path="/var/run/resource.sock"
-
-traefik:
-  enabled: ${install_traefik}
-  replicas: ${traefik_replicas}
-  enableWebEntrypoint: ${traefik_enable_web_entrypoint}
-  image:
-    repository: "${traefik_image_repository}"
-    tag: "${traefik_image_tag}"
-  ports:
-%{ if traefik_enable_web_entrypoint ~}
-    web: ${traefik_web_port}
-    websecure: ${traefik_websecure_port}
-%{ else ~}
-    tcp: ${traefik_tcp_port}
-%{ endif ~}
-  service:
-    type: "${traefik_service_type}"
-    annotations: ${jsonencode(traefik_service_annotations)}
-    loadBalancerIP: "${traefik_service_loadbalancer_ip}"
-  tls:
-    enabled: ${traefik_tls_enabled}
-    createSecret: ${traefik_tls_create_secret}
-%{ if traefik_tls_cert != "" ~}
-    moduleCrt: ${jsonencode(traefik_tls_cert)}
-%{ endif ~}
-%{ if traefik_tls_key != "" ~}
-    moduleKey: ${jsonencode(traefik_tls_key)}
-%{ endif ~}
-  internalStats:
-    enabled: ${traefik_internal_stats}
-    image: "${traefik_internal_stats_image}"
-  grafana:
-    enabled: ${traefik_grafana_enabled}
-%{ if traefik_grafana_url != "" ~}
-    url: "${traefik_grafana_url}"
-%{ endif ~}
 
 coordinator:
   image:

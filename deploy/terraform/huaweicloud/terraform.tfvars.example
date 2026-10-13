@@ -80,8 +80,6 @@ master_image_repository   = "swr.cn-north-4.myhuaweicloud.com/akernel/all-in-one
 master_image_tag          = "<release-tag>"
 node_image_repository     = "swr.cn-north-4.myhuaweicloud.com/akernel/all-in-one"
 node_image_tag            = "<release-tag>"
-# traefik_image_repository = "traefik"
-# traefik_image_tag        = "v3.6.8"
 
 # Generate a unique seed for each deployment. Guided `make config` writes this
 # automatically; direct Terraform users can use `openssl rand -hex 32`.
@@ -92,10 +90,6 @@ enable_runc = false
 
 # AKernel defaults YuanRong placement to "spread"; use "binpack" to compact.
 schedule_placement_policy = "spread"
-
-# Enable the /internal-stats endpoint sidecar on Traefik.
-# traefik_internal_stats_enabled = true
-# traefik_internal_stats_image   = "my-registry.example.com/busybox:1.37.0-musl"
 
 # Optional mirror registry for Grafana, Prometheus, Loki, Tempo, and BusyBox.
 # Leave empty to use the projects' official public images.
@@ -147,9 +141,6 @@ schedule_placement_policy = "spread"
 # Optional: or specify the Service EIP as loadBalancerIP.
 # Optional: extra service annotations.
 
-# Optional: traefik replicas.
-# traefik_replicas = 1
-
 # Restrict SSH CIDRs in production.
 allowed_ssh_cidrs = ["0.0.0.0/0"]
 
@@ -181,3 +172,12 @@ prereq_kruise_chart_version = "1.8.3"
 #     password = "<password>"
 #   }
 # }
+
+# ADX directly exposes HTTPS control/PTY and HTTP sandbox traffic.
+adx_public_service_enabled = true
+adx_service_type           = "LoadBalancer"
+adx_control_port           = 443
+adx_data_port              = 80
+# adx_service_annotations = {}
+# adx_load_balancer_ip = ""
+adx_public_access = true

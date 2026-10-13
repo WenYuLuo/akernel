@@ -440,18 +440,6 @@ variable "node_image_tag" {
   default     = ""
 }
 
-variable "traefik_image_repository" {
-  type        = string
-  description = "Image repository for Traefik."
-  default     = "traefik"
-}
-
-variable "traefik_image_tag" {
-  type        = string
-  description = "Image tag for Traefik."
-  default     = "v3.6.8"
-}
-
 variable "monitor_image_registry" {
   type        = string
   description = "Optional mirror registry prefix for Grafana, Prometheus, Loki, Tempo, and BusyBox. Empty uses their official public images."
@@ -517,92 +505,6 @@ variable "master_elb_eip_type" {
   type        = string
   description = "EIP type for auto-created ELB."
   default     = "5_bgp"
-}
-
-variable "install_traefik" {
-  type        = bool
-  description = "Whether to enable Traefik ingress controller in the core chart."
-  default     = true
-}
-
-variable "traefik_replicas" {
-  type        = number
-  description = "Number of Traefik replicas."
-  default     = 1
-}
-
-variable "traefik_tcp_port" {
-  type        = number
-  description = "TCP port for Traefik websecure entrypoint (legacy single-entrypoint mode; ignored when traefik_enable_web_entrypoint=true)."
-  default     = 8888
-}
-
-variable "traefik_enable_web_entrypoint" {
-  type        = bool
-  description = "Enable dual entrypoints for the legacy control plane. ADX always exposes 'websecure' for control traffic and 'web' for instance data."
-  default     = false
-}
-
-variable "traefik_web_port" {
-  type        = number
-  description = "Port for Traefik 'web' (plain HTTP) data entrypoint. ADX always uses it."
-  default     = 80
-}
-
-variable "traefik_websecure_port" {
-  type        = number
-  description = "Port for Traefik 'websecure' (TLS) control entrypoint. ADX always uses it."
-  default     = 443
-}
-
-variable "traefik_service_type" {
-  type        = string
-  description = "Service type for Traefik. Use 'LoadBalancer' for cloud deployments."
-  default     = "LoadBalancer"
-}
-
-variable "traefik_public_access" {
-  type        = bool
-  description = "Whether Traefik receives a public Huawei Cloud LoadBalancer."
-  default     = true
-}
-
-variable "traefik_tls_enabled" {
-  type        = bool
-  description = "Whether to enable TLS for Traefik."
-  default     = false
-}
-
-variable "traefik_tls_cert" {
-  type        = string
-  description = "TLS certificate content (PEM) for Traefik. Only used when traefik_tls_enabled=true and traefik_tls_create_secret=true."
-  default     = ""
-  sensitive   = true
-}
-
-variable "traefik_tls_key" {
-  type        = string
-  description = "TLS private key content (PEM) for Traefik. Only used when traefik_tls_enabled=true and traefik_tls_create_secret=true."
-  default     = ""
-  sensitive   = true
-}
-
-variable "traefik_tls_create_secret" {
-  type        = bool
-  description = "Whether to create TLS secret from traefik_tls_cert/traefik_tls_key."
-  default     = false
-}
-
-variable "traefik_internal_stats_enabled" {
-  type        = bool
-  description = "Whether to enable the /internal-stats endpoint on Traefik."
-  default     = false
-}
-
-variable "traefik_internal_stats_image" {
-  type        = string
-  description = "BusyBox image for the Traefik /internal-stats sidecar."
-  default     = "busybox:1.37.0-musl"
 }
 
 variable "monitor_namespace" {
@@ -936,4 +838,58 @@ variable "chunk_db_size" {
     condition     = var.chunk_db_size == "" || can(regex("^[0-9]+(B|KiB|MiB|GiB|TiB)?$", var.chunk_db_size))
     error_message = "chunk_db_size must be empty, whole bytes, or an integer with B/KiB/MiB/GiB/TiB."
   }
+}
+
+variable "adx_public_service_enabled" {
+  type        = bool
+  description = "Expose ADX control and data listeners directly through a Kubernetes Service."
+  default     = true
+}
+
+variable "adx_service_type" {
+  type        = string
+  description = "Type of the ADX public Service."
+  default     = "LoadBalancer"
+  validation {
+    condition     = contains(["LoadBalancer", "NodePort", "ClusterIP"], var.adx_service_type)
+    error_message = "ADX service type must be LoadBalancer, NodePort or ClusterIP."
+  }
+}
+
+variable "adx_service_annotations" {
+  type        = map(string)
+  description = "Cloud load-balancer annotations for the ADX public Service."
+  default     = {}
+}
+
+variable "adx_load_balancer_ip" {
+  type        = string
+  description = "Optional address of an existing ADX load balancer."
+  default     = ""
+}
+
+variable "adx_control_port" {
+  type        = number
+  description = "ADX public HTTPS control and PTY port."
+  default     = 443
+  validation {
+    condition     = var.adx_control_port >= 1 && var.adx_control_port <= 65535 && floor(var.adx_control_port) == var.adx_control_port
+    error_message = "ADX control port must be an integer between 1 and 65535."
+  }
+}
+
+variable "adx_data_port" {
+  type        = number
+  description = "ADX public HTTP sandbox data port."
+  default     = 80
+  validation {
+    condition     = var.adx_data_port >= 1 && var.adx_data_port <= 65535 && floor(var.adx_data_port) == var.adx_data_port
+    error_message = "ADX data port must be an integer between 1 and 65535."
+  }
+}
+
+variable "adx_public_access" {
+  type        = bool
+  description = "Automatically provision a public Huawei Cloud ELB for ADX."
+  default     = true
 }
