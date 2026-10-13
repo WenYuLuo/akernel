@@ -616,7 +616,6 @@ cloud-provider templates and generated SDK endpoints:
 ```bash
 python deploy/akernel/charts/core/tests/test_adx_chart.py -v
 python deploy/terraform/test_adx_contract.py -v
-python deploy/scripts/test_print_sdk_env.py -v
 ```
 
 ADX directly terminates HTTPS control/API/PTY on its 8443 listener and exposes
