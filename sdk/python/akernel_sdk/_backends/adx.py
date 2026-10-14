@@ -514,6 +514,7 @@ class AdxBackend:
             use_tls=config.api_endpoint.use_tls,
             gateway_address=config.gateway_endpoint.authority(),
             gateway_use_tls=config.gateway_endpoint.use_tls,
+            verify_tls=config.verify_tls,
         )
 
     def pty_for(self, instance_id: str) -> Any:

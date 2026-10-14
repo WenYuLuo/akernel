@@ -15,6 +15,10 @@ which owns availability and compatibility checks. The bundled deployment also
 advertises Kata Containers and Firecracker on KVM-capable nodes. The native
 Linux runc payload is build-time optional and must be explicitly included and
 enabled by an operator.
+SDK service certificate verification is configured with `AKERNEL_VERIFY_TLS`
+(default off); private trust uses `SSL_CERT_FILE`. The `ak` CLI supports global
+`--verify-tls` / `--no-verify-tls` and `--ca-file` options. Keep SDK connection,
+PTY, inventory and resource-query TLS policy consistent through `_tls.py`.
 Creation-time network policies and atomic runtime replacement support
 unrestricted networking, blocking new flows except the control-plane and
 published sandbox-port routes, or denying exact and leading-wildcard DNS names.

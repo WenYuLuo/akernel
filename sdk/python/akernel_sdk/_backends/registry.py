@@ -24,6 +24,7 @@ from importlib import metadata
 from typing import Final
 
 from .._addresses import api_endpoint_from_env, gateway_endpoint_from_env
+from .._tls import verification_from_env
 from .base import Backend, BackendConfig
 from .errors import BackendNotInstalledError, InvalidBackendError
 
@@ -96,6 +97,7 @@ def _config_from_env() -> BackendConfig:
         api_endpoint=api_endpoint_from_env(),
         gateway_endpoint=gateway_endpoint_from_env(),
         token=token,
+        verify_tls=verification_from_env(),
     )
 
 
