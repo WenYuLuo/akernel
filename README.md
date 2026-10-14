@@ -137,8 +137,7 @@ AKernel SDK requires Python 3.10 or newer. This source version declares
 `adx_environment.Environment`; the public `akernel_sdk.Sandbox` API keeps its
 existing names and behavior. Deploy the matching ADX Environment API before
 using this SDK. Source installs and CI resolve the declared dependency from
-PyPI. The published `adx-environment==0.1.0rc1` wheel and source distribution
-are the verified ADX Buildkite #160 artifacts.
+PyPI.
 
 Configure the AKernel environment:
 

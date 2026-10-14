@@ -57,13 +57,11 @@ payloads.
 
 ADX platform and Execd binaries come from the release archives pinned in the
 Dockerfiles; `src/agent-dx/` provides the matching artifact build source for
-inspection. The refreshed `v0.1.0rc1` archives use Buildkite #160 source
-`0a5dea4c0674c8930de78d787dc59bab1bc8d770`, independently of the Git tag.
+inspection.
 The internal adapter uses `adx-environment==0.1.0rc1` and
 `/api/environment/v1`, while AKernel retains its public `Sandbox` API.
-The matching ADX Environment wheel and source distribution are published on
-PyPI from Buildkite #160. Keep source installation, CI and publication
-dependency resolution through the configured package index.
+Keep source installation, CI and publication dependency resolution through
+the configured package index.
 
 ## Common Commands
 
