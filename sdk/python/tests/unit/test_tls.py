@@ -130,6 +130,8 @@ class TLSHandshakeTest(unittest.TestCase):
             "/CN=AKernel loopback test CA",
             "-addext",
             "basicConstraints=critical,CA:TRUE",
+            "-addext",
+            "keyUsage=critical,keyCertSign,cRLSign",
         )
         for name, san in (
             ("valid", "DNS:localhost,IP:127.0.0.1"),
@@ -149,7 +151,10 @@ class TLSHandshakeTest(unittest.TestCase):
             )
             ext = cls.root / f"{name}.ext"
             ext.write_text(
-                f"subjectAltName={san}\nextendedKeyUsage=serverAuth\nbasicConstraints=CA:FALSE\n"
+                f"subjectAltName={san}\nextendedKeyUsage=serverAuth\n"
+                "basicConstraints=critical,CA:FALSE\n"
+                "keyUsage=critical,digitalSignature,keyEncipherment\n"
+                "subjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid,issuer\n"
             )
             run(
                 "x509",
@@ -272,8 +277,9 @@ class TLSHandshakeTest(unittest.TestCase):
         env = {
             "AKERNEL_SERVER_ADDRESS": f"127.0.0.1:{port}",
             "AKERNEL_TOKEN": "loopback-test-token",
-            "AKERNEL_VERIFY_TLS": "1" if verify else "0",
         }
+        if verify is not None:
+            env["AKERNEL_VERIFY_TLS"] = "1" if verify else "0"
         if trusted:
             env["SSL_CERT_FILE"] = str(self.root / "ca.pem")
         return patch.dict(os.environ, env, clear=True)
@@ -336,16 +342,41 @@ class TLSHandshakeTest(unittest.TestCase):
         with self._https("valid") as port, self._env(port, trusted=False, verify=False):
             self.assertEqual(_resource_api.query_resource_view(), {"items": []})
 
+    def test_default_verification_accepts_self_signed_endpoint(self):
+        with self._https("valid") as port, self._env(port, trusted=False, verify=None):
+            backend = adx.AdxBackend(registry._config_from_env())
+            self.assertFalse(backend._connection.verify_tls)
+            client = EnvironmentClient(connection=backend._connection)
+            try:
+                self.assertEqual(
+                    client._http.get(
+                        f"https://127.0.0.1:{port}/api/instances"
+                    ).status_code,
+                    200,
+                )
+                self.assertEqual(
+                    cli._make_get_request(
+                        f"https://127.0.0.1:{port}/api/instances",
+                        "test",
+                        cli._create_ssl_context(),
+                    )["status"],
+                    200,
+                )
+                self.assertEqual(_resource_api.query_resource_view(), {"items": []})
+            finally:
+                client.close()
+
     def test_pty_tls_rejects_untrusted_and_wrong_host_and_accepts_trusted(self):
-        for name, trusted, accepted in (
-            ("valid", True, True),
-            ("valid", False, False),
-            ("wrong-host", True, False),
+        for name, trusted, verify, accepted in (
+            ("valid", True, True, True),
+            ("valid", False, True, False),
+            ("wrong-host", True, True, False),
+            ("valid", False, None, True),
         ):
             with (
-                self.subTest(name=name, trusted=trusted),
+                self.subTest(name=name, trusted=trusted, verify=verify),
                 self._wss(name) as port,
-                self._env(port, trusted=trusted),
+                self._env(port, trusted=trusted, verify=verify),
             ):
                 backend = adx.AdxBackend(registry._config_from_env())
                 pty = backend.pty_for("tls-test")
@@ -365,6 +396,7 @@ class TLSHandshakeTest(unittest.TestCase):
             ("valid", False, True, False),
             ("wrong-host", True, True, False),
             ("valid", False, False, True),
+            ("valid", False, None, True),
         ):
             received = threading.Event()
             with (
