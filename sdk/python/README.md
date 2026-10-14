@@ -45,16 +45,11 @@ This source version depends on `adx-environment==0.1.0rc1`, maintained in
 to `adx_environment.Environment`. Deploy a matching ADX release exposing
 `/api/environment/v1` for lifecycle, resources and command subscriptions.
 
-For source validation with locally built distributions:
-
-```bash
-python -m pip install --find-links /absolute/path/to/adx-wheels ./sdk/python
-```
-
-Release installation requires the declared ADX dependency to be available
-from the configured package index. CI checks wheel and source distribution
-installs in separate clean environments, including `pip check`, imports,
-version checks, and the `ak` CLI.
+Source installs and CI resolve `adx-environment==0.1.0rc1` from PyPI. Its
+published wheel and source distribution match the verified ADX Buildkite #160
+artifacts bundled with the platform release. CI checks AKernel wheel and source
+distribution installs in separate clean environments, including `pip check`,
+imports, version checks, and the `ak` CLI.
 
 Configure the public AKernel entrypoint and the deployment token:
 

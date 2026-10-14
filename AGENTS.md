@@ -61,10 +61,9 @@ inspection. The refreshed `v0.1.0rc1` archives use Buildkite #160 source
 `0a5dea4c0674c8930de78d787dc59bab1bc8d770`, independently of the Git tag.
 The internal adapter uses `adx-environment==0.1.0rc1` and
 `/api/environment/v1`, while AKernel retains its public `Sandbox` API.
-For source validation before the ADX dependency is available in the package
-index, select the release's bundled wheel with `pip --find-links` or
-`UV_FIND_LINKS`. Keep normal CI and publication dependency resolution through
-the configured package index.
+The matching ADX Environment wheel and source distribution are published on
+PyPI from Buildkite #160. Keep source installation, CI and publication
+dependency resolution through the configured package index.
 
 ## Common Commands
 
