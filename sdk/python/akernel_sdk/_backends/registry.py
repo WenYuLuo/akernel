@@ -34,7 +34,7 @@ _MODULES: Final = {
     ADX: "akernel_sdk._backends.adx",
 }
 _DISTRIBUTIONS: Final = {
-    ADX: "adx-sandbox",
+    ADX: "adx-environment",
 }
 
 

@@ -44,7 +44,7 @@ tunnels. The project overview and deployment quick start are in
 - `deploy/` - Helm charts, standalone scripts, Terraform modules, and deployment helper scripts.
 - `deploy/standalone/manage.py` - source-build standalone lifecycle shared by Linux and Apple Silicon Mac with OrbStack.
 - `assets/` - static images used by the root README.
-- `src/agent-dx/` - Agent DX source pinned to the upstream release commit by a Git submodule.
+- `src/agent-dx/` - Agent DX source pinned to the packaged build commit by a Git submodule.
 
 The open-source AKernel repository contains the SDK, deployment configuration,
 build tooling, and examples. Node runtime components such as `sandboxd` and
@@ -56,7 +56,15 @@ source reference, not a build input. See the Build section below for runtime
 payloads.
 
 ADX platform and Execd binaries come from the release archives pinned in the
-Dockerfiles; `src/agent-dx/` provides the tagged source for inspection.
+Dockerfiles; `src/agent-dx/` provides the matching artifact build source for
+inspection. The refreshed `v0.1.0rc1` archives use Buildkite #160 source
+`0a5dea4c0674c8930de78d787dc59bab1bc8d770`, independently of the Git tag.
+The internal adapter uses `adx-environment==0.1.0rc1` and
+`/api/environment/v1`, while AKernel retains its public `Sandbox` API.
+For source validation before the ADX dependency is available in the package
+index, select the release's bundled wheel with `pip --find-links` or
+`UV_FIND_LINKS`. Keep normal CI and publication dependency resolution through
+the configured package index.
 
 ## Common Commands
 

@@ -27,7 +27,7 @@ from urllib.error import HTTPError, URLError
 from ._addresses import api_endpoint_from_env
 from .types import NodeInfo
 
-RESOURCE_PATH = "/api/sandbox/v1/resources"
+RESOURCE_PATH = "/api/environment/v1/resources"
 
 
 class ResourceAPIError(RuntimeError):

@@ -407,7 +407,7 @@ def handle_delete(instance_ids: list[str]) -> None:
     for instance_id in instance_ids:
         try:
             result = _make_delete_request(
-                f"{endpoint.base_url()}/api/sandbox/v1/sandboxes/"
+                f"{endpoint.base_url()}/api/environment/v1/environments/"
                 f"{quote(instance_id, safe='')}",
                 token,
                 ssl_context,

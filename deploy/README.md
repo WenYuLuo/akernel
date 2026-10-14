@@ -29,14 +29,21 @@ make e2e
 ```
 
 The node image installs the ADX `v0.1.0rc1` Linux AMD64 package from
-[Buildkite #152](https://buildkite.com/agent-dx/agent-dx/builds/152), commit
-`9a7924658fbcf04a34d76bfcecb0935ed850923a`. Both Dockerfiles pin the immutable
-OBS build path and archive SHA-256. The node build runs the release's
+[Buildkite #160](https://buildkite.com/agent-dx/agent-dx/builds/160), commit
+`0a5dea4c0674c8930de78d787dc59bab1bc8d770`. Both Dockerfiles pin the immutable
+OBS build path and verified archive SHA-256. These archives are also published
+in the GitCode `v0.1.0rc1` release; their manifests identify the refreshed build
+source separately from the original Git tag. The node build runs the release's
 `install.sh`, which also verifies its internal manifest. The runtime build
 uses the independent `adx-execd` archive from the same build to produce
 AKernel's own runtime rootfs; it does not use the prebuilt ADX runtime image.
-The refreshed platform release retains `v0.1.0rc1`; the SDK dependency is
-`adx-sandbox==0.1.0rc2` from the configured Python package index.
+
+The SDK depends on `adx-environment==0.1.0rc1` and uses `/api/environment/v1`.
+The public `akernel_sdk.Sandbox` API retains its existing names. Install the
+matching wheel bundled in the platform archive through `pip --find-links`
+or `UV_FIND_LINKS` when it has not been published to your package index.
+See [image build downloads](../builder/README.md#environment-api-source-builds)
+for source validation and archive overrides.
 
 When advancing ADX, update the URL, checksum and `ADX_VERSION` in both
 Dockerfiles together. The CI contract checks matching build paths and release

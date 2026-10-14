@@ -43,6 +43,30 @@ Each pair is validated before either image build; downloads retain checksum and 
 
 Source version/revision labels and artifact URL overrides are declared near their uses so changing those inputs preserves preceding dependency layers.
 
+### Environment API source builds
+
+The current AKernel source adapter uses `adx-environment==0.1.0rc1` and
+`/api/environment/v1`. The default platform and Execd archives are pinned to
+[ADX Buildkite #160](https://buildkite.com/agent-dx/agent-dx/builds/160), source
+`0a5dea4c0674c8930de78d787dc59bab1bc8d770`, with matching immutable OBS URLs
+and verified SHA-256 values. These are the same archives published in the
+GitCode `v0.1.0rc1` release. The Git tag still identifies the original release
+source; the refreshed archives' manifests identify the actual build source.
+
+Use the matching SDK wheel bundled under `sdk/` in the platform archive for
+source validation when the dependency is not available in your package index:
+
+```bash
+export UV_FIND_LINKS=/absolute/path/to/extracted-adx-release/sdk
+make standalone-source-test
+```
+
+The source reference in `src/agent-dx/` matches the artifact build commit.
+Archive URL/checksum overrides remain available for validating another build;
+select the platform and Execd archives from the same ADX revision and install
+that release's SDK wheel. SDK publication requires the declared dependency
+to be available from the configured package index.
+
 ## Build proxy and network
 
 Export proxy variables for an endpoint reachable from the Docker builder, then opt into forwarding them:

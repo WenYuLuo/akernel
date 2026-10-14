@@ -40,11 +40,21 @@ To install from source:
 python -m pip install ./sdk/python
 ```
 
-Source installs, CI, and AKernel SDK releases resolve the declared
-`adx-sandbox==0.1.0rc2` dependency from the configured Python package index.
-The dependency version is maintained in `pyproject.toml`. CI validates wheel
-and source distribution installs in separate clean environments, including
-`pip check`, imports, version checks, and the `ak` CLI.
+This source version depends on `adx-environment==0.1.0rc1`, maintained in
+`pyproject.toml`. The ADX adapter translates the public AKernel `Sandbox` API
+to `adx_environment.Environment`. Deploy a matching ADX release exposing
+`/api/environment/v1` for lifecycle, resources and command subscriptions.
+
+For source validation with locally built distributions:
+
+```bash
+python -m pip install --find-links /absolute/path/to/adx-wheels ./sdk/python
+```
+
+Release installation requires the declared ADX dependency to be available
+from the configured package index. CI checks wheel and source distribution
+installs in separate clean environments, including `pip check`, imports,
+version checks, and the `ak` CLI.
 
 Configure the public AKernel entrypoint and the deployment token:
 
