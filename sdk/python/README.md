@@ -110,6 +110,23 @@ ak --ca-file /path/to/trusted-ca-or-certificate.pem exec <sandbox-id>
 `--no-verify-tls` option selects the existing unverified mode and cannot be
 combined with `--ca-file`. Environment boolean values accept `1/true/yes/on`
 and `0/false/no/off`; invalid values fail rather than disabling verification.
+
+CA loading follows the underlying transport when verification is enabled:
+
+| Transport | Trust-source contract |
+|---|---|
+| SDK control, command and file HTTP requests (HTTPX) | A nonempty `SSL_CERT_FILE` takes precedence over `SSL_CERT_DIR` and is loaded explicitly. A missing or malformed file raises an error during client construction, even if the directory contains a usable CA. If no file is selected, HTTPX uses `SSL_CERT_DIR` when set, otherwise its default CA bundle. |
+| CLI inventory/deletion, SDK resource queries, PTY and command-watch (Python SSL/OpenSSL) | Use OpenSSL's default trust paths, including `SSL_CERT_FILE` and `SSL_CERT_DIR`. A missing or malformed file can be ignored while a usable CA directory still validates the server. |
+
+`--ca-file` sets the process trust-file variable; it does not restrict all
+transports to that file as their sole trust source or guarantee an error for
+an invalid path. Check the selected PEM file before use. For a private CA,
+configure a valid file and unset `SSL_CERT_DIR` to avoid an additional
+environment-selected directory; OpenSSL can still use its default trust paths.
+These loading differences do not disable certificate-chain or hostname checks
+in verified mode. When verification is off, these service transports do not
+load the CA sources to authenticate the server.
+
 Verification failures do not fall back to unverified TLS. The process backend
 and dependency HTTP pools retain their configuration, so set trust and
 verification before first use; restart the client after changing CA material.

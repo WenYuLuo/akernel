@@ -179,6 +179,26 @@ class TLSHandshakeTest(unittest.TestCase):
         context.load_cert_chain(self.root / f"{name}.pem", self.root / f"{name}.key")
         return context
 
+    def _trust_directory_with_invalid_file(self, kind):
+        directory = self.root / "ca-directory"
+        directory.mkdir(exist_ok=True)
+        subject_hash = subprocess.check_output(
+            [
+                "openssl",
+                "x509",
+                "-in",
+                str(self.root / "ca.pem"),
+                "-subject_hash",
+                "-noout",
+            ],
+            text=True,
+        ).strip()
+        shutil.copy(self.root / "ca.pem", directory / f"{subject_hash}.0")
+        file = self.root / f"{kind}.pem"
+        if kind == "malformed":
+            file.write_text("not a PEM certificate\n")
+        return {"SSL_CERT_FILE": str(file), "SSL_CERT_DIR": str(directory)}
+
     @contextlib.contextmanager
     def _https(self, name):
         server = ThreadingHTTPServer(("127.0.0.1", 0), _HTTPHandler)
@@ -309,6 +329,98 @@ class TLSHandshakeTest(unittest.TestCase):
                 self.assertEqual(_resource_api.query_resource_view(), {"items": []})
             finally:
                 client.close()
+
+    def test_httpx_rejects_invalid_file_despite_usable_ca_directory(self):
+        for kind, error in (
+            ("missing", FileNotFoundError),
+            ("malformed", ssl.SSLError),
+        ):
+            trust = self._trust_directory_with_invalid_file(kind)
+            with (
+                self.subTest(kind=kind),
+                self._https("valid") as port,
+                self._env(port, trusted=False),
+                patch.dict(os.environ, trust),
+            ):
+                backend = adx.AdxBackend(registry._config_from_env())
+                self.assertTrue(backend._connection.verify_tls)
+                with self.assertRaises(error):
+                    EnvironmentClient(connection=backend._connection)
+
+    def test_openssl_http_uses_directory_despite_invalid_file_and_checks_host(self):
+        for kind in ("missing", "malformed"):
+            trust = self._trust_directory_with_invalid_file(kind)
+            for name in ("valid", "wrong-host"):
+                with (
+                    self.subTest(kind=kind, name=name),
+                    self._https(name) as port,
+                    self._env(port, trusted=False),
+                    patch.dict(os.environ, trust),
+                ):
+                    context = cli._create_ssl_context()
+                    self.assertTrue(context.check_hostname)
+                    self.assertEqual(context.verify_mode, ssl.CERT_REQUIRED)
+                    if name == "valid":
+                        with (
+                            patch(
+                                "sys.argv",
+                                ["ak", "--ca-file", trust["SSL_CERT_FILE"], "list"],
+                            ),
+                            contextlib.redirect_stdout(io.StringIO()),
+                        ):
+                            cli.main()
+                        self.assertEqual(
+                            _resource_api.query_resource_view(), {"items": []}
+                        )
+                    else:
+                        with (
+                            contextlib.redirect_stderr(io.StringIO()),
+                            self.assertRaises(SystemExit),
+                        ):
+                            cli._make_get_request(
+                                f"https://127.0.0.1:{port}/api/instances",
+                                "test",
+                                context,
+                            )
+                        with self.assertRaisesRegex(
+                            _resource_api.ResourceAPIError, "CERTIFICATE_VERIFY_FAILED"
+                        ):
+                            _resource_api.query_resource_view()
+
+    def test_openssl_websockets_use_directory_despite_invalid_file(self):
+        for kind in ("missing", "malformed"):
+            trust = self._trust_directory_with_invalid_file(kind)
+            with (
+                self.subTest(kind=kind, transport="pty"),
+                self._wss("valid") as port,
+                self._env(port, trusted=False),
+                patch.dict(os.environ, trust),
+            ):
+                backend = adx.AdxBackend(registry._config_from_env())
+                self.assertTrue(backend._connection.verify_tls)
+                session = backend.pty_for("tls-test").create("true")
+                try:
+                    self.assertEqual(session.wait(timeout=5), 0)
+                finally:
+                    session.close()
+            received = threading.Event()
+            with (
+                self.subTest(kind=kind, transport="command-watch"),
+                self._wss("valid", watch=True, received=received) as port,
+                self._env(port, trusted=False),
+                patch.dict(os.environ, trust),
+            ):
+                backend = adx.AdxBackend(registry._config_from_env())
+                self.assertTrue(backend._connection.verify_tls)
+                manager = _CommandWaitManager(backend._connection)
+                try:
+                    manager.wait("tls-test", "command-test", timeout=3)
+                    self.assertTrue(received.is_set())
+                finally:
+                    thread = manager._thread
+                    if thread is not None:
+                        thread.join(timeout=7)
+                        self.assertFalse(thread.is_alive())
 
     def test_sdk_cli_and_resources_reject_untrusted_and_wrong_host(self):
         for name, trusted in (("valid", False), ("wrong-host", True)):

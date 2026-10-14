@@ -19,6 +19,12 @@ SDK service certificate verification is configured with `AKERNEL_VERIFY_TLS`
 (default off); private trust uses `SSL_CERT_FILE`. The `ak` CLI supports global
 `--verify-tls` / `--no-verify-tls` and `--ca-file` options. Keep SDK connection,
 PTY, inventory and resource-query TLS policy consistent through `_tls.py`.
+Trust-source loading follows the underlying transport: HTTPX explicitly loads
+`SSL_CERT_FILE` ahead of `SSL_CERT_DIR`, while Python SSL/OpenSSL paths use
+default trust paths and can validate through a CA directory despite an invalid
+file. `--ca-file` sets the trust-file environment variable rather than selecting
+an exclusive trust store. Preserve this documented distinction and its real
+TLS regression coverage; the SDK README owns the detailed contract.
 Creation-time network policies and atomic runtime replacement support
 unrestricted networking, blocking new flows except the control-plane and
 published sandbox-port routes, or denying exact and leading-wildcard DNS names.
