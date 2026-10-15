@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Opt-in runc executable-loss regression on a task-owned standalone container."""
+"""Fail one selected runc delete, then verify ordinary upstream retry cleanup."""
 
 import hashlib
 import json
@@ -27,6 +27,7 @@ import httpx
 
 from akernel_sdk import Sandbox
 from akernel_sdk._addresses import api_endpoint_from_env
+from tests.e2e.fault import runc_delete_fault
 from tests.e2e.full.test_redis_lifecycle import _Redis
 from tests.e2e.run import _capture_redis_inventory
 
@@ -79,19 +80,16 @@ print(json.dumps(result))
     _ENABLED, "requires isolated standalone node and explicit fault opt-in"
 )
 class RuncDeleteRetryIntegrationTest(unittest.TestCase):
-    def test_missing_runc_retains_ownership_then_monitor_cleans_after_restore(self):
-        container = os.environ.get("AKERNEL_TEST_CONTAINER", "")
-        expected = os.environ.get("AKERNEL_TEST_CONTAINER_ID", "")
-        self.assertTrue(
-            container and len(expected) == 64,
-            "set task-owned container name and full ID",
-        )
+    def test_one_delete_failure_retains_ownership_then_retry_cleans(self):
+        container = os.environ["AKERNEL_TEST_CONTAINER"]
+        expected = os.environ["AKERNEL_TEST_CONTAINER_ID"]
+        self.assertEqual(len(expected), 64, "set the full task container ID")
         output = Path(os.environ["AKERNEL_TEST_FAULT_OUTPUT"])
         output.mkdir(parents=True, exist_ok=True)
         name = "runc-delete-retry-" + uuid.uuid4().hex[:12]
+        fault = "/home/akernel/" + name
         marker = name + ".bin"
         payload = uuid.uuid4().bytes * 4096
-        backup = "/usr/local/bin/runc." + name
         namespace = os.environ.get("AKERNEL_REDIS_NAMESPACE", "akernel")
         control = f"adx:{{{namespace}}}:control:v1"
         evidence = {
@@ -100,16 +98,18 @@ class RuncDeleteRetryIntegrationTest(unittest.TestCase):
             "public_delete_requests_before_cleanup": 0,
         }
         sandbox = None
-        hidden = False
         physical, pid, cgroup = "", 0, ""
+        installation_attempted = False
 
         def docker(*args):
             identity = subprocess.check_output(
-                ["docker", "inspect", "--format", "{{.Id}}", container], text=True
+                ["docker", "inspect", "--format", "{{.Id}}", container],
+                text=True,
+                timeout=15,
             ).strip()
             self.assertEqual(identity, expected, "task container identity changed")
             return subprocess.check_output(
-                ["docker", "exec", container, *args], text=True
+                ["docker", "exec", expected, *args], text=True, timeout=15
             )
 
         def record():
@@ -120,37 +120,29 @@ class RuncDeleteRetryIntegrationTest(unittest.TestCase):
             finally:
                 client.close()
 
+        def write_evidence():
+            (output / "runc-delete-retry.json").write_text(
+                json.dumps(evidence, indent=2) + "\n"
+            )
+
         def snapshot(stage):
             nonlocal pid, cgroup
             state = json.loads(
                 docker("python3", "-c", _SNAPSHOT, physical, marker, str(pid), cgroup)
             )
             pid, cgroup = state["init_pid"], state["cgroup_path"]
-            current = record()
-            result = (current or {}).get("result") or {}
+            current = record() or {}
+            result = current.get("result") or {}
             state.update(
                 stage=stage,
                 time=time.time(),
                 state=result.get("state"),
                 resources_held=result.get("resources_held"),
-                assignment=(current or {}).get("assignment"),
+                assignment=current.get("assignment"),
             )
             evidence["observations"].append(state)
-            (output / "runc-delete-retry.json").write_text(
-                json.dumps(evidence, indent=2) + "\n"
-            )
+            write_evidence()
             return state
-
-        def restore():
-            nonlocal hidden
-            if hidden:
-                docker(
-                    "python3",
-                    "-c",
-                    "import os,sys; os.rename(sys.argv[1],'/usr/local/bin/runc')",
-                    backup,
-                )
-                hidden = False
 
         try:
             self.assertFalse(
@@ -165,6 +157,26 @@ class RuncDeleteRetryIntegrationTest(unittest.TestCase):
                 ).strip(),
                 "0",
             )
+            self.assertEqual(
+                docker(
+                    "python3",
+                    "-c",
+                    "from pathlib import Path; "
+                    "print(Path('/usr/local/bin/runc').read_bytes()[:4].hex())",
+                ).strip(),
+                "7f454c46",
+            )
+            installation_attempted = True
+            evidence["real_runc_sha256"] = docker(
+                "python3",
+                "-c",
+                "import pathlib,runpy,sys; p=pathlib.Path(sys.argv[1]+'.py'); "
+                "p.write_text(sys.argv[2]); "
+                "print(runpy.run_path(str(p))['install']("
+                "'/usr/local/bin/runc',sys.argv[1])); p.unlink()",
+                fault,
+                Path(runc_delete_fault.__file__).read_text(),
+            ).strip()
             kwargs = {
                 "name": name,
                 "runtime": "runc",
@@ -184,7 +196,7 @@ class RuncDeleteRetryIntegrationTest(unittest.TestCase):
                 docker(
                     "python3",
                     "-c",
-                    "import json; from pathlib import Path; "
+                    "import json;from pathlib import Path; "
                     "print(json.dumps([p.name for p in "
                     "Path('/run/sandboxd/runc').iterdir()]))",
                 )
@@ -208,17 +220,43 @@ class RuncDeleteRetryIntegrationTest(unittest.TestCase):
                     )
                 )
             )
-            evidence["environment_id"] = sandbox.id
-            evidence["physical_id"] = physical
+            evidence.update(
+                environment_id=sandbox.id,
+                physical_id=physical,
+                fixture_id=expected,
+                fault_directory=fault,
+            )
+            remaining = (
+                float(
+                    os.environ.get(
+                        "AKERNEL_E2E_DEADLINE_MONOTONIC", time.monotonic() + 360
+                    )
+                )
+                - time.monotonic()
+            )
+            self.assertGreaterEqual(
+                remaining, 100, "insufficient time for injection and ordinary cleanup"
+            )
+            config = {
+                "script": _SNAPSHOT,
+                "args": [physical, marker, "0", ""],
+                "control": control,
+                "environment": sandbox.id,
+            }
             docker(
                 "python3",
                 "-c",
-                "import os,sys; p='/usr/local/bin/runc'; "
-                "assert os.path.realpath(p)==p and not os.path.exists(sys.argv[1]); "
-                "os.rename(p,sys.argv[1])",
-                backup,
+                "import json,runpy,sys;from pathlib import Path; "
+                "pids=[int(p.name) for p in Path('/proc').iterdir() "
+                "if p.name.isdigit() and (p/'comm').exists() "
+                "and (p/'comm').read_text().strip()=='sandboxd']; "
+                "assert len(pids)==1; "
+                "runpy.run_path(sys.argv[1]+'/helper.py')['arm']("
+                "sys.argv[1],sys.argv[2],pids[0],snapshot=json.loads(sys.argv[3]))",
+                fault,
+                physical,
+                json.dumps(config),
             )
-            hidden = True
             with httpx.Client(verify=False, trust_env=False, timeout=90) as client:
                 evidence["public_delete_requests_before_cleanup"] += 1
                 response = client.delete(
@@ -228,38 +266,12 @@ class RuncDeleteRetryIntegrationTest(unittest.TestCase):
                     headers={"X-Auth": os.environ["AKERNEL_TOKEN"]},
                 )
             evidence["delete_status"] = response.status_code
-            self.assertGreaterEqual(
-                response.status_code, 500, "failed deletion must not report success"
+            self.assertTrue(
+                response.status_code in (200, 202, 204) or response.status_code >= 500
             )
-            hold = time.monotonic() + 12
-            while True:
-                failed = snapshot("runtime-unavailable")
-                self.assertEqual(failed["state"], "Failed")
-                self.assertTrue(failed["resources_held"])
-                self.assertEqual(failed["assignment"], running["assignment"])
-                self.assertEqual(failed["marker_sha256"], running["marker_sha256"])
-                self.assertTrue(
-                    all(
-                        failed[k]
-                        for k in (
-                            "metadata",
-                            "storage",
-                            "runtime",
-                            "netns",
-                            "init_alive",
-                            "cgroup_exists",
-                        )
-                    )
-                )
-                if time.monotonic() >= hold:
-                    break
-                time.sleep(2)
-            restore()
-            evidence["restored_at"] = time.time()
-            # Only read Redis and physical state here. No SDK/API delete is issued.
             deadline = time.monotonic() + 90
             while True:
-                cleaned = snapshot("await-automatic-cleanup")
+                cleaned = snapshot("await-ordinary-retry-cleanup")
                 physical_clean = not any(
                     cleaned[k]
                     for k in (
@@ -276,29 +288,77 @@ class RuncDeleteRetryIntegrationTest(unittest.TestCase):
                 if physical_clean and cleaned["resources_held"] is not True:
                     break
                 self.assertLess(
-                    time.monotonic(),
-                    deadline,
-                    "upstream monitor did not retry cleanup after restoring runc",
+                    time.monotonic(), deadline, "ordinary cleanup did not retry"
                 )
                 time.sleep(1)
+            events = json.loads(
+                docker(
+                    "python3",
+                    "-c",
+                    "import json,sys;from pathlib import Path; "
+                    "print(json.dumps([json.loads(p.read_text()) "
+                    "for p in sorted(Path(sys.argv[1]).glob('*-*.json'))]))",
+                    fault,
+                )
+            )
+            evidence["delete_events"] = events
+            injected = [e for e in events if e["action"] == "inject"]
+            delegated = [e for e in events if e["action"] == "delegate"]
+            self.assertEqual(len(injected), 1)
+            self.assertTrue(
+                delegated, "no successful follow-up runc delete was observed"
+            )
+            retained = delegated[0]["ownership"]
+            self.assertTrue(
+                all(
+                    retained[k]
+                    for k in (
+                        "metadata",
+                        "storage",
+                        "runtime",
+                        "netns",
+                        "cgroup_exists",
+                        "resources_held",
+                    )
+                )
+            )
+            self.assertEqual(retained["marker_sha256"], running["marker_sha256"])
+            self.assertEqual(retained["assignment"], running["assignment"])
             evidence["automatic_cleanup_seconds"] = (
-                cleaned["time"] - evidence["restored_at"]
+                cleaned["time"] - injected[0]["time"]
             )
             evidence["automatic_cleanup_verified"] = True
             self.assertEqual(evidence["public_delete_requests_before_cleanup"], 1)
             evidence["status"] = "passed"
+        except BaseException as error:
+            evidence["error"] = type(error).__name__
+            raise
         finally:
-            restore()
-            # Retire the remaining Failed catalog record only after the automatic
-            # physical-cleanup assertion, keeping that action distinct in evidence.
+            errors = []
+            if installation_attempted:
+                try:
+                    docker(
+                        "python3",
+                        "-c",
+                        "from pathlib import Path;import sys; "
+                        "Path(sys.argv[1]+'/armed.json').unlink(missing_ok=True)",
+                        fault,
+                    )
+                except Exception as error:
+                    errors.append("disarm:" + type(error).__name__)
             if sandbox is not None:
-                sandbox.kill()
-                Sandbox.delete(name)
-                evidence["terminal_record_retired_by_explicit_cleanup"] = True
-                self.assertIsNone(record())
-            (output / "runc-delete-retry.json").write_text(
-                json.dumps(evidence, indent=2) + "\n"
-            )
+                try:
+                    sandbox.kill()
+                    Sandbox.delete(name)
+                    self.assertIsNone(record())
+                    evidence["terminal_record_retired_by_explicit_cleanup"] = True
+                except Exception as error:
+                    errors.append("catalog:" + type(error).__name__)
+            if errors:
+                evidence.update(status="failed", cleanup_errors=errors)
+            write_evidence()
+            if errors and "error" not in evidence:
+                self.fail("; ".join(errors))
 
 
 if __name__ == "__main__":
