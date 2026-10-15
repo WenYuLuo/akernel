@@ -202,6 +202,12 @@ CASES = (
         180,
     ),
     Case(
+        "fault-runc-delete-retry",
+        "full",
+        ("-m", "unittest", "-v", "tests.e2e.fault.test_runc_delete_retry"),
+        360,
+    ),
+    Case(
         "fault-process-restart",
         "full",
         ("-m", "unittest", "-v", "tests.e2e.fault.test_process_restart"),

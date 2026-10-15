@@ -8,7 +8,7 @@ E2E directories separate deployment requirements:
 | L0 | One ready node; fast public SDK smoke | `sdk-contracts` |
 | Standalone | One Linux node, configured runtime and reachable image fixtures | `direct-ingress`, `lifecycle`, `auth`, `cli-contract`, `io`, `pty-close`, `network-url`, `network-tunnel`, `network-policy`, `runtime-integration`, `storage-quota`, `network-policy-matrix` |
 | Multi-VM | At least two registered workers | `node-placement` |
-| Full | Multi-worker deployment with storage/device/admin/fault fixtures as selected | `redis-lifecycle`, `placement-affinity`, `admission`, `concurrent-claim`, `unknown-create-result`, `create-transport-disconnect`, `custom-image`, `dockerfile`, `port-forward`, `storage-sources`, `tenant-isolation`, `key-lifecycle`, `scheduler-admin`, `scheduler-maintenance`, `fault-process-restart`, `fault-node-loss`, `fault-checkpoint-shared`, `fault-checkpoint-local` |
+| Full | Multi-worker deployment with storage/device/admin/fault fixtures as selected | `redis-lifecycle`, `placement-affinity`, `admission`, `concurrent-claim`, `unknown-create-result`, `create-transport-disconnect`, `custom-image`, `dockerfile`, `port-forward`, `storage-sources`, `tenant-isolation`, `key-lifecycle`, `scheduler-admin`, `scheduler-maintenance`, `fault-runc-delete-retry`, `fault-process-restart`, `fault-node-loss`, `fault-checkpoint-shared`, `fault-checkpoint-local` |
 
 The runner includes lower levels. `standalone/`, `multi_vm/` and `full/` contain
 functional cases; `fault/` contains opt-in destructive cases. The existing
@@ -101,6 +101,7 @@ Fault groups require an isolated deployment and
 `AKERNEL_TEST_DESTRUCTIVE_FAULTS=1`. Hooks must be absolute executable paths;
 they receive the target node ID and must verify the requested operation.
 
+- `fault-runc-delete-retry`: use an otherwise empty, task-owned standalone Docker container with native runc enabled. Set `AKERNEL_TEST_CONTAINER`, its full `AKERNEL_TEST_CONTAINER_ID`, direct test Redis access and `AKERNEL_TEST_FAULT_OUTPUT`. The case temporarily renames only that container's `/usr/local/bin/runc` and restores it in `finally`. It checks a failed public deletion retains sandboxd metadata, private file contents, namespace/cgroup/runtime state and ADX resource ownership; after restoring runc it issues no further delete request until periodic adxlet cleanup has removed physical resources. A final explicit deletion retires the remaining Failed catalog record. Run only this group with `--case fault-runc-delete-retry` when enabling destructive faults on a standalone fixture.
 - `fault-process-restart`: set `AKERNEL_TEST_FAULT_NODE_ID`,
   `AKERNEL_TEST_RESTART_SANDBOXD` and/or `AKERNEL_TEST_RESTART_NODE_MANAGER`.
   Hooks return after a new process and working RPC are confirmed; node recovery
