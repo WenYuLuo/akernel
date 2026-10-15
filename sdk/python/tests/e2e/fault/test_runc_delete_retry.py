@@ -35,6 +35,8 @@ _ENABLED = (
     and os.environ.get("AKERNEL_TEST_DESTRUCTIVE_FAULTS") == "1"
     and bool(os.environ.get("AKERNEL_SERVER_ADDRESS"))
     and bool(os.environ.get("AKERNEL_REDIS_HOST"))
+    and bool(os.environ.get("AKERNEL_TEST_CONTAINER"))
+    and bool(os.environ.get("AKERNEL_TEST_CONTAINER_ID"))
 )
 
 # Emit only ownership/retention evidence; OCI specs and metadata may contain secrets.
