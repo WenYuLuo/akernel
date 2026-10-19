@@ -602,6 +602,14 @@ ports. Its frontend derives the WebSocket port from the HTTP listener, so
 that sandbox while the tunnel is active and must not also appear in
 `port_forwardings`; they do not occupy ports on the SDK host.
 
+Replacing a network policy can interrupt the existing tunnel connection. After
+acknowledgement, the SDK that owns the tunnel actively retires its old transport
+and reuses its reconnect loop, keeping the session and resumable requests.
+Return from `update_network_policy()` confirms policy installation; tunnel
+readiness may follow, so retry requests during recovery. Updates through another
+client or raw HTTP use the existing heartbeat fallback (20-second interval and
+10-second pong timeout by default).
+
 ## Rootfs and mounts
 
 Use a public OCI image:
