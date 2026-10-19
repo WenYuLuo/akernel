@@ -521,6 +521,9 @@ The Python SDK installs its execution backend automatically. Preserve the
 public `AKERNEL_SERVER_ADDRESS=host[:port]` and `AKERNEL_TOKEN` contract.
 Retired backend selector names map to ADX without installing old dependencies.
 Native conversions remain under `akernel_sdk._backends`.
+`BackendOperationError` preserves optional structured service fields and the
+original cause; missing context remains `None`. Keep retry/outcome semantics
+backend-owned and document public error fields in `sdk/python/README.md`.
 
 Keep sandbox cleanup explicit through context managers or `kill()`, with
 observable, retryable deletion failures and workload exceptions preserved on

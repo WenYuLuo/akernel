@@ -864,3 +864,32 @@ not part of the default test suite.
 | `DockerContext` | Abstract Dockerfile and build-context source |
 | `DockerContextEntry` | `path`, `kind`, `mode` |
 | `LocalDockerContext` | Local Dockerfile and context implementation |
+
+## Backend errors
+
+`BackendOperationError` preserves optional service context directly on the
+public exception: `code`, `retry`, `outcome`, `request_id`, `operation_id`,
+`environment_id`, `status_code`, `scheduling_failure`, `failure`,
+`probe_failure`, and `request_forwarded`. Fields absent from the backend response
+are `None`; the original exception remains in `__cause__`.
+
+```python
+from akernel_sdk import BackendOperationError, Sandbox
+
+try:
+    sandbox = Sandbox(cpu=1000, memory=2048)
+except BackendOperationError as error:
+    print(error.code, error.retry, error.outcome, error.request_id)
+    print(error.scheduling_failure)
+else:
+    sandbox.kill()
+```
+
+A service-confirmed cancelled scheduling request uses `outcome="not_started"`
+and `retry="never"`: the configured queue wait has finished. Capacity and
+placement details are available in `scheduling_failure` when supported by the
+server and ADX SDK. An older backend can omit those details. Ambiguous execution
+results retain `outcome="unknown"` and `retry="same_operation"`; preserve the
+original identity when querying or retrying. Do not infer execution or cleanup
+from a timeout message. `status_code` describes the service failure (including
+an SSE final event's error code); it need not equal the stream's HTTP status.

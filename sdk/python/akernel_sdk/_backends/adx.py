@@ -115,7 +115,20 @@ def _native_network_policy(policy: NetworkPolicy) -> Any:
 
 
 def _convert_error(operation: str, error: Exception) -> BackendOperationError:
-    return BackendOperationError(f"{operation} failed: {error}")
+    return BackendOperationError(
+        f"{operation} failed: {error}",
+        code=getattr(error, "code", None),
+        retry=getattr(error, "retry", None),
+        outcome=getattr(error, "outcome", None),
+        request_id=getattr(error, "request_id", None),
+        operation_id=getattr(error, "operation_id", None),
+        environment_id=getattr(error, "environment_id", None),
+        status_code=getattr(error, "status_code", None),
+        scheduling_failure=getattr(error, "scheduling_failure", None),
+        failure=getattr(error, "failure", None),
+        probe_failure=getattr(error, "probe_failure", None),
+        request_forwarded=getattr(error, "request_forwarded", None),
+    )
 
 
 def _route_read_retryable(error: Exception) -> bool:
