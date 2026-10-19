@@ -69,6 +69,53 @@ class AdxBackendTest(unittest.TestCase):
             token="secret",
         )
 
+    def test_create_preserves_public_error_context_and_cause(self):
+        error = EnvironmentHTTPError(
+            504, {}, "CPU cannot fit", code="DEADLINE_EXCEEDED",
+            retry="never", outcome="not_started", request_id="create-test",
+            operation_id="op-test", environment_id="default-test",
+        )
+        error.scheduling_failure = {"rejections": {"insufficient_cpu": 3}}
+        with (
+            patch.object(adx, "_OwnedSandbox", side_effect=error),
+            self.assertRaises(BackendOperationError) as raised,
+        ):
+            adx.AdxBackend(self.config).create(_spec())
+        public = raised.exception
+        self.assertIs(public.__cause__, error)
+        for field in (
+            "code", "retry", "outcome", "request_id", "operation_id",
+            "environment_id", "status_code", "scheduling_failure",
+        ):
+            self.assertEqual(getattr(public, field), getattr(error, field), field)
+
+    def test_unknown_create_retains_same_operation_guidance(self):
+        error = adx.adx_environment.EnvironmentError(
+            "response lost", code="OUTCOME_UNKNOWN", retry="same_operation",
+            outcome="unknown", request_id="create-unknown",
+            environment_id="default-unknown",
+        )
+        with (
+            patch.object(adx, "_OwnedSandbox", side_effect=error),
+            self.assertRaises(BackendOperationError) as raised,
+        ):
+            adx.AdxBackend(self.config).create(_spec())
+        self.assertEqual(raised.exception.retry, "same_operation")
+        self.assertEqual(raised.exception.outcome, "unknown")
+        self.assertIsNone(raised.exception.status_code)
+        self.assertIsNone(raised.exception.scheduling_failure)
+
+    def test_unstructured_error_does_not_invent_execution_outcome(self):
+        error = adx._convert_error("create sandbox", RuntimeError("local failure"))
+        self.assertIsNone(error.code)
+        self.assertIsNone(error.retry)
+        self.assertIsNone(error.outcome)
+        self.assertIsNone(error.request_id)
+        self.assertIsNone(error.environment_id)
+        self.assertEqual(
+            str(BackendOperationError("existing caller")), "existing caller"
+        )
+
     def test_constructor_cwd_is_created_and_used_by_commands(self):
         with tempfile.TemporaryDirectory() as directory:
             cwd = Path(directory).resolve() / "workspace" / "nested"
