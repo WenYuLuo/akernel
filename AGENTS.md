@@ -68,7 +68,7 @@ payloads.
 ADX platform and Execd binaries come from the release archives pinned in the
 Dockerfiles; `src/agent-dx/` provides the matching artifact build source for
 inspection.
-The internal adapter uses `adx-environment==0.1.0rc1` and
+The internal adapter uses `adx-environment==0.1.0rc2` and
 `/api/environment/v1`, while AKernel retains its public `Sandbox` API.
 Keep source installation, CI and publication dependency resolution through
 the configured package index.
@@ -521,6 +521,9 @@ The Python SDK installs its execution backend automatically. Preserve the
 public `AKERNEL_SERVER_ADDRESS=host[:port]` and `AKERNEL_TOKEN` contract.
 Retired backend selector names map to ADX without installing old dependencies.
 Native conversions remain under `akernel_sdk._backends`.
+`BackendOperationError` preserves optional structured service fields and the
+original cause; missing context remains `None`. Keep retry/outcome semantics
+backend-owned and document public error fields in `sdk/python/README.md`.
 
 Keep sandbox cleanup explicit through context managers or `kill()`, with
 observable, retryable deletion failures and workload exceptions preserved on

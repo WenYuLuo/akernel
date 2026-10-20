@@ -45,7 +45,7 @@ Source version/revision labels and artifact URL overrides are declared near thei
 
 ### Environment API source builds
 
-The current AKernel source adapter uses `adx-environment==0.1.0rc1` and
+The current AKernel source adapter uses `adx-environment==0.1.0rc2` and
 `/api/environment/v1`. The Dockerfiles pin the platform and Execd archive
 URLs and SHA-256 values, and `src/agent-dx/` provides the matching source.
 

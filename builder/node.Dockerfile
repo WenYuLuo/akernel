@@ -36,9 +36,9 @@ ARG OTELCOL_CONTRIB_URL=
 ARG OTELCOL_CONTRIB_SHA256=
 ARG AKERNEL_VERSION=unknown
 ARG AKERNEL_REVISION=unknown
-ARG ADX_VERSION=v0.1.0rc1
-ARG ADX_RELEASE_URL=https://openyuanrong.obs.cn-southwest-2.myhuaweicloud.com/adx/daily/20261015154014-af7d82f04a52/linux/amd64/adx-release.tar.gz
-ARG ADX_RELEASE_SHA256=84f2cc11dca67aed642f4908c0e74ba1978d272491e239adad2ad03ba302da77
+ARG ADX_VERSION=v0.1.0rc2
+ARG ADX_RELEASE_URL=https://agent-dx.obs.cn-southwest-2.myhuaweicloud.com/adx/release/0.1.0rc2/linux/amd64/adx-release.tar.gz
+ARG ADX_RELEASE_SHA256=5b4ec8896084f1589b33b7678f22824af43774bfd57991b7c89af69a9dffec5d
 
 FROM ${AKERNEL_NODE_BASE_IMAGE} AS adx-release
 ARG ADX_RELEASE_URL
