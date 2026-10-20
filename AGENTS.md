@@ -68,7 +68,7 @@ payloads.
 ADX platform and Execd binaries come from the release archives pinned in the
 Dockerfiles; `src/agent-dx/` provides the matching artifact build source for
 inspection.
-The internal adapter uses `adx-environment==0.1.0rc1` and
+The internal adapter uses `adx-environment==0.1.0rc2` and
 `/api/environment/v1`, while AKernel retains its public `Sandbox` API.
 Keep source installation, CI and publication dependency resolution through
 the configured package index.

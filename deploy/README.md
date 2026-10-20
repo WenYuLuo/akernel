@@ -28,7 +28,7 @@ make print-env
 make e2e
 ```
 
-The SDK depends on `adx-environment==0.1.0rc1` and uses `/api/environment/v1`.
+The SDK depends on `adx-environment==0.1.0rc2` and uses `/api/environment/v1`.
 The public `akernel_sdk.Sandbox` API retains its existing names. Source
 installs resolve the declared dependency from PyPI.
 See [image build downloads](../builder/README.md#environment-api-source-builds)
