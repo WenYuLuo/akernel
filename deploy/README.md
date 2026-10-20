@@ -238,6 +238,11 @@ and Tempo. Kubernetes nodes must support privileged Pods and the runtime
 requirements described earlier in this guide. Managed Redis requires a default
 StorageClass or an explicit `core.adx.redis.persistence.storageClassName`.
 
+Adxlet reads scheduling capacity and accelerator inventory from sandboxd's
+`/resource` endpoint over `/var/run/resource.sock`. The core chart and both
+cloud deployment profiles enable sandboxd's Kubernetes resource provider;
+keep its socket path aligned with adxlet's `resource_source.socket`.
+
 ### Create the HTTPS and API key Secret
 
 Create the public HTTPS certificate and API key before installing the chart. The helper is

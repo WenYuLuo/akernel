@@ -173,8 +173,8 @@ data:
           runtime_logs:
             directory: /home/akernel/adx/run/node/logs/runtime
           resource_source:
-            kind: auto
-            disk_path: /home/akernel
+            kind: sandboxd
+            socket: /var/run/resource.sock
             valid_for_seconds: {{ .Values.adx.node.resourceValidForSeconds }}
           tls:
             mode: network

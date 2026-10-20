@@ -63,6 +63,15 @@ withdrawal after deletion. Its Host-header case additionally requires
 `AKERNEL_TEST_PORT_HOST_DOMAIN` to match the configured ADX port-host domain;
 it does not configure public wildcard DNS or certificates.
 
+The `network-tunnel-block` standalone group covers default WS/HTTP 8765/8766 and
+custom 18765/18766 listeners with creation-time `NetworkPolicy.block()` and live
+block/clear/reblock transitions, including consecutive updates before waiting
+for tunnel recovery. It uses the same public tunnel handle throughout and
+requires each probe to recover within 10 seconds after a policy replacement.
+It also checks command/file/PTY/published-port access under block and verifies
+that a bounded ordinary outbound TCP attempt is denied. Normal standalone
+inventory and teardown audits apply to these cases too.
+
 ## Fixture requirements
 
 | Groups | Additional configuration |
@@ -127,20 +136,3 @@ they receive the target node ID and must verify the requested operation.
 Restore scheduling and workers, delete owned resources, and audit the ledger
 on failure as well as success. Save version-specific results and evidence in
 the run output directory, rather than treating old runs as current coverage.
-
-
-The `network-tunnel-block` standalone group covers default WS/HTTP 8765/8766 and
-custom 18765/18766 listeners with creation-time `NetworkPolicy.block()` and live
-block/clear/reblock transitions, including consecutive updates before waiting
-for tunnel recovery. It requires the ADX server and SDK fixes for
-[AKernel #107](https://github.com/inclusionAI/AKernel/issues/107); the existing
-ADX release pin predates that fix. Run it against a matching candidate build
-before updating the release pin. The group uses the same public tunnel handle
-throughout, checks command/file/PTY/published-port access under block, and checks
-a bounded ordinary outbound TCP attempt is denied. Normal standalone inventory
-and teardown audits apply to these cases too.
-
-Each tunnel probe allows 10 seconds for the owning SDK to actively reconnect
-after a policy replacement. This is below the default 20-second heartbeat
-interval, so the group verifies prompt recovery with the same public handle.
-Use the corresponding SDK candidate wheel until its release pin is updated.
