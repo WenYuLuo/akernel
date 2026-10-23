@@ -911,7 +911,10 @@ variable "checkpoint_storage" {
   validation {
     condition = (
       contains(["local", "distributed_fs"], var.checkpoint_storage.kind) &&
-      can(regex("^[A-Za-z0-9][A-Za-z0-9_-]*$", var.checkpoint_storage.alias)) &&
+      (var.checkpoint_storage.kind == "local" || (
+        var.checkpoint_storage.alias != "local" &&
+        can(regex("^[A-Za-z0-9-]+$", var.checkpoint_storage.alias))
+      )) &&
       can(regex("^(/[A-Za-z0-9_-]+)+$", var.checkpoint_storage.mount_path)) &&
       can(regex("^[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+)*$", var.checkpoint_storage.prefix)) &&
       alltrue([for path in ["/home/akernel", "/opt/adx", "/etc", "/run", "/var/run", "/proc", "/sys", "/dev"] :

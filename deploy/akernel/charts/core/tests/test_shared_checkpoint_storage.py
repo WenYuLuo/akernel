@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import subprocess
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -26,6 +27,57 @@ def render(*settings: str) -> dict[tuple[str, str], dict]:
 
 
 class SharedCheckpointStorageTests(unittest.TestCase):
+    def test_shared_consumers_use_mount_client_placement_and_keep_affinity(
+        self,
+    ) -> None:
+        resources = self.shared_resources(
+            "adx.checkpointStorage.nodeSelector.storage=juicefs",
+            "node.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key=pool",
+            "node.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].operator=In",
+            "node.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].values[0]=workers",
+        )
+        for kind, name in (
+            ("Deployment", "akernel-adx-coordinator"),
+            ("DaemonSet", "akernel-node"),
+        ):
+            pod = resources[(kind, name)]["spec"]["template"]["spec"]
+            self.assertEqual(pod["nodeSelector"], {"storage": "juicefs"})
+        node = resources[("DaemonSet", "akernel-node")]["spec"]["template"]["spec"]
+        self.assertEqual(
+            node["affinity"]["nodeAffinity"][
+                "requiredDuringSchedulingIgnoredDuringExecution"
+            ]["nodeSelectorTerms"][0]["matchExpressions"][0]["key"],
+            "pool",
+        )
+        for kind, name in (
+            ("Deployment", "akernel-adx-coordinator"),
+            ("DaemonSet", "akernel-node"),
+        ):
+            self.assertNotIn(
+                "nodeSelector", render()[(kind, name)]["spec"]["template"]["spec"]
+            )
+
+    def test_firecracker_default_preserves_erofs_without_virtiofs(self) -> None:
+        config = tomllib.loads(
+            render()[("ConfigMap", "akernel-node-config")]["data"][
+                "sandboxd_config.toml"
+            ]
+        )
+        self.assertFalse(config["plugin"]["runtime"]["firecracker"]["virtiofs_enabled"])
+        standalone = tomllib.loads(
+            (CHART.parents[2] / "standalone/config/sandboxd_config.toml").read_text()
+        )
+        self.assertFalse(
+            standalone["plugin"]["runtime"]["firecracker"]["virtiofs_enabled"]
+        )
+
+    def test_aliases_follow_filesystem_backend_contract(self) -> None:
+        for alias in ("akernel-checkpoints", "Team9", "-cache", "LOCAL"):
+            with self.subTest(alias=alias):
+                self.shared_resources(f"adx.checkpointStorage.alias={alias}")
+        # Local mode does not instantiate the distributed filesystem store.
+        render("adx.checkpointStorage.alias=local")
+
     def test_ingress_rollout_preserves_one_replica_without_a_spare_node(self) -> None:
         for replicas in (1, 2, 3):
             with self.subTest(replicas=replicas):
@@ -74,9 +126,11 @@ class SharedCheckpointStorageTests(unittest.TestCase):
 
     def test_runtime_push_rejects_invalid_ports(self) -> None:
         for port in ("0", "65536", "-1", "invalid", "19003.5"):
-            with self.subTest(port=port):
-                with self.assertRaises(subprocess.CalledProcessError):
-                    render(f"adx.runtimeControl.port={port}")
+            with (
+                self.subTest(port=port),
+                self.assertRaises(subprocess.CalledProcessError),
+            ):
+                render(f"adx.runtimeControl.port={port}")
 
     def shared_resources(self, *settings: str) -> dict[tuple[str, str], dict]:
         return render(
@@ -218,17 +272,24 @@ class SharedCheckpointStorageTests(unittest.TestCase):
             ["adx.checkpointStorage.mountPath=/home/akernel/adx"],
             ["adx.checkpointStorage.mountPath=/mnt/../etc"],
             ["adx.checkpointStorage.prefix=../checkpoints"],
+            ["adx.checkpointStorage.alias=local"],
+            ["adx.checkpointStorage.alias=team_cache"],
+            ["adx.checkpointStorage.alias="],
+            ["adx.checkpointStorage.alias=cache/path"],
+            ["adx.checkpointStorage.alias=缓存"],
         )
         for settings in invalid:
-            with self.subTest(settings=settings):
-                with self.assertRaises(subprocess.CalledProcessError):
-                    if settings[0] in (
-                        "adx.checkpointStorage.kind=unknown",
-                        "adx.checkpointStorage.kind=distributed_fs",
-                    ):
-                        render(*settings)
-                    else:
-                        self.shared_resources(*settings)
+            with (
+                self.subTest(settings=settings),
+                self.assertRaises(subprocess.CalledProcessError),
+            ):
+                if settings[0] in (
+                    "adx.checkpointStorage.kind=unknown",
+                    "adx.checkpointStorage.kind=distributed_fs",
+                ):
+                    render(*settings)
+                else:
+                    self.shared_resources(*settings)
 
 
 if __name__ == "__main__":

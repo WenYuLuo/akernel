@@ -5,6 +5,17 @@ output "helm_values" {
   description = "ADX checkpointStorage configuration for both execution nodes and Coordinator."
   value       = local.checkpoint_values
   precondition {
+    condition = local.selected_storage.kind == "local" || (
+      local.selected_storage.alias != "local" &&
+      can(regex("^[A-Za-z0-9-]+$", local.selected_storage.alias))
+    )
+    error_message = "distributed_fs alias must contain only ASCII letters, digits or hyphens and must not be local."
+  }
+  precondition {
+    condition     = !var.juicefs.enabled || local.client_node_selector["kubernetes.io/os"] == "linux"
+    error_message = "Managed JuiceFS clients and consumers require Linux nodes."
+  }
+  precondition {
     condition = (
       local.selected_storage.kind == "local" ||
       ((local.selected_storage.host_path != "") != (local.selected_storage.existing_claim != ""))

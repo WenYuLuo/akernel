@@ -65,7 +65,12 @@ juicefs = {
 This also selects `distributed_fs` for ADX, with the managed host mount at
 `/srv/akernel-shared`. Terraform deploys the storage namespace, pinned Rook
 operator and local JuiceFS chart. It waits for the format Job and mount clients
-before installing AKernel. Use the main deployment guide for cloud credentials,
+before installing AKernel. A bounded post-install/upgrade readiness Job
+checks that the current OnDelete client template is ready on every selected
+host, including a nonempty host set. Helm's built-in wait alone does not wait
+for OnDelete DaemonSets. API failures, missing mounts or outdated clients fail
+the release instead of allowing the dependent AKernel release to start.
+Use the main deployment guide for cloud credentials,
 image selection and TLS/API-key setup. Run `make plan ENV=YOUR_PROFILE`, review
 the resulting resources, and then deploy the approved plan.
 
@@ -104,9 +109,12 @@ juicefs = {
 }
 ```
 
-`client_node_selector` limits mount clients. Include every host eligible for
-execution nodes or Coordinator. Leave it empty to cover all eligible Linux
-hosts. `values_files` customizes the local storage chart, and
+`client_node_selector` limits mount clients and also constrains execution node
+and Coordinator placement. It defaults to all Linux hosts; existing execution
+node affinity still applies. If `values_files` adds JuiceFS `nodeSelector`
+labels, the effective merged selector is passed to both consumer roles too.
+The selected hosts must satisfy both storage and workload placement requirements.
+`values_files` customizes the local storage chart, and
 `rook_values_files` customizes the Rook operator, for example registry mirrors
 and image-pull Secrets. These files must exist on the machine running Terraform.
 The host mount remains tied to `juicefs.host_mount_path` so ADX and clients agree.
@@ -127,7 +135,9 @@ checkpoint_storage = {
 For an existing JuiceFS/AFS RWX claim in the AKernel namespace, replace
 `host_path` with `existing_claim = "YOUR_RWX_CLAIM"`. Exactly one source is
 required. The namespace, alias and prefix must identify the same storage for
-nodes and Coordinator. Defaults retain node-local checkpoints.
+nodes and Coordinator. Shared aliases accept only ASCII letters, digits and
+hyphens; `local` is reserved. This validation also applies when managed JuiceFS
+implicitly selects shared storage. Defaults retain node-local checkpoints.
 
 ## Deploy the storage charts directly
 
@@ -163,7 +173,12 @@ PostgreSQL without TLS; apply your production database and network policies.
 The format Job runs `juicefs format --no-update`. It waits for PostgreSQL and
 RGW and preserves an existing formatted volume. Client Pods wait for formatted
 metadata, mount the same volume and verify a real JuiceFS FUSE mount before
-becoming ready. AK/SK and database passwords stay in Kubernetes Secrets and
+becoming ready. The readiness hook uses a pinned Python image and a read-only
+ServiceAccount: it lists node labels and client Pods and reads this DaemonSet;
+it cannot change workloads or read Secrets. `readiness.timeoutSeconds` defaults
+to 900 seconds and must fit within the Helm release timeout. A failed hook is
+retained for diagnostics; inspect its Job/Pod logs before retrying the upgrade.
+AK/SK and database passwords stay in Kubernetes Secrets and
 are not put in ADX configuration. Export secrets separately for backup.
 
 The default uses 1 MiB blocks, 4 MiB readahead and a 4096 MiB node-local block
@@ -201,7 +216,10 @@ helm template akernel deploy/akernel/charts/core --namespace akernel \
 Review the rendered configuration and install it with `helm upgrade --install`
 using the same arguments. For the umbrella chart, nest these values under
 `core:`. AFS uses the same values with `hostPath` pointing at its actual mount.
-Host mounts must exist before AKernel Pods start. A CSI claim can instead be
+Host mounts must exist before AKernel Pods start. For restricted client placement,
+set `adx.checkpointStorage.nodeSelector` to the same effective selector on direct
+Helm installs; the chart applies it to execution nodes and Coordinator. Terraform
+sets it automatically for managed JuiceFS. A CSI claim can instead be
 selected by clearing `hostPath` and setting `existingClaim`.
 
 Only nodes and Coordinator mount checkpoint storage. Coordinator receives a
@@ -242,8 +260,13 @@ and full application-state verification.
 Drain consumers before unmounting, replacing a client, or changing storage
 identity. Changes to cache arguments also require this drain/remount sequence.
 Clients use `OnDelete` updates so a chart upgrade does not immediately
-replace live FUSE mounts. Recreate ADX Pods after remounting to pin the new mount
-identity. Local runtime files remain sandboxd-owned. JuiceFS trash and block GC,
+replace live FUSE mounts. An upgrade that changes the client Pod template waits
+at the readiness hook until the clients are explicitly replaced. Drain all
+consumers first, then replace clients on each affected host while the upgrade
+waits (or retry after its timeout). Wait for the new clients' mount probes and
+the readiness hook to pass. Recreate ADX Pods after remounting to pin the new
+mount identity; only then admit workloads. Local runtime files remain
+sandboxd-owned. JuiceFS trash and block GC,
 and AFS's COW block GC, run separately from Coordinator artifact deletion.
 
 PostgreSQL credentials/PVC, Ceph cluster/pools, the bucket and storage namespace

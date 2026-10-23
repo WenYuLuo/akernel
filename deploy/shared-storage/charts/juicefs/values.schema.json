@@ -126,6 +126,20 @@
           "type": "string"
         }
       }
+    },
+    "readiness": {
+      "type": "object",
+      "properties": {
+        "image": {
+          "type": "string",
+          "minLength": 1
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 3300
+        }
+      }
     }
   }
 }

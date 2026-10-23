@@ -34,6 +34,12 @@ spec:
         checksum/otel-collector-config: {{ include (print $.Template.BasePath "/otel-configmap.yaml") . | sha256sum }}
         checksum/adx-config: {{ include (print $.Template.BasePath "/adx/configmap.yaml") . | sha256sum }}
     spec:
+      {{- if eq .Values.adx.checkpointStorage.kind "distributed_fs" }}
+      {{- with .Values.adx.checkpointStorage.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- end }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}

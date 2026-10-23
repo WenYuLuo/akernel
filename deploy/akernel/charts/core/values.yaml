@@ -42,6 +42,9 @@ adx:
     hostPath: ""
     existingClaim: ""
     prefix: akernel/checkpoints
+    # Optional placement shared by execution nodes and Coordinator. Managed
+    # JuiceFS sets this to its client selector so both roles have a host mount.
+    nodeSelector: {}
   tls:
     existingSecret: akernel-adx-tls
   redis:

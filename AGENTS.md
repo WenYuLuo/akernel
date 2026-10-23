@@ -261,6 +261,12 @@ owns PostgreSQL/Ceph/JuiceFS setup, values, acceptance and operational limits.
 Both cloud Terraform modules expose `checkpoint_storage` and an optional
 `juicefs` stack. Managed JuiceFS deploys PostgreSQL, PVC-backed Rook/Ceph RGW,
 bucket provisioning, an idempotent format Job and host FUSE clients before ADX.
+A bounded post-install/upgrade readiness Job checks current OnDelete clients
+and mount coverage on every selected host. Managed client selectors also
+constrain execution node and Coordinator placement; preserve existing node
+affinity and the runtime mount guards. Shared aliases accept ASCII letters,
+digits and hyphens, with `local` reserved, including when managed JuiceFS
+implicitly selects distributed_fs.
 `make config JUICEFS_ENABLED=true JUICEFS_STORAGE_CLASS=...` selects this stack;
 external mounts and RWX claims use the checkpoint storage options instead.
 Keep storage deployment disabled by default and preserve the matching
@@ -735,6 +741,7 @@ python sdk/python/benchmarks/sandbox_pressure.py \
 ```
 
 Set `AKERNEL_TEST_IMAGE=ubuntu:24.04` with `AKERNEL_TEST_RUNTIME=firecracker`
+after explicitly enabling a compatible virtio-fs profile on the test node
 to run integration and reload coverage against an OCI/Nydus image root. This
 also verifies that two sandboxes using the same image have private writes.
 Test both an ordinary OCI image and a Nydus image resolved through the deployed

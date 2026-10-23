@@ -14,6 +14,11 @@ terraform {
 locals {
   namespace_chart = "${path.module}/../../shared-storage/charts/namespace"
   storage_chart   = "${path.module}/../../shared-storage/charts/juicefs"
+  client_node_selector = merge(
+    { "kubernetes.io/os" = "linux" },
+    var.juicefs.client_node_selector,
+    [for path in var.juicefs.values_files : try(yamldecode(file(path)).juicefs.nodeSelector, {})]...
+  )
   selected_storage = var.juicefs.enabled ? merge(var.checkpoint_storage, {
     kind           = "distributed_fs"
     host_path      = var.juicefs.host_mount_path
@@ -26,6 +31,7 @@ locals {
     hostPath      = local.selected_storage.host_path
     existingClaim = local.selected_storage.existing_claim
     prefix        = local.selected_storage.prefix
+    nodeSelector  = var.juicefs.enabled ? local.client_node_selector : {}
   }
 }
 
@@ -95,7 +101,11 @@ resource "helm_release" "juicefs" {
       size         = var.juicefs.postgres_size
     }
     })], [for path in var.juicefs.values_files : file(path)], [yamlencode({
-    juicefs = { hostMountPath = var.juicefs.host_mount_path }
+    # Keep client and consumer placement identical even with custom overlays.
+    juicefs = {
+      hostMountPath = var.juicefs.host_mount_path
+      nodeSelector  = local.client_node_selector
+    }
   })])
   depends_on = [helm_release.storage_namespace, helm_release.rook]
 }

@@ -22,8 +22,8 @@
 {{- if eq (empty $storage.hostPath) (empty $storage.existingClaim) }}
 {{- fail "distributed_fs requires exactly one checkpointStorage.hostPath or existingClaim" }}
 {{- end }}
-{{- if not (regexMatch "^[A-Za-z0-9][A-Za-z0-9_-]*$" $storage.alias) }}
-{{- fail "checkpointStorage.alias must be a nonempty storage identifier" }}
+{{- if or (eq $storage.alias "local") (not (regexMatch "^[A-Za-z0-9-]+$" $storage.alias)) }}
+{{- fail "checkpointStorage.alias must contain only ASCII letters, digits or hyphens and must not be local" }}
 {{- end }}
 {{- if not (regexMatch "^(/[A-Za-z0-9_-]+)+$" $storage.mountPath) }}
 {{- fail "checkpointStorage.mountPath must be a dedicated absolute mount directory" }}
