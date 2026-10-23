@@ -47,3 +47,6 @@ data:
   prepare-node-directories.py: |
 {{ .Files.Get "scripts/prepare-node-directories.py" | indent 4 }}
 {{- end }}
+
+  prepare_checkpoint_storage.py: |
+{{ .Files.Get "scripts/prepare_checkpoint_storage.py" | indent 4 }}

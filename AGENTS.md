@@ -54,7 +54,7 @@ tunnels. The project overview and deployment quick start are in
 - `deploy/` - Helm charts, standalone scripts, Terraform modules, and deployment helper scripts.
 - `deploy/standalone/manage.py` - source-build standalone lifecycle shared by Linux and Apple Silicon Mac with OrbStack.
 - `assets/` - static images used by the root README.
-- `src/agent-dx/` - Agent DX source pinned to the packaged build commit by a Git submodule.
+- `src/agent-dx/` - Agent DX source reference maintained as a Git submodule.
 
 The open-source AKernel repository contains the SDK, deployment configuration,
 build tooling, and examples. Node runtime components such as `sandboxd` and
@@ -66,9 +66,9 @@ source reference, not a build input. See the Build section below for runtime
 payloads.
 
 ADX platform and Execd binaries come from the release archives pinned in the
-Dockerfiles; `src/agent-dx/` provides the matching artifact build source for
-inspection.
-The internal adapter uses `adx-environment==0.1.0rc2` and
+Dockerfiles. Archive manifests identify the packaged binaries;
+`src/agent-dx/` is a source reference.
+The internal adapter uses `adx-environment==0.1.0rc3` and
 `/api/environment/v1`, while AKernel retains its public `Sandbox` API.
 Keep source installation, CI and publication dependency resolution through
 the configured package index.
@@ -129,6 +129,10 @@ AKernel uses Docker for building. The public distribution ships one all-in-one
 image that can run the ADX control role, node role, or standalone topology
 depending on the deployment entrypoint and environment.
 
+Image build stages refresh APT indexes through `builder/scripts/apt-get-update.sh`.
+Keep its bounded retries, complete-update requirement, and repository
+verification intact when changing package installation.
+
 ```bash
 make build
 make build AKERNEL_ENABLE_RUNC=true
@@ -157,9 +161,9 @@ matching guest-agent initrd. Runc remains build-time optional, and
 AKernel builds virtiofsd 1.14.0 from the pinned source commit and release
 Cargo.lock in `builder/node.Dockerfile`. Keep its shared-library dependencies
 and licenses packaged with the Firecracker payload. Both standalone and Helm
-enable virtio-fs for read-only image roots and explicitly read-only or writable
-host directory mounts; disabling the Firecracker image payload also excludes
-virtiofsd.
+disable virtio-fs by default and use EROFS roots; enabling directory-backed
+roots requires an explicit compatible virtio-fs profile. Disabling the
+Firecracker image payload also excludes virtiofsd.
 
 The sandboxd submodule's runtime manifest is the source of truth for the gVisor, runc, and Firecracker releases used by both sandboxd E2E and AKernel packaging. Test an unreleased runtime by checking out the sandboxd commit that pins it rather than overriding manifest fields from the AKernel build. Keep sandboxd's pooled-TAP contract and the matching gVisor compatibility patches validated together when upgrading.
 
@@ -175,7 +179,9 @@ four adjacent `gvisor-bin/` helpers in the final image. The manifest SHA-512
 covers the archive, not a bare runsc binary. Keep CI's final-image payload
 checks synchronized; do not mix helper versions or fetch them at runtime.
 
-The sandboxd gitlink fixes the source revision compiled by `make build`.
+The sandboxd submodule supplies the source compiled by `make build`.
+Helm and standalone enable `runsc.background_restore` and `checkpoint_sync.sync_output`;
+runtime files and private writable layers remain on node-local storage.
 AKernel's `builder/distill-fs-versions.env` fixes the distill-fs release URL
 and SHA-256. `make build` compiles the local sandboxd worktree and consumes the
 static distill-fs release through `builder/scripts/install-distill-fs.sh`; editing
@@ -241,6 +247,40 @@ generated state is container-local, while Redis persists authoritative state.
 Adxlet uses its own state subtree under `/home/akernel/adx/run/node`;
 never start Coordinator, Ingress/API Server, or Redis in a node Pod.
 
+Helm `adx.checkpointStorage.kind=distributed_fs` consumes an operator-mounted
+JuiceFS/AFS filesystem or an existing RWX claim. The node and Coordinator must
+see the same namespace, alias and checkpoint prefix; only these two roles mount
+it. Coordinator reclaims shared checkpoints. An init container verifies the
+mount and runtime path isolation without rewriting sandboxd configuration.
+Runtime state and private writable filestores stay on node-local disk, with the
+same container path on all nodes so runsc rootfs annotations remain compatible
+across nodes. Keep credentials and filesystem format/mount/GC in the deployment
+layer. Drain before replacing a mount or changing storage identity.
+The [shared storage guide](deploy/shared-storage/README.md)
+owns PostgreSQL/Ceph/JuiceFS setup, values, acceptance and operational limits.
+Both cloud Terraform modules expose `checkpoint_storage` and an optional
+`juicefs` stack. Managed JuiceFS deploys PostgreSQL, PVC-backed Rook/Ceph RGW,
+bucket provisioning, an idempotent format Job and host FUSE clients before ADX.
+A bounded post-install/upgrade readiness Job checks current OnDelete clients
+and mount coverage on every selected host. Managed client selectors also
+constrain execution node and Coordinator placement; preserve existing node
+affinity and the runtime mount guards. Shared aliases accept ASCII letters,
+digits and hyphens, with `local` reserved, including when managed JuiceFS
+implicitly selects distributed_fs.
+`make config JUICEFS_ENABLED=true JUICEFS_STORAGE_CLASS=...` selects this stack;
+external mounts and RWX claims use the checkpoint storage options instead.
+Keep storage deployment disabled by default and preserve the matching
+node/Coordinator alias, prefix and mount when changing these inputs.
+Managed JuiceFS uses a 4096 MiB node-local hostPath block cache with
+`cacheLargeWrite: true` and enforced `writeback: false`. The cache stays separate
+from runtime and shared checkpoint paths. Helm, both cloud Terraform modules
+and `make config` expose its size and host path. Managed Ceph enables RGW Beast
+`tcp_nodelay=1`. Drain consumers before replacing OnDelete mount clients and
+recreate the ADX consumers afterward; a chart upgrade alone does not remount.
+Managed JuiceFS defaults to `trashDays: 0`; Environment and Snapshot references
+control checkpoint retention. Update existing volume settings explicitly because
+the idempotent format Job preserves them.
+
 Aliyun's aggregate Pod PID budget is configurable independently of the
 per-sandbox limit; see `deploy/terraform/aliyun/README.md#pod-pid-budget`.
 Aliyun and Huawei default AKernel node pools also configure host PID/thread
@@ -279,9 +319,10 @@ directories directly from the image manager through read-only virtio-fs.
 Explicit local/S3 imagefile roots and mounts must already be EROFS. The bundled
 default runtime root also remains EROFS; sandbox writes use a private ext4 disk.
 
-The bundled Firecracker writable disk policy is `AsyncDirect` with `Writeback`.
-Validate io_uring and `STATX_DIOALIGN` on the target host and filestore; use an
-explicit `Async` or `Sync` policy on incompatible hosts, never silent fallback.
+The bundled Firecracker writable disk policy is buffered `Async` with `Writeback`.
+Validate io_uring on the target host; explicitly select `Sync` where it is
+unavailable. Direct I/O profiles additionally require `STATX_DIOALIGN` support;
+there is no silent policy fallback.
 Keep standalone and Helm defaults synchronized. Drain before upgrading the
 runtime stack: checkpoint compatibility includes VMM, kernel, initrd, and
 virtiofsd digests, and restores retain the saved writable I/O engine.
@@ -510,7 +551,7 @@ not set a bounded filestore size for this profile because that reintroduces a
 loop-backed filesystem and disables the high-performance Firecracker C/R
 layout.
 
-The bundled node enables ADX local recovery points and
+The default bundled node enables ADX local recovery points and
 stores checkpoint state under the persistent `/home/akernel/adx/checkpoints`
 mount. EXECD receives
 `ADX_EXECD_CONTROL_SOCKET_PATH=/run/akernel` so sandbox workloads can trigger
@@ -518,7 +559,9 @@ their local checkpoint handoff through `/run/akernel/execd.sock`. Recovery point
 follow the source sandbox lifecycle. The public SDK exposes only failover and
 reload, not checkpoint identifiers, restore, list, delete, or snapshot TTLs.
 Keep local-only snapshot mode and the persistent checkpoint directory
-configured together when changing node startup arguments.
+configured together when changing node startup arguments. The optional Helm
+shared filesystem profile replaces that node checkpoint directory with
+`checkpoint_storage` and configures the matching Coordinator reclaimer.
 
 Keep detailed SDK reference material with the SDK. The root README should
 contain only the project-level entry points and representative examples:
@@ -698,6 +741,7 @@ python sdk/python/benchmarks/sandbox_pressure.py \
 ```
 
 Set `AKERNEL_TEST_IMAGE=ubuntu:24.04` with `AKERNEL_TEST_RUNTIME=firecracker`
+after explicitly enabling a compatible virtio-fs profile on the test node
 to run integration and reload coverage against an OCI/Nydus image root. This
 also verifies that two sandboxes using the same image have private writes.
 Test both an ordinary OCI image and a Nydus image resolved through the deployed

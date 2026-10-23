@@ -377,11 +377,11 @@ prerequisites are available.
 Kata and Firecracker require at least one cluster node whose sandboxd instance
 successfully initialized the requested runtime with a usable `/dev/kvm`
 device. Nodes without KVM remain available for runsc workloads and do not
-advertise either VM runtime. The bundled Firecracker configuration enables
-virtio-fs for read-only OCI/Nydus image roots and explicitly read-only or
-writable host directories, while retaining EROFS image roots and mounts.
-Qualify the deployed sandboxd image and virtio-fs stack before using directory
-binds. OCI image mounts, GPUs, and nested KVM remain unsupported.
+advertise either VM runtime. The bundled Firecracker configuration disables
+virtio-fs and uses EROFS image roots and mounts. OCI/Nydus image roots and
+HostPath directories require an operator-enabled compatible virtio-fs profile;
+see [enabling Firecracker directory access](#enabling-firecracker-directory-access).
+OCI image mounts, GPUs, and nested KVM remain unsupported.
 
 The all-in-one image can optionally package a native Linux `runc` backend.
 Operators build it with `AKERNEL_ENABLE_RUNC=true` and enable it explicitly
@@ -673,15 +673,37 @@ runtime inside an S3 object. When neither source is supplied, AKernel sends
 only the selected isolation runtime and openYuanRong overlays it onto the
 rootfs configured by the deployed service.
 
-Firecracker supports `Sandbox(runtime="firecracker", image="ubuntu:24.04")`
-with the bundled virtio-fs configuration. Both OCI and Nydus roots use the
-image manager's directory directly, without conversion to EROFS. The shared
-root stays read-only; sandbox writes use its private ext4 overlay. The deployed
-default and explicit `rootfs` S3 objects continue to use raw EROFS images.
-The bundled distill-fs supports Nydus RAFS v5. When preparing Nydus images with
-`nydusify convert`, select `--fs-version 5` explicitly.
-Custom deployments must enable `plugin.runtime.firecracker.virtiofs_enabled`
-and install the matching Firecracker stack and virtiofsd.
+The default Firecracker profile uses the deployed EROFS root when `image`
+and `rootfs` are omitted; explicit `rootfs` S3 objects must contain raw EROFS
+images. `Sandbox(runtime="firecracker", image="ubuntu:24.04")` requires the
+operator-enabled virtio-fs profile described below. With that profile, OCI and
+Nydus roots use the image manager's directory directly. The shared root stays
+read-only; sandbox writes use its private node-local ext4 overlay. The bundled
+distill-fs supports Nydus RAFS v5; select `--fs-version 5` when preparing images
+with `nydusify convert`.
+
+### Enabling Firecracker directory access
+
+This is a node deployment setting, not an SDK `extra_config` option. Helm and
+standalone keep `plugin.runtime.firecracker.virtiofs_enabled=false` by default.
+Operators who need OCI/Nydus roots or HostPath directories must:
+
+1. Qualify a KVM-capable image containing the compatible Firecracker VMM,
+   guest kernel/agent and virtiofsd. Include the Firecracker build payload.
+2. Drain existing Firecracker sandboxes before changing the runtime profile.
+   Recreate recovery points when the rootfs or mount layout changes.
+3. In Helm, update the `[plugin.runtime.firecracker]` section of
+   `node.config.sandboxd.config` to `virtiofs_enabled=true` (`core.node...` in
+   the umbrella chart), preserving the rest of the TOML configuration. For
+   standalone, update the same section in the sandboxd configuration used by
+   the launcher. Restart the drained node services with the updated profile.
+4. Verify a fresh Sandbox using the required root or HostPath directory,
+   including permissions, private writes and checkpoint/reload, before
+   admitting workloads. Keep runtime state and private writable layers on
+   node-local disk, separate from shared checkpoints.
+
+An incompatible runtime or filesystem profile requires new recovery points;
+do not restore old checkpoints across that migration.
 
 The same `S3Config` type can be used as a read-only mount source:
 
@@ -699,8 +721,9 @@ OCI images can also be mounted read-only:
 mount = Mount(target="/opt/tools", image_url="ubuntu:24.04")
 ```
 
-Firecracker mounts must instead use `type="erofs"` with an S3 object containing
-a raw EROFS image; it rejects `image_url` and directory-backed mounts.
+Firecracker S3 mounts use `type="erofs"` with a raw EROFS image. It rejects
+`image_url` mounts. HostPath directories require the enabled virtio-fs profile
+above; the default profile rejects them.
 
 ### Node HostPath bind mounts
 
@@ -734,7 +757,10 @@ request. Directory ownership and permissions must allow the sandbox's process
 UID/GID to use it. Separate workers' local directories are separate data;
 `node_id` selects the prepared node but does not replicate storage. Data written
 through a bind can outlive the sandbox. Runtime-specific mount restrictions
-are enforced by the deployed backend.
+are enforced by the deployed backend. Firecracker HostPath directories,
+including read-only directories, require the operator-enabled virtio-fs profile.
+Read-only regular-file injection can use the default Firecracker profile;
+writable regular-file mounts are unsupported.
 
 For operator-managed Kubernetes preparation and the retention/C/R contract, see
 [node-local application directories](../../deploy/docs/node-local-directories.md).
@@ -894,8 +920,9 @@ PYTHONPATH=sdk/python \
 ```
 
 Set `AKERNEL_TEST_RUNTIME=firecracker` and `AKERNEL_TEST_IMAGE=ubuntu:24.04`
-to exercise the same suite, including checkpoint/reload, against a virtio-fs
-image root. `AKERNEL_TEST_IMAGE` also accepts a Nydus image reference and
+after enabling the compatible virtio-fs profile on the test node to exercise
+the same suite, including checkpoint/reload, against an image root.
+`AKERNEL_TEST_IMAGE` also accepts a Nydus image reference and
 enables a check that writes stay private to each sandbox sharing the image.
 The test image must provide an Ubuntu/Debian userspace with `apt-get` for the
 checkpoint test's curl and CA certificate installation. Omit

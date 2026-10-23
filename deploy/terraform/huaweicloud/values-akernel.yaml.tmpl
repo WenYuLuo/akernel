@@ -10,6 +10,7 @@ monitoring:
 %{ endif ~}
 
 adx:
+  checkpointStorage: ${jsonencode(checkpoint_storage)}
   tls:
     existingSecret: akernel-adx-tls
   redis:
