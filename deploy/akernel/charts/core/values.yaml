@@ -107,7 +107,13 @@ node:
     requests:
       ephemeral-storage: 50Gi
   annotations: {}
+  # Operator-managed preparation; see deploy/docs/node-local-directories.md
+  # and deploy/akernel/examples/node-local-directories.yaml. Lists replace on merge.
   initContainers: []
+  directoryHelper:
+    # Package the script for the init-container example without invoking it.
+    # Disabled by default to preserve the node rollout checksum.
+    enabled: false
   hostDiskPath: "/home/akernel"
   homeDisk:
     useEphemeralPVC: false

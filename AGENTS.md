@@ -157,8 +157,9 @@ matching guest-agent initrd. Runc remains build-time optional, and
 AKernel builds virtiofsd 1.14.0 from the pinned source commit and release
 Cargo.lock in `builder/node.Dockerfile`. Keep its shared-library dependencies
 and licenses packaged with the Firecracker payload. Both standalone and Helm
-enable read-only virtio-fs by default; disabling the Firecracker image payload
-also excludes virtiofsd.
+enable virtio-fs for read-only image roots and explicitly read-only or writable
+host directory mounts; disabling the Firecracker image payload also excludes
+virtiofsd.
 
 The sandboxd submodule's runtime manifest is the source of truth for the gVisor, runc, and Firecracker releases used by both sandboxd E2E and AKernel packaging. Test an unreleased runtime by checking out the sandboxd commit that pins it rather than overriding manifest fields from the AKernel build. Keep sandboxd's pooled-TAP contract and the matching gVisor compatibility patches validated together when upgrading.
 
@@ -265,10 +266,12 @@ scheduling with a no-resource error when no eligible node exists. Do not treat
 a configured runtime as an advertised runtime.
 
 Firecracker supports commands, files, PTYs, network policies, published ports,
-reverse tunnels, EROFS roots and mounts, OCI/Nydus directory roots and read-only
-host directory mounts through virtio-fs, explicit `storage_mb` quotas, and
-recovery across sandboxd restarts. OCI image mounts, writable live host binds,
-NVIDIA GPUs, and nested KVM remain unsupported.
+reverse tunnels, EROFS roots and mounts, OCI/Nydus directory roots and explicitly
+read-only or writable host directory mounts through virtio-fs, explicit
+`storage_mb` quotas, and recovery across sandboxd restarts. Writable external
+directories remain caller-owned and require their original backing files for
+local C/R. Qualify the actual deployed image and virtio-fs stack. OCI image
+mounts, NVIDIA GPUs, and nested KVM remain unsupported.
 
 Do not add Firecracker-specific directory conversion, image caching, or
 artifact reference counting to sandboxd or its image manager. Consume OCI/Nydus
@@ -397,6 +400,10 @@ operator-controlled source paths; client validation is not authorization to
 access the node's filesystem.
 The SDK does not create host directories, mount node storage, or replicate
 node-local data. See the SDK guide and `sdk/python/examples/hostpath_mounts.py`.
+For operator-owned node directories, use the supported Helm overlay and
+ownership, retention, and validation contract in
+[`deploy/docs/node-local-directories.md`](./deploy/docs/node-local-directories.md).
+Keep helper lifecycle and core/umbrella rendering tests synchronized.
 
 Same-node failover and explicit rollback retain the logical sandbox identity:
 

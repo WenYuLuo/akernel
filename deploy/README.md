@@ -55,12 +55,15 @@ requested runtime, `Sandbox(runtime="kata")` or
 The bundled Firecracker VMM and guest kernel are selected by sandboxd's shared
 runtime manifest, and its guest-agent initrd is built from that same sandboxd
 revision. AKernel also builds pinned virtiofsd 1.14.0 with its release lockfile
-and enables read-only virtio-fs in standalone and Helm. OCI/Nydus image roots
-use the directory provided by the image manager directly, without EROFS
-conversion. The sandbox's writable layer remains a private ext4 image;
-writable host sharing and OCI image mounts are unsupported. EROFS roots and
-mounts remain supported. Set `AKERNEL_ENABLE_FIRECRACKER=false` while building
-to exclude the VMM, kernel, virtiofsd, and initrd.
+and enables virtio-fs in standalone and Helm. OCI/Nydus image roots use the
+read-only directory provided by the image manager directly, without EROFS
+conversion. The pinned sandboxd also supports explicitly read-only or writable
+host directory binds; their backing files remain caller-owned and must be
+retained for local checkpoint/restore. Qualify the deployed image and virtio-fs
+stack before use. The sandbox's writable layer remains a private ext4 image;
+OCI image mounts are unsupported. EROFS roots and mounts remain supported. Set
+`AKERNEL_ENABLE_FIRECRACKER=false` while building to exclude the VMM, kernel,
+virtiofsd, and initrd.
 
 The default writable disk policy is `AsyncDirect` with `Writeback`. Hosts must
 provide usable `io_uring` and filesystem alignment queries through
@@ -75,7 +78,7 @@ Drain sandboxes before replacing the Firecracker stack. Checkpoints record
 VMM, kernel, initrd, and, when used, virtiofsd digests; mismatched stacks are
 rejected on restore. Changing the writable I/O default does not convert the
 engine saved in an existing checkpoint. For the full contract, see the
-[sandbox runtime comparison](https://github.com/inclusionAI/sandboxd/blob/b8f4656c57432bce1b50111e766bcd21510ee482/doc/runtime.md).
+[sandbox runtime comparison](https://github.com/inclusionAI/sandboxd/blob/02386fea2050c4a77cfaa9df5edfe72fd35fc987/doc/runtime.md).
 
 The native Linux runc backend is opt-in because it uses the host kernel. For a
 guided cloud profile, `make config ENABLE_RUNC=true` records both sides of the
@@ -223,6 +226,8 @@ exports. Treat both commands' output as secret material.
 From the repository root, `make standalone` builds the current source and starts a single-node runsc instance on Linux with native AMD64/ARM64 Docker or Apple Silicon Mac with OrbStack. Use `make standalone-status` and `make standalone-stop` for the same local profile. The direct image launcher remains available for Docker or Pouch. See the [standalone guide](./standalone/README.md) for prerequisites, SDK setup, optional runtimes, and profile management.
 
 ## 2. Kubernetes (Helm)
+
+For operator-owned sandbox HostPath sources, use [node-local directory preparation](docs/node-local-directories.md) and its supported values overlay.
 
 The umbrella chart in [`akernel/`](./akernel/) deploys AKernel's control
 service, persistent state store, one worker Pod per eligible node, and the
