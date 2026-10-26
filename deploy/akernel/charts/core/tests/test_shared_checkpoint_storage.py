@@ -109,7 +109,7 @@ class SharedCheckpointStorageTests(unittest.TestCase):
                 },
             )
 
-    def test_runtime_push_port_and_legacy_opt_out(self) -> None:
+    def test_runtime_push_port_and_required_lifecycle_events(self) -> None:
         resources = render("adx.runtimeControl.port=19023")
         node = yaml.safe_load(
             resources[("ConfigMap", "akernel-adx-config")]["data"]["node.yaml"]
@@ -118,11 +118,9 @@ class SharedCheckpointStorageTests(unittest.TestCase):
         self.assertEqual(
             node["runtime_control"]["advertised_address"], "http://${INSTANCE_IP}:19023"
         )
-        resources = render("adx.runtimeControl.enabled=false")
-        node = yaml.safe_load(
-            resources[("ConfigMap", "akernel-adx-config")]["data"]["node.yaml"]
-        )["services"][0]["config"]
-        self.assertNotIn("runtime_control", node)
+        with self.assertRaises(subprocess.CalledProcessError) as error:
+            render("adx.runtimeControl.enabled=false")
+        self.assertIn("lifecycle events require runtime control", error.exception.stderr)
 
     def test_runtime_push_rejects_invalid_ports(self) -> None:
         for port in ("0", "65536", "-1", "invalid", "19003.5"):

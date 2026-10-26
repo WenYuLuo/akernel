@@ -105,7 +105,7 @@ spec:
           image: "{{ include "core.image" (dict "root" . "image" .Values.coordinator.image) }}"
           imagePullPolicy: {{ include "core.image.pullPolicy" (dict "root" . "image" .Values.coordinator.image) }}
           command: [/usr/local/bin/otelcol-contrib]
-          args: [--config=/etc/otel/control.yaml]
+          args: [--config=/etc/otel/ingress-api.yaml]
           env:
             - {name: ADX_METRICS_TARGET, value: "127.0.0.1:18080"}
             - {name: ADX_METRICS_COMPONENT, value: adx-ingress}

@@ -235,3 +235,16 @@ prometheusServer:
       - "akernel"
       - "akernel-monitor"
     pushgateways: []
+
+# Optional per-Environment series live in a separate TSDB, never the long-term store.
+environmentDetails:
+  enabled: false
+  namespaces: [akernel]
+  environment: default
+  scrapeInterval: 30s
+  retentionTime: 24h
+  storageSize: 10Gi
+  storageClassName: ""
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {cpu: 1000m, memory: 1Gi}

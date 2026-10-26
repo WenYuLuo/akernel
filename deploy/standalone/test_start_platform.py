@@ -136,7 +136,7 @@ GPU_RUN_ARGS=()
             "validate_container_proxy", "configure_container_proxy",
             "validate_host_platform", "validate_image_platform",
             "validate_image_capabilities", "prepare_host_network_modules",
-            "start_node_container",
+            "configure_afs", "start_node_container",
         )
         functions = "\n".join(
             function_from(STANDALONE_DIR / "start.sh", name) for name in names

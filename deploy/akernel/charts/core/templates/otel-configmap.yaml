@@ -12,4 +12,6 @@ data:
 {{ .Files.Get "files/otel-collector/config.yaml" | indent 4 }}
   control.yaml: |
 {{ .Files.Get "files/otel-collector/control.yaml" | indent 4 }}
+  ingress-api.yaml: |
+{{ .Files.Get "files/otel-collector/ingress-api.yaml" | indent 4 }}
 {{- end }}

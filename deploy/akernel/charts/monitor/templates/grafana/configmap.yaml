@@ -22,6 +22,16 @@ data:
           exemplarTraceIdDestinations:
             - name: traceID
               datasourceUid: {{ .Values.grafanaServer.prometheus.exemplarTraceIdDatasourceUid }}
+      {{- if .Values.environmentDetails.enabled }}
+      - name: Environment details
+        uid: prometheus-details
+        type: prometheus
+        access: proxy
+        url: http://prometheus-details:9090
+        isDefault: false
+        jsonData:
+          timeInterval: {{ .Values.environmentDetails.scrapeInterval | quote }}
+      {{- end }}
   {{- if .Values.grafanaServer.loki.enabled }}
   loki.yaml: |
     apiVersion: 1

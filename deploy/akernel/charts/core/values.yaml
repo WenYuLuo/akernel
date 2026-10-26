@@ -97,6 +97,7 @@ adx:
     allowedTargetCidrs: 10.88.0.0/16
     allowedIngressCidrs: 0.0.0.0/0
     reportIntervalSeconds: 5
+    metricsIntervalSeconds: 15
     resourceValidForSeconds: 30
 
 # Preserve the existing placement setting; translate binpack to ADX pack.

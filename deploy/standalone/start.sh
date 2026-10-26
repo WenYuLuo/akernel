@@ -31,6 +31,7 @@ DOCKER_PREFIX=()
 CONTAINER_PLATFORM_ARGS=()
 PROXY_RUN_ARGS=()
 GPU_RUN_ARGS=()
+AFS_RUN_ARGS=()
 
 # Colors for output
 RED='\033[0;31m'
@@ -563,9 +564,31 @@ prepare_host_network_modules() {
     log_info "Loaded host filter, bridge, conntrack, and ipset modules for the iptables ACL backend"
 }
 
+# AFS is managed independently; only its existing DFS mount is shared.
+configure_afs() {
+    AFS_RUN_ARGS=()
+    if [[ -n "${AKERNEL_AFS_MOUNT:-}" ]]; then
+        local mount_path
+        mount_path="$(python3 "${SCRIPT_DIR}/validate-afs.py" "${AKERNEL_AFS_MOUNT}" \
+          --prefix "${AKERNEL_AFS_CHECKPOINT_PREFIX:-akernel/checkpoints}")"
+        AFS_RUN_ARGS=(
+          --mount "type=bind,src=${mount_path},dst=/mnt/akernel-shared,bind-propagation=rslave"
+          -e AKERNEL_AFS_CHECKPOINTS=true
+          -e "AKERNEL_AFS_CHECKPOINT_PREFIX=${AKERNEL_AFS_CHECKPOINT_PREFIX:-akernel/checkpoints}"
+        )
+    fi
+}
+
 # Start the AKernel all-in-one container and publish Edge's distinct control
 # and data listeners directly on the host.
 start_node_container() {
+    local endpoint_name
+    local telemetry_args=()
+    for endpoint_name in AKERNEL_ENV PROMETHEUS_ENDPOINT LOKI_ENDPOINT TEMPO_ENDPOINT; do
+        if [[ -n "${!endpoint_name:-}" ]]; then
+            telemetry_args+=(-e "${endpoint_name}")
+        fi
+    done
     log_info "Starting container: ${NODE_CONTAINER_NAME}"
     "${DOCKER_PREFIX[@]}" ${DOCKER_CMD} run -d \
         "${CONTAINER_PLATFORM_ARGS[@]}" \
@@ -578,6 +601,8 @@ start_node_container() {
         -e container=oci \
         -e "AKERNEL_FIRECRACKER_BACKEND=${AKERNEL_FIRECRACKER_BACKEND}" \
         -e AKS_LOCAL_MODE="true" \
+        -e AKERNEL_ROLE=standalone \
+        "${telemetry_args[@]}" \
         -e NODE_NAME="$(hostname)" \
         -e POD_NAME=akernel-node-local \
         -e POD_NAMESPACE=default \
@@ -586,6 +611,7 @@ start_node_container() {
         -e ENABLE_METRICS="${ENABLE_METRICS:-false}" \
         "${PROXY_RUN_ARGS[@]}" \
         "${GPU_RUN_ARGS[@]}" \
+        "${AFS_RUN_ARGS[@]}" \
         --entrypoint=/usr/local/bin/akernel-entrypoint \
         -v "${DATA_DIR}:/home/akernel" \
         -v "${CONFIG_DIR}/oss_auths.json:/home/akernel/sandboxd/config/oss_auths.json:ro" \
@@ -712,6 +738,7 @@ main() {
     check_prerequisites
     cleanup_existing
     validate_host_platform
+    configure_afs
     ensure_image "${IMAGE}"
     validate_image_capabilities
     prepare_data

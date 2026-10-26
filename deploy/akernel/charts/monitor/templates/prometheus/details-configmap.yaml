@@ -1,0 +1,38 @@
+{{- if .Values.environmentDetails.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-details
+  namespace: {{ .Release.Namespace }}
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: {{ .Values.environmentDetails.scrapeInterval }}
+    scrape_configs:
+      {{- range $role := list "coordinator" "node" }}
+      - job_name: adx-{{ $role }}-environments
+        metrics_path: /metrics/environments
+        sample_limit: 200000
+        kubernetes_sd_configs:
+        - role: pod
+          namespaces:
+            names: {{ $.Values.environmentDetails.namespaces | toJson }}
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_pod_phase]
+          action: keep
+          regex: Running
+        - source_labels: [__meta_kubernetes_pod_container_name, __meta_kubernetes_pod_container_port_name]
+          action: keep
+          regex: {{ if eq $role "coordinator" }}'coordinator;metrics'{{ else }}'akernel-node;'{{ end }}
+        - source_labels: [__meta_kubernetes_pod_ip]
+          target_label: __address__
+          regex: (.+)
+          replacement: {{ if eq $role "coordinator" }}'${1}:19090'{{ else }}'${1}:19091'{{ end }}
+        - target_label: adx_env
+          replacement: {{ $.Values.environmentDetails.environment | quote }}
+        - target_label: component_name
+          replacement: {{ if eq $role "node" }}adxlet{{ else }}adx-coordinator{{ end }}
+        - source_labels: [__meta_kubernetes_pod_name]
+          target_label: pod
+      {{- end }}
+{{- end }}

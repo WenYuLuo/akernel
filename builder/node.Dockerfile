@@ -38,8 +38,8 @@ ARG OTELCOL_CONTRIB_SHA256=
 ARG AKERNEL_VERSION=unknown
 ARG AKERNEL_REVISION=unknown
 ARG ADX_VERSION=v0.1.0rc2
-ARG ADX_RELEASE_URL=https://agent-dx.obs.cn-southwest-2.myhuaweicloud.com/adx/daily/20261022184915-6fb53d733181/linux/amd64/adx-release.tar.gz
-ARG ADX_RELEASE_SHA256=664c4a7344ca7cf9b9fedefc7f010ae775c35b89148b068ab2dfa532b150b566
+ARG ADX_RELEASE_URL=https://agent-dx.obs.cn-southwest-2.myhuaweicloud.com/adx/daily/20261026040256-0c09fb8cd35e/linux/amd64/adx-release.tar.gz
+ARG ADX_RELEASE_SHA256=19e36043cea282a5c0c7633d4e8a048ef72e4b0b86ecfcc5f609b5cf163454c4
 
 FROM ${AKERNEL_NODE_BASE_IMAGE} AS adx-release
 ARG ADX_RELEASE_URL
@@ -371,6 +371,7 @@ RUN --mount=type=bind,source=builder/scripts/apt-get-update.sh,target=/tmp/apt-g
         procps \
         python3 \
         python3-pip \
+        python3-yaml \
         systemd \
         systemd-sysv \
         tzdata \
@@ -424,6 +425,10 @@ COPY --from=runtime-image /akernel-runtime-rootfs.img /opt/akernel/runtime/akern
 # sandboxd and its runtime rootfs from pinned sources and installs only EXECD
 # from the verified ADX release into that rootfs.
 COPY --from=adx-release /opt/adx/current/bin/ /opt/adx/current/bin/
+COPY --from=adx-release /opt/adx/current/third_party/ /opt/adx/current/third_party/
+COPY --from=adx-release /opt/adx/current/LICENSE /opt/adx/current/LICENSE
+COPY --from=adx-release /opt/adx/current/manifest.json /opt/adx/current/manifest.json
+COPY --from=adx-release /opt/adx/current/etc/ /opt/adx/current/etc/
 COPY --from=adx-release /opt/adx/current/sdk/ /opt/adx/current/sdk/
 COPY --from=adx-release /opt/adx/current/runtime/adx-execd /opt/adx/current/runtime/adx-execd
 RUN set -eux; \
@@ -452,6 +457,7 @@ RUN if [ "${AKERNEL_ENABLE_KATA}" = "true" ]; then \
     fi
 
 COPY ./builder/scripts/akernel-entrypoint.sh /usr/local/bin/akernel-entrypoint
+COPY ./builder/scripts/prepare-adx-config.py /usr/local/libexec/prepare-adx-config.py
 COPY ./builder/scripts/adx-service.sh /usr/local/bin/adx-service
 COPY ./builder/scripts/otel-collector-service.sh /usr/local/bin/otel-collector-service
 COPY ./builder/scripts/sandboxd_network_prepare.sh /usr/local/bin/sandboxd-network-prepare
@@ -480,6 +486,7 @@ RUN if [ "${AKERNEL_ENABLE_RUNC}" = "true" ]; then \
       test ! -e /usr/local/bin/runc-shim; \
     fi
 
+COPY ./builder/config/otel-collector-standalone.yaml /etc/akernel/otel_standalone.yaml
 COPY ./builder/config/otel-collector-config.yaml /etc/akernel/otel_config.yaml
 RUN chmod 0755 /usr/local/bin/otel-collector-service
 COPY ./builder/config/logrotate.d/gvisor /etc/logrotate.d/gvisor

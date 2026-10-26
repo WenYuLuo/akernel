@@ -324,3 +324,57 @@ By default, direct startup stores data in `deploy/standalone/data`. Override it 
 ```bash
 export AKERNEL_STANDALONE_DATA_DIR="/path/to/your/data"
 ```
+
+### AFS shared checkpoints
+
+Use a separately managed AFS **DFS** mount for shared checkpoint artifacts.
+The default standalone profile keeps checkpoints and runtime files on local
+storage. To select AFS, mount DFS on the Linux Docker host first, then launch:
+
+```bash
+AKERNEL_AFS_MOUNT=/srv/afs-dfs \
+AKERNEL_AFS_CHECKPOINT_PREFIX=akernel/checkpoints \
+make standalone
+```
+
+The launcher requires a writable, existing FUSE mount with source `afs-dfs`;
+an ordinary directory, OwnerFs mount, or read-only mount is rejected before
+startup. Docker binds it at `/mnt/akernel-shared`. The ADX service checks the
+mount again and configures the same `distributed_fs` alias and prefix for the
+Adxlet checkpoint writer and Coordinator artifact reclaimer. Runtime rootfs,
+writable layers, journals and local caches remain under the node's local state.
+Keep the mount available throughout the node lifecycle. Bring up AFS Meta and
+Node services independently; stopping AKernel does not stop those services.
+Use durable local-file Meta storage and current AFS mTLS configuration. Existing
+legacy AFS metadata formats require the upstream documented migration policy.
+
+The latest ADX dashboards provide creation request/completion QPS and peak QPS,
+matching Running/Paused counts, aggregated node/runtime resources, and separate
+Environment detail and log pages. Helm monitoring can enable
+`environmentDetails.enabled=true` for a separate Prometheus TSDB (30-second
+scrapes, 24-hour retention). The ordinary summary store retains its 15-second
+scrapes and 30-day retention. Match `environmentDetails.namespaces` and
+`environmentDetails.environment` to the deployment's namespace and
+`core.monitoring.akernelEnv`. The log detail page defaults to a 15-minute,
+manual-refresh query with bounded results. Per-instance OTLP samples from sandboxd
+are excluded from the summary store; native ADX detail endpoints supply instance
+CPU and memory. The existing `sandbox-metrics` dashboard URL now uses those
+short-retention Environment detail panels.
+
+For a standalone Collector, set `PROMETHEUS_ENDPOINT`, `LOKI_ENDPOINT`, and
+`TEMPO_ENDPOINT` to reachable `host:port` addresses before startup; the launcher
+passes supplied endpoint variables and `AKERNEL_ENV` into the node container.
+Standalone collection includes Coordinator, API Server, Adxlet and relay summary
+metrics on private listeners. API creation metrics use port 19093; Coordinator
+autoscaling keeps port 19092. Collector self-metrics use port 18889.
+
+Set `ENABLE_TRACE=true` to trace standalone control processes and Execd at a
+10% sampling ratio through the local Collector. The default keeps tracing off.
+
+The AMD64 default pins the AFS-enabled ADX release and Execd artifacts from
+[Build 190](https://buildkite.com/agent-dx/agent-dx/builds/190), revision
+`0c09fb8cd35efa6be368344efb5a3c2a6086cbe4` (master plus
+[upstream fixes](https://github.com/openJiuwen-ai/agent-dx/pull/121)). Both archives
+are SHA256-pinned in the builder Dockerfiles. ARM builds require their own
+architecture-matched artifact overrides; this AMD64 candidate does not establish
+ARM compatibility.
