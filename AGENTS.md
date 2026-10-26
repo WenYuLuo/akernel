@@ -784,3 +784,9 @@ standalone adds scrape targets through a small overlay. Preserve dashboard UIDs,
 summary/detail metric separation and runtime-control events. Verify real SDK
 telemetry after collection changes. The [standalone guide](deploy/standalone/README.md)
 owns tracing and AFS options; test actual mount validation and checkpoint reload.
+
+The Sandbox Lifecycle dashboard uses summary Prometheus data scoped by `cluster`
+and `adx_env`. Keep `core.monitoring.clusterName`, `AKERNEL_CLUSTER_NAME` and
+the monitor cluster identity aligned across control, node and standalone
+Collectors. API metrics stay on 19093; autoscaling stays on 19092. Unknown
+outcomes, missing coverage and stale snapshots must remain visible.

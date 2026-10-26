@@ -227,6 +227,74 @@ class ObservabilityTest(unittest.TestCase):
             self.assertEqual(dashboard["uid"], f"adx-{name}")
             self.assertIn("adx_env", p.read_text())
 
+    def test_sandbox_lifecycle_dashboard_uses_summary_metrics_and_scoped_queries(self) -> None:
+        dashboard_dir = ROOT / "deploy/akernel/charts/monitor/dashboards"
+        dashboard = json.loads((dashboard_dir / "adx-sandbox-lifecycle.json").read_text())
+        self.assertEqual(dashboard["uid"], "adx-sandbox-lifecycle")
+        variables = {v["name"] for v in dashboard["templating"]["list"]}
+        self.assertTrue({"cluster", "adx_env"}.issubset(variables))
+        panels = {p["title"]: p for p in dashboard["panels"]}
+        p95 = panels["Successful New-Create Call P95"]["targets"][0]["expr"]
+        self.assertIn("adx_environment_create_success_call_duration_seconds_bucket", p95)
+        for panel in dashboard["panels"]:
+            for target in panel.get("targets", []):
+                self.assertEqual(panel["datasource"]["uid"], "prometheus")
+                self.assertIn('cluster=~"$cluster"', target["expr"])
+                self.assertIn('adx_env=~"$adx_env"', target["expr"])
+        rendered = subprocess.run(
+            ["helm", "template", "monitor", str(ROOT / "deploy/akernel/charts/monitor")],
+            check=True, capture_output=True, text=True,
+        )
+        resources = {(r["kind"], r["metadata"]["name"]): r
+                     for r in yaml.safe_load_all(rendered.stdout) if r}
+        provisioned = resources[("ConfigMap", "grafana-dashboards")]["data"]
+        self.assertEqual(json.loads(provisioned["adx-sandbox-lifecycle.json"]), dashboard)
+
+    def test_cluster_identity_reaches_all_role_collectors(self) -> None:
+        rendered = subprocess.run(
+            ["helm", "template", "akernel", str(CHART),
+             "--set", "monitoring.clusterName=cluster-west",
+             "--set", "monitoring.akernelEnv=prod",
+             "--set", "monitoring.prometheusEndpoint=prometheus:9090"],
+            check=True, capture_output=True, text=True,
+        )
+        resources = {(r["kind"], r["metadata"]["name"]): r
+                     for r in yaml.safe_load_all(rendered.stdout) if r}
+        for kind, name, container_name in (
+            ("DaemonSet", "akernel-node", "akernel-node"),
+            ("Deployment", "akernel-adx-coordinator", "otel-collector"),
+            ("Deployment", "akernel-adx-ingress-api", "otel-collector"),
+        ):
+            containers = resources[(kind, name)]["spec"]["template"]["spec"]["containers"]
+            container = next(c for c in containers if c["name"] == container_name)
+            env = {e["name"]: e.get("value") for e in container["env"]}
+            self.assertEqual(env.get("AKERNEL_CLUSTER_NAME"), "cluster-west", name)
+            self.assertEqual(env.get("AKERNEL_ENV"), "prod", name)
+        for name, content in resources[("ConfigMap", "akernel-otel-collector-config")]["data"].items():
+            attributes = yaml.safe_load(content)["processors"]["resource"]["attributes"]
+            identity = {a["key"]: a for a in attributes}
+            self.assertEqual(identity["cluster"]["value"], "${env:AKERNEL_CLUSTER_NAME:-standalone}", name)
+            self.assertEqual(identity["cluster"]["action"], "upsert", name)
+
+    def test_standalone_imports_cluster_identity_for_systemd_collector(self) -> None:
+        launcher = (ROOT / "deploy/standalone/start.sh").read_text()
+        wrapper = (ROOT / "builder/scripts/otel-collector-service.sh").read_text()
+        self.assertIn("AKERNEL_CLUSTER_NAME", launcher)
+        self.assertIn("AKERNEL_CLUSTER_NAME=*", wrapper)
+
+    def test_cloud_templates_use_cluster_identity_and_collector_host_ports(self) -> None:
+        for provider in ("aliyun", "huaweicloud"):
+            with self.subTest(provider=provider):
+                directory = ROOT / "deploy/terraform" / provider
+                core = (directory / "values-akernel.yaml.tmpl").read_text()
+                monitor = (directory / "values-monitor.yaml.tmpl").read_text()
+                self.assertIn('clusterName: "${cluster_name}"', core)
+                self.assertIn('clusterName: "${cluster_name}"', monitor)
+                self.assertIn('tempoEndpoint: "tempo.${monitor_namespace}.svc:4317"', core)
+                for key in ("prometheusEndpoint", "lokiEndpoint", "tempoEndpoint"):
+                    value = re.search(rf'{key}:\s*"([^"]+)"', core).group(1)
+                    self.assertNotIn("://", value)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -348,7 +348,24 @@ Node services independently; stopping AKernel does not stop those services.
 Use durable local-file Meta storage and current AFS mTLS configuration. Existing
 legacy AFS metadata formats require the upstream documented migration policy.
 
-The latest ADX dashboards provide creation request/completion QPS and peak QPS,
+The ADX Sandbox Lifecycle dashboard (`adx-sandbox-lifecycle`) adds creation-call
+success ratios, successful actual-new-create P95 latency, unknown outcomes,
+queued/starting counts and wait ages, interruption/recovery results, worker
+incidents, and statistics coverage/freshness. Its data source is the summary
+Prometheus store; the optional Environment detail store is independent. P95
+excludes replay and unknown outcomes. Missing data, zero denominators and stale
+snapshots are not evidence of health. The current-impact panel documents the
+private Coordinator query boundary; it does not expose that administrative API
+through the public SDK or Grafana.
+
+All lifecycle queries use `cluster` and `adx_env`. For Helm, set
+`core.monitoring.clusterName` and `monitor.prometheusServer.config.clusterName`
+to the same stable cluster identity (default `akernel`); Terraform supplies its
+`cluster_name` to both. For standalone, set `AKERNEL_CLUSTER_NAME` and
+`AKERNEL_ENV` before startup (defaults `standalone` and `default`). Use distinct
+cluster identities when multiple clusters send to the same Prometheus.
+
+The other ADX dashboards provide creation request/completion QPS and peak QPS,
 matching Running/Paused counts, aggregated node/runtime resources, and separate
 Environment detail and log pages. Helm monitoring can enable
 `environmentDetails.enabled=true` for a separate Prometheus TSDB (30-second
@@ -363,7 +380,9 @@ short-retention Environment detail panels.
 
 For a standalone Collector, set `PROMETHEUS_ENDPOINT`, `LOKI_ENDPOINT`, and
 `TEMPO_ENDPOINT` to reachable `host:port` addresses before startup; the launcher
-passes supplied endpoint variables and `AKERNEL_ENV` into the node container.
+passes supplied endpoint variables, `AKERNEL_ENV` and `AKERNEL_CLUSTER_NAME`
+into the node container. Endpoints use `host:port` without a URL scheme; Tempo
+uses its OTLP gRPC listener (4317).
 Standalone collection includes Coordinator, API Server, Adxlet and relay summary
 metrics on private listeners. API creation metrics use port 19093; Coordinator
 autoscaling keeps port 19092. Collector self-metrics use port 18889.
@@ -372,9 +391,8 @@ Set `ENABLE_TRACE=true` to trace standalone control processes and Execd at a
 10% sampling ratio through the local Collector. The default keeps tracing off.
 
 The AMD64 default pins the AFS-enabled ADX release and Execd artifacts from
-[Build 190](https://buildkite.com/agent-dx/agent-dx/builds/190), revision
-`0c09fb8cd35efa6be368344efb5a3c2a6086cbe4` (master plus
-[upstream fixes](https://github.com/openJiuwen-ai/agent-dx/pull/121)). Both archives
+[Build 191](https://buildkite.com/agent-dx/agent-dx/builds/191), master revision
+`be366e5d40c8956a78087aa9523becbecc730f02`. Both archives
 are SHA256-pinned in the builder Dockerfiles. ARM builds require their own
 architecture-matched artifact overrides; this AMD64 candidate does not establish
 ARM compatibility.

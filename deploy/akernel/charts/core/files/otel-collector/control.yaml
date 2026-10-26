@@ -116,6 +116,9 @@ processors:
         attributes["process.executable.name"] != nil
   resource:
     attributes:
+    - key: cluster
+      value: ${env:AKERNEL_CLUSTER_NAME:-standalone}
+      action: upsert
     - key: akernel_env
       value: ${env:AKERNEL_ENV:-default}
       action: upsert

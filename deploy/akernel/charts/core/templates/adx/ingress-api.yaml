@@ -109,6 +109,7 @@ spec:
           env:
             - {name: ADX_METRICS_TARGET, value: "127.0.0.1:18080"}
             - {name: ADX_METRICS_COMPONENT, value: adx-ingress}
+            - {name: AKERNEL_CLUSTER_NAME, value: {{ .Values.monitoring.clusterName | quote }}}
             - {name: AKERNEL_ENV, value: {{ .Values.monitoring.akernelEnv | default "default" | quote }}}
             - {name: PROMETHEUS_ENDPOINT, value: {{ .Values.monitoring.prometheusEndpoint | quote }}}
             - {name: LOKI_ENDPOINT, value: {{ .Values.monitoring.lokiEndpoint | quote }}}

@@ -87,6 +87,7 @@ locals {
   ]) : local.node_pool_bootstrap_script
 
   core_values = templatefile("${path.module}/values-akernel.yaml.tmpl", {
+    cluster_name                = var.cluster_name
     adx_public_service_enabled  = var.adx_public_service_enabled
     adx_service_type            = var.adx_service_type
     adx_control_port            = var.adx_control_port
@@ -132,6 +133,7 @@ locals {
   })
 
   monitor_values = templatefile("${path.module}/values-monitor.yaml.tmpl", {
+    cluster_name                = var.cluster_name
     image_registry              = var.monitor_image_registry
     enable_kruise               = var.install_prereqs
     monitor_storage_class       = var.monitor_storage_class

@@ -710,6 +710,15 @@
       "includeVars": true,
       "keepTime": false,
       "targetBlank": false
+    },
+    {
+      "title": "Sandbox Lifecycle",
+      "type": "link",
+      "url": "/d/adx-sandbox-lifecycle",
+      "icon": "dashboard",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false
     }
   ]
 }

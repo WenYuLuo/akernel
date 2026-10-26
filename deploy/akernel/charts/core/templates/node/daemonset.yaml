@@ -175,6 +175,8 @@ spec:
         - name: TEMPO_ENDPOINT
           value: {{ .Values.monitoring.tempoEndpoint | quote }}
         {{- end }}
+        - name: AKERNEL_CLUSTER_NAME
+          value: {{ .Values.monitoring.clusterName | quote }}
         - name: AKERNEL_ENV
           value: {{ .Values.monitoring.akernelEnv | default "default" | quote }}
         securityContext:

@@ -584,7 +584,7 @@ configure_afs() {
 start_node_container() {
     local endpoint_name
     local telemetry_args=()
-    for endpoint_name in AKERNEL_ENV PROMETHEUS_ENDPOINT LOKI_ENDPOINT TEMPO_ENDPOINT; do
+    for endpoint_name in AKERNEL_ENV AKERNEL_CLUSTER_NAME PROMETHEUS_ENDPOINT LOKI_ENDPOINT TEMPO_ENDPOINT; do
         if [[ -n "${!endpoint_name:-}" ]]; then
             telemetry_args+=(-e "${endpoint_name}")
         fi

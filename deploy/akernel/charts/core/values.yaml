@@ -13,6 +13,8 @@ serviceAccount:
   name: default
 
 monitoring:
+  # Stable identity shared by Coordinator, API Server and node metrics.
+  clusterName: "akernel"
   akernelEnv: "default"
   prometheusEndpoint: ""
   lokiEndpoint: ""
