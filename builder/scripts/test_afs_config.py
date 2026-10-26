@@ -51,14 +51,14 @@ class AfsConfigTest(unittest.TestCase):
                     run.assert_not_called()
 
     def test_profile_shares_checkpoint_store_and_preserves_local_runtime_paths(self):
-        for name in ("adx-standalone.yaml", "adx-pvm.yaml"):
-            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+        for pvm in (False, True):
+            with self.subTest(pvm=pvm), tempfile.TemporaryDirectory() as directory:
                 target = Path(directory) / "afs.yaml"
-                source = ROOT / "builder/config" / name
+                source = ROOT / "builder/config/adx-standalone.yaml"
                 original = yaml.safe_load(source.read_text())
                 with patch.object(CONFIG.subprocess, "run") as run:
                     run.return_value.stdout = "afs-dfs fuse rw\n"
-                    CONFIG.configure(source, target, Path("/mnt/akernel-shared"), "test/checkpoints")
+                    CONFIG.configure(source, target, Path("/mnt/akernel-shared"), "test/checkpoints", pvm=pvm)
                 profile = yaml.safe_load(target.read_text())
                 overrides = profile["service_overrides"]
                 storage = overrides["adxlet"]["config"]["checkpoint_storage"]
@@ -68,14 +68,23 @@ class AfsConfigTest(unittest.TestCase):
                 self.assertEqual(profile["runtime_profile"], original["runtime_profile"])
                 self.assertEqual(target.stat().st_mode & 0o777, 0o600)
 
-    def test_colocated_api_metrics_and_autoscaling_use_distinct_ports(self):
-        for name in ("adx-standalone.yaml", "adx-pvm.yaml"):
-            with self.subTest(name=name):
-                overrides = yaml.safe_load((ROOT / "builder/config" / name).read_text())["service_overrides"]
+    def test_pvm_only_changes_rpc_budgets_and_supports_in_place_generation(self):
+        source = ROOT / "builder/config/adx-standalone.yaml"
+        original = yaml.safe_load(source.read_text())
+        for pvm in (False, True):
+            with self.subTest(pvm=pvm), tempfile.TemporaryDirectory() as directory:
+                target = Path(directory) / "profile.yaml"
+                target.write_text(source.read_text())
+                with patch.dict(os.environ, {"ENABLE_TRACE": "false"}):
+                    CONFIG.configure(target, target, None, "unused", pvm=pvm)
+                result = yaml.safe_load(target.read_text())
+                overrides = result["service_overrides"]
                 self.assertEqual(overrides["coordinator"]["config"]["autoscaling_listen"], "127.0.0.1:19092")
                 self.assertEqual(overrides["apiserver"]["config"]["metrics_listen"], "127.0.0.1:19093")
-                self.assertNotEqual(overrides["coordinator"]["config"]["autoscaling_listen"],
-                                    overrides["apiserver"]["config"]["metrics_listen"])
+                if pvm:
+                    for role in ("coordinator", "adxlet"):
+                        self.assertEqual(overrides[role]["config"].pop("rpc_timeout_seconds"), 90)
+                self.assertEqual(result, original)
 
     def test_standalone_trace_flag_configures_processes_and_guest_without_afs(self):
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {"ENABLE_TRACE": "true"}):

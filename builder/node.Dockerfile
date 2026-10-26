@@ -463,9 +463,9 @@ COPY ./builder/scripts/otel-collector-service.sh /usr/local/bin/otel-collector-s
 COPY ./builder/scripts/sandboxd_network_prepare.sh /usr/local/bin/sandboxd-network-prepare
 ARG FIRECRACKER_KERNEL_PROFILE
 COPY ./builder/config/adx-standalone.yaml /etc/akernel/adx-standalone.yaml
-COPY ./builder/config/adx-pvm.yaml /etc/akernel/adx-pvm.yaml
 RUN case "${FIRECRACKER_KERNEL_PROFILE}" in \
-      pvm) cp /etc/akernel/adx-pvm.yaml /etc/akernel/adx-standalone.yaml ;; \
+      pvm) python3 /usr/local/libexec/prepare-adx-config.py \
+        /etc/akernel/adx-standalone.yaml /etc/akernel/adx-standalone.yaml --pvm ;; \
       kvm) ;; \
       *) echo "invalid Firecracker kernel profile" >&2; exit 1 ;; \
     esac
@@ -487,7 +487,7 @@ RUN if [ "${AKERNEL_ENABLE_RUNC}" = "true" ]; then \
     fi
 
 COPY ./builder/config/otel-collector-standalone.yaml /etc/akernel/otel_standalone.yaml
-COPY ./builder/config/otel-collector-config.yaml /etc/akernel/otel_config.yaml
+COPY ./deploy/akernel/charts/core/files/otel-collector/config.yaml /etc/akernel/otel_config.yaml
 RUN chmod 0755 /usr/local/bin/otel-collector-service
 COPY ./builder/config/logrotate.d/gvisor /etc/logrotate.d/gvisor
 COPY ./builder/scripts/*.sh /root/

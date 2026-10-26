@@ -11,8 +11,8 @@ while IFS= read -r -d '' entry; do
       ;;
   esac
 done </proc/1/environ
-config=/etc/akernel/otel_config.yaml
+configs=(--config=/etc/akernel/otel_config.yaml)
 if [[ "${AKERNEL_ROLE:-standalone}" == standalone ]]; then
-  config=/etc/akernel/otel_standalone.yaml
+  configs+=(--config=/etc/akernel/otel_standalone.yaml)
 fi
-exec /usr/local/bin/otelcol-contrib --config="${config}"
+exec /usr/local/bin/otelcol-contrib "${configs[@]}"

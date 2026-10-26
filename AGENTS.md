@@ -779,24 +779,8 @@ SDK control-plane access.
 
 ## ADX observability
 
-The node Collector runs inside the existing node container; control-role
-collectors read shared local logs. Keep `builder/config/` and Helm Collector
-configuration synchronized. Preserve the ADX dashboards' UIDs and query
-contracts. Verify real SDK traffic reaches the backends after collection changes.
-
-Current ADX requires runtime-control lifecycle events; Helm rejects disabling
-`adx.runtimeControl.enabled`. Keep resource sampling (`metricsIntervalSeconds`,
-15s) separate from the node report interval (5s). API Server creation metrics
-use private port 19093; Collector self-metrics use 18889 to avoid API port 18888.
-The optional `environmentDetails` monitor runs a separate short-retention TSDB
-and supplies Grafana UID `prometheus-details`; do not send per-Environment
-series into the long-term summary store. Preserve all five upstream dashboard
-UIDs and the creation-QPS recording rules.
-
-Standalone AFS checkpoints select an existing host DFS mount with
-`AKERNEL_AFS_MOUNT` and a safe relative `AKERNEL_AFS_CHECKPOINT_PREFIX`. Both host
-and container must validate the actual writable `afs-dfs` FUSE mount before
-configuring shared checkpoint storage. Preserve node-local runtime files and
-use the same alias/prefix for the Adxlet and Coordinator reclaimer. AFS service
-lifecycle remains independently managed. Test mount failure and real checkpoint
-restore; mocked mount checks alone do not qualify AFS integration.
+Collector configs live in `deploy/akernel/charts/core/files/otel-collector/`;
+standalone adds scrape targets through a small overlay. Preserve dashboard UIDs,
+summary/detail metric separation and runtime-control events. Verify real SDK
+telemetry after collection changes. The [standalone guide](deploy/standalone/README.md)
+owns tracing and AFS options; test actual mount validation and checkpoint reload.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate standalone telemetry and optional mounted checkpoint overrides."""
+"""Apply PVM, telemetry and mounted checkpoint options to the standalone profile."""
 from __future__ import annotations
 import argparse
 import os
@@ -10,10 +10,16 @@ import subprocess
 import yaml
 
 
-def configure(source: Path, destination: Path, mount: Path | None, prefix: str) -> None:
+def configure(
+    source: Path, destination: Path, mount: Path | None, prefix: str, *, pvm: bool = False,
+) -> None:
     cfg = yaml.safe_load(source.read_text())
     overrides = cfg.setdefault("service_overrides", {})
     node = overrides.setdefault("adxlet", {}).setdefault("config", {})
+    if pvm:
+        # Nested PVM cleanup needs a longer RPC budget; guest boot stays unchanged.
+        for role in ("coordinator", "adxlet"):
+            overrides.setdefault(role, {}).setdefault("config", {})["rpc_timeout_seconds"] = 90
     if mount is not None:
         if not re.fullmatch(r"[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*", prefix):
             raise ValueError("checkpoint prefix must contain safe relative components")
@@ -52,8 +58,9 @@ def main() -> None:
     parser.add_argument("destination", type=Path)
     parser.add_argument("--mount", type=Path, default=None)
     parser.add_argument("--prefix", default="akernel/checkpoints")
+    parser.add_argument("--pvm", action="store_true", help="use the PVM cleanup RPC budget")
     args = parser.parse_args()
-    configure(args.source, args.destination, args.mount, args.prefix)
+    configure(args.source, args.destination, args.mount, args.prefix, pvm=args.pvm)
 
 
 if __name__ == "__main__":

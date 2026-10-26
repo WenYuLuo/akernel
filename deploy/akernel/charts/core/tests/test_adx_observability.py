@@ -38,8 +38,9 @@ class ObservabilityTest(unittest.TestCase):
                                    "adx-relay": ["127.0.0.1:18443"],
                                    "otel-collector": ["127.0.0.1:18889"]})
         self.assertIn("prometheus/adx", config["service"]["pipelines"]["metrics"]["receivers"])
-        self.assertEqual((ROOT / "builder/config/otel-collector-config.yaml").read_bytes(),
-                         (CHART / "files/otel-collector/config.yaml").read_bytes())
+        dockerfile = (ROOT / "builder/node.Dockerfile").read_text()
+        self.assertIn("COPY ./deploy/akernel/charts/core/files/otel-collector/config.yaml "
+                      "/etc/akernel/otel_config.yaml", dockerfile)
 
     def test_standalone_collects_all_local_control_and_data_metrics(self) -> None:
         config = yaml.safe_load((ROOT / "builder/config/otel-collector-standalone.yaml").read_text())
@@ -50,6 +51,24 @@ class ObservabilityTest(unittest.TestCase):
             "adx-coordinator": ["127.0.0.1:19090"], "adx-apiserver": ["127.0.0.1:19093"],
             "adx-ingress": ["127.0.0.1:18080"], "otel-collector": ["127.0.0.1:18889"],
         })
+
+    def test_standalone_overlay_only_replaces_scrape_jobs(self) -> None:
+        overlay = yaml.safe_load((ROOT / "builder/config/otel-collector-standalone.yaml").read_text())
+        self.assertEqual(set(overlay), {"receivers"})
+        self.assertEqual(set(overlay["receivers"]), {"prometheus/adx"})
+        self.assertEqual(set(overlay["receivers"]["prometheus/adx"]), {"config"})
+        self.assertEqual(set(overlay["receivers"]["prometheus/adx"]["config"]), {"scrape_configs"})
+
+    def test_ingress_collector_only_adds_api_scrape_to_control(self) -> None:
+        data = self.resources[("ConfigMap", "akernel-otel-collector-config")]["data"]
+        control = yaml.safe_load(data["control.yaml"])
+        ingress = yaml.safe_load(data["ingress-api.yaml"])
+        jobs = ingress["receivers"]["prometheus/adx"]["config"]["scrape_configs"]
+        api = jobs.pop()
+        self.assertEqual(api["job_name"], "adx-apiserver")
+        self.assertEqual(api["static_configs"][0]["targets"], ["127.0.0.1:19093"])
+        self.assertEqual(ingress, control)
+        self.assertFalse(any(j["job_name"] == "adx-apiserver" for j in jobs))
 
     def test_adxlet_samples_the_sandboxd_resource_socket_for_both_clouds(self) -> None:
         configs = self.resources[("ConfigMap", "akernel-adx-config")]["data"]
@@ -138,13 +157,10 @@ class ObservabilityTest(unittest.TestCase):
         self.assertIn('state="Running"', rules[0]["expr"])
 
     def test_primary_collectors_exclude_instance_resource_samples(self) -> None:
-        paths = [ROOT / "builder/config/otel-collector-config.yaml",
-                 ROOT / "builder/config/otel-collector-standalone.yaml",
-                 *(CHART / f"files/otel-collector/{role}.yaml"
-                   for role in ("config", "control", "ingress-api"))]
-        for path in paths:
-            with self.subTest(path=path):
-                config = yaml.safe_load(path.read_text())
+        configs = self.resources[("ConfigMap", "akernel-otel-collector-config")]["data"]
+        for name, content in configs.items():
+            with self.subTest(name=name):
+                config = yaml.safe_load(content)
                 pipeline = config["service"]["pipelines"]["metrics"]
                 self.assertIn("filter/summary_metrics", pipeline["processors"])
                 conditions = config["processors"]["filter/summary_metrics"]["metrics"]["datapoint"]
