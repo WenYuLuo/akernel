@@ -18,7 +18,7 @@ import os
 import unittest
 import uuid
 
-from akernel_sdk import BackendOperationError, Sandbox
+from akernel_sdk import Sandbox
 
 _ENABLED = (
     os.environ.get("AKERNEL_RUN_INTEGRATION") == "1"
@@ -55,26 +55,30 @@ class LifecycleFeaturesIntegrationTest(unittest.TestCase):
                 first.kill()
                 Sandbox.delete(name)
 
-    def test_same_name_with_different_resources_conflicts(self):
-        name = f"e2e-conflict-{uuid.uuid4().hex[:12]}"
+    def test_same_name_reuses_successful_result_and_original_resources(self):
+        name = f"e2e-reuse-{uuid.uuid4().hex[:12]}"
         first = None
-        competing = None
+        reopened = None
         try:
             first = Sandbox(
                 name=name, detached=True, runtime=_RUNTIME, cpu=1000, memory=2048
             )
-            with self.assertRaises(BackendOperationError):
-                competing = Sandbox(
-                    name=name,
-                    detached=True,
-                    runtime=_RUNTIME,
-                    cpu=2000,
-                    memory=2048,
-                )
+            reopened = Sandbox(
+                name=name,
+                detached=True,
+                runtime=_RUNTIME,
+                cpu=2000,
+                memory=4096,
+            )
+            self.assertEqual(reopened.id, first.id)
+            info = reopened.get_info()
+            self.assertEqual(info.cpu, 1000)
+            self.assertEqual(info.memory, 2048)
+            self.assertEqual(reopened.commands.run("printf reused").stdout, "reused")
             self.assertEqual(first.commands.run("printf owner").stdout, "owner")
         finally:
-            if competing is not None:
-                competing.kill()
+            if reopened is not None:
+                reopened.kill()
             if first is not None:
                 first.kill()
                 Sandbox.delete(name)

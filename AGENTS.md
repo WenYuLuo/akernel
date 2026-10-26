@@ -73,6 +73,10 @@ The internal adapter uses `adx-environment==0.1.0rc3` and
 Keep source installation, CI and publication dependency resolution through
 the configured package index.
 
+Named creation reuses an already successful Environment and its retained
+resource allocation. Keep the standalone replay regression aligned with that
+contract; use `get_info()` to verify retained resources.
+
 ## Common Commands
 
 All commands should be run from the repository root.
