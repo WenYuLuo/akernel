@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -151,6 +152,16 @@ class RuntimeContractTest(unittest.TestCase):
         self.assertFalse((ROOT / "builder/scripts/fetch_adx_release.py").exists())
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
         self.assertNotIn("ADX_RELEASE_ARCHIVE", makefile)
+
+    def test_daily_artifact_pin_matches_the_source_gitlink(self) -> None:
+        node = (ROOT / "builder/node.Dockerfile").read_text()
+        match = re.search(r"^ARG ADX_RELEASE_URL=.+/daily/[0-9]{14}-([0-9a-f]{12})/", node, re.MULTILINE)
+        self.assertIsNotNone(match, "daily artifact URL must identify its source revision")
+        entry = subprocess.check_output(
+            ["git", "ls-files", "--stage", "--", "src/agent-dx"], cwd=ROOT, text=True
+        ).split()
+        self.assertEqual(entry[0], "160000", "ADX source reference must remain a gitlink")
+        self.assertTrue(entry[1].startswith(match.group(1)), "ADX archive and source revisions differ")
 
     def test_artifact_contract_rejects_unpinned_or_mismatched_builds(self) -> None:
         node = (ROOT / "builder/node.Dockerfile").read_text(encoding="utf-8")

@@ -793,9 +793,9 @@ Environment details are opt-in scrape jobs on the existing Prometheus instance,
 with the same datasource and retention policy as summary metrics. Keep default
 and detail-enabled provisioning compatible with private images and node placement.
 
-All ADX dashboards, identity joins, recording rules, logs and TraceQL queries
-retain `cluster` and `adx_env`. Grafana date fields consume milliseconds; source
-`_seconds` metrics retain seconds. Keep `core.monitoring.clusterName`, `AKERNEL_CLUSTER_NAME` and
+Scope ADX dashboards, logs and TraceQL by `cluster` and `adx_env`; preserve both
+labels in identity joins and per-deployment recording rules. Grafana date fields
+consume milliseconds; source `_seconds` metrics retain seconds. Keep `core.monitoring.clusterName`, `AKERNEL_CLUSTER_NAME` and
 the monitor cluster identity aligned across control, node and standalone
 Collectors. API metrics stay on 19093; autoscaling stays on 19092. Unknown
 outcomes, missing coverage and stale snapshots must remain visible.
