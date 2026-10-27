@@ -361,8 +361,8 @@ through the public SDK or Grafana.
 All ADX dashboards scope queries by `cluster` and `adx_env`. Environment and
 node identity joins, node table keys, and creation QPS recording rules retain
 both labels. Loki indexes `cluster`; log and TraceQL queries and dashboard
-navigation carry the same scope. Explore Requests accepts one selected cluster
-or All. The Statistics Started At panel converts the Unix seconds metric to
+navigation carry the same scope. TraceQL and Explore Requests match the selected cluster literally, including
+cluster names containing dots, and retain an explicit All option. The Statistics Started At panel converts the Unix seconds metric to
 milliseconds for Grafana date formatting. For Helm, set
 `core.monitoring.clusterName` and `monitor.prometheusServer.config.clusterName`
 to the same stable cluster identity (default `akernel`); Terraform supplies its
@@ -395,6 +395,7 @@ clock using the provisioned dashboard queries and recording rules:
 ```bash
 python deploy/akernel/charts/core/tests/test_adx_multicluster.py -v
 python deploy/tests/observability/dashboard_query_contract.py --docker --output /tmp/adx-dashboard-queries
+python deploy/tests/observability/dashboard_signal_contract.py --output /tmp/adx-dashboard-signals
 ```
 
 For a standalone Collector, set `PROMETHEUS_ENDPOINT`, `LOKI_ENDPOINT`, and

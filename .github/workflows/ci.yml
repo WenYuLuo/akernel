@@ -158,6 +158,7 @@ jobs:
       - name: Evaluate ADX multi-cluster dashboard queries
         run: |
           python deploy/tests/observability/dashboard_query_contract.py --docker --output "$RUNNER_TEMP/adx-dashboard-queries"
+          python deploy/tests/observability/dashboard_signal_contract.py --output "$RUNNER_TEMP/adx-dashboard-signals"
 
       - name: Verify node-directory ownership with restricted Linux capabilities
         run: |
