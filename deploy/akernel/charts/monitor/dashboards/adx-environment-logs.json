@@ -47,7 +47,7 @@
     {
       "title": "Explore Requests",
       "type": "link",
-      "url": "/explore?schemaVersion=1&panes=%7B%22a%22%3A%7B%22datasource%22%3A%22tempo%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22tempo%22%7D%2C%22queryType%22%3A%22traceql%22%2C%22query%22%3A%22%7B%20%28resource.cluster%20%3D%20%5C%22${cluster:percentencode}%5C%22%20%7C%7C%20%5C%22${cluster:percentencode}%5C%22%20%3D%20%5C%22..%2A%5C%22%29%20%26%26%20resource.adx_env%20%3D~%20%5C%22${adx_env:percentencode}%5C%22%20%26%26%20%28name%20%3D%20%5C%22environment.create%5C%22%20%7C%7C%20%28name%20%3D~%20%5C%22%5E%28GET%7CPOST%7CPUT%7CDELETE%7CPATCH%7CHEAD%7COPTIONS%7CCONNECT%7COTHER%29%20%2F.%2A%5C%22%20%26%26%20span.http.route%20%21%3D%20%5C%22%2Funmatched%5C%22%20%26%26%20%28%28name%20%21%3D%20%5C%22POST%20%2Fapi%2Fenvironment%2Fv1%2Fenvironments%5C%22%20%26%26%20name%20%21%3D%20%5C%22POST%20%2Fapi%2Fenvironment%2Fcreate%5C%22%29%20%7C%7C%20span.http.response.status_code%20%3D~%20%5C%22%5E%5B45%5D%5B0-9%5D%7B2%7D%24%5C%22%29%20%26%26%20name%20%21%3D%20%5C%22GET%20%2Fhealthz%5C%22%20%26%26%20name%20%21%3D%20%5C%22GET%20%2Fmetrics%5C%22%29%29%20%7D%20%7C%20select%28name%2C%20resource.service.name%2C%20span.http.response.status_code%2C%20span.rpc.method%2C%20span.environment.create.outcome%29%22%2C%22tableType%22%3A%22spans%22%2C%22limit%22%3A50%2C%22spss%22%3A3%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22now-6h%22%2C%22to%22%3A%22now%22%7D%7D%7D",
+      "url": "/explore?schemaVersion=1&panes=%7B%22a%22%3A%7B%22datasource%22%3A%22tempo%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22tempo%22%7D%2C%22queryType%22%3A%22traceql%22%2C%22query%22%3A%22%7B%20%28resource.cluster%20%3D%20%5C%22${cluster:percentencode}%5C%22%20%7C%7C%20%5C%22${cluster:percentencode}%5C%22%20%3D%20%5C%22..%2A%5C%22%29%20%26%26%20resource.adx_env%20%3D~%20%5C%22${adx_env:percentencode}%5C%22%20%26%26%20resource.service.name%20%3D%20%5C%22adx-apiserver%5C%22%20%26%26%20name%20%3D%20%5C%22environment.create%5C%22%20%7D%20%7C%20select%28span.environment.id%2C%20span.environment.create.outcome%2C%20resource.service.name%29%22%2C%22tableType%22%3A%22spans%22%2C%22limit%22%3A50%2C%22spss%22%3A20%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22now-6h%22%2C%22to%22%3A%22now%22%7D%7D%7D",
       "includeVars": false,
       "keepTime": false,
       "targetBlank": false,
@@ -122,10 +122,10 @@
       "description": "Main-process stdout/stderr. Runtime ID contains Environment ID and generation. Runtime filter is a regex; .* matches all, .*environment-id.* selects its generations. Log text is literal and case-sensitive. At most 500 lines per query. SDK command responses are separate."
     },
     {
-      "id": 22,
+      "id": 23,
       "type": "table",
-      "title": "HTTP Request Traces",
-      "description": "One row per matching HTTP span, showing endpoint, actual component, response status and span duration. Streaming HTTP spans may finish before background tasks; click Trace ID for the complete trace. Excludes unmatched routes and health checks. Does not require an upstream root span.",
+      "title": "Environment Create Completion Traces",
+      "description": "One environment.create business span per sampled create call, ending at its final result after scheduling and runtime startup. Duration excludes the earlier HTTP authentication/spec preparation. Success includes successful reuse; use the successful-new-create metric to exclude replay/reuse. Unknown means an uncertain result, not confirmed failure. Sampling means this table is not a complete request ledger.",
       "datasource": {
         "type": "tempo",
         "uid": "tempo"
@@ -183,18 +183,6 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Endpoint"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 500
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
               "options": "Start Time"
             },
             "properties": [
@@ -219,19 +207,19 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Status"
+              "options": "Create Completion Time"
             },
             "properties": [
               {
                 "id": "custom.width",
-                "value": 80
+                "value": 155
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "Span Duration"
+              "options": "Outcome"
             },
             "properties": [
               {
@@ -255,8 +243,9 @@
           },
           "queryType": "traceql",
           "tableType": "spans",
-          "query": "{ (resource.cluster = \"${cluster:raw}\" || \"${cluster:raw}\" = \"..*\") && resource.adx_env =~ \"$adx_env\" && (resource.service.name = \"adx-apiserver\" || resource.service.name = \"adx-ingress\") && name =~ \"^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS|CONNECT|OTHER) /.*\" && span.http.route != \"/unmatched\" && name != \"GET /healthz\" && name != \"GET /metrics\" } | select(span.http.request.method, span.http.route, span.http.response.status_code, resource.service.name)",
+          "query": "{ (resource.cluster = \"${cluster:raw}\" || \"${cluster:raw}\" = \"..*\") && resource.adx_env =~ \"$adx_env\" && resource.service.name = \"adx-apiserver\" && name = \"environment.create\" } | select(span.environment.id, span.environment.create.outcome, resource.service.name)",
           "limit": 50,
+          "spss": 20,
           "filters": []
         }
       ],
@@ -268,32 +257,33 @@
               "traceService": true,
               "traceName": true,
               "spanID": true,
+              "nested": true,
               "adx_env": true,
-              "http.request.method": true,
-              "http.route": true,
-              "nested": true
+              "cluster": true
             },
             "indexByName": {
-              "time": 0,
-              "name": 1,
-              "service.name": 2,
-              "http.response.status_code": 3,
-              "duration": 4,
-              "traceIdHidden": 5,
-              "Start time": 0,
-              "Name": 1,
-              "Duration": 4
+              "duration": 0,
+              "Duration": 0,
+              "environment.create.outcome": 1,
+              "environment.id": 2,
+              "name": 3,
+              "Name": 3,
+              "time": 4,
+              "Start time": 4,
+              "service.name": 5,
+              "traceIdHidden": 6
             },
             "renameByName": {
               "time": "Start Time",
-              "name": "Endpoint",
+              "name": "Operation",
+              "environment.id": "Environment ID",
+              "environment.create.outcome": "Outcome",
               "service.name": "Component",
-              "http.response.status_code": "Status",
-              "duration": "Span Duration",
+              "duration": "Create Completion Time",
               "traceIdHidden": "Trace ID",
               "Start time": "Start Time",
-              "Name": "Endpoint",
-              "Duration": "Span Duration"
+              "Name": "Operation",
+              "Duration": "Create Completion Time"
             }
           }
         }

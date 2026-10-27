@@ -241,4 +241,5 @@ environmentDetails:
   enabled: false
   namespaces: [akernel]
   environment: default
-  scrapeInterval: 30s
+  # Match the runtime sampler so short-lived workloads can produce multiple scrapes.
+  scrapeInterval: 15s

@@ -200,7 +200,7 @@ def main() -> None:
             trace_ids[cluster] = trace_id
             request(tp[4318] + "/v1/traces", {"resourceSpans": [{"resource": {"attributes": attrs},
                 "scopeSpans": [{"scope": {}, "spans": [{"traceId": trace_id, "spanId": f"{index:016x}",
-                    "name": "GET /api/environment/v1/environments", "kind": 2,
+                    "name": "environment.create", "kind": 2,
                     "startTimeUnixNano": str(now), "endTimeUnixNano": str(now + 1000000),
                     "attributes": [{"key": "http.route", "value": {"stringValue": "/api/environment/v1/environments"}},
                                    {"key": "http.response.status_code", "value": {"intValue": "200"}}]}]}]}]})

@@ -130,7 +130,8 @@
             }
           }
         }
-      ]
+      ],
+      "description": "Current Running/Paused logical inventory joined to fresh runtime samples. It is not a historical list of every created Environment. With all test Environments deleted, an empty inventory is expected; check scrape health to distinguish missing collection."
     },
     {
       "id": 2,
@@ -163,7 +164,8 @@
           "format": "time_series",
           "legendFormat": "{{environment_id}} / {{runtime_id}}"
         }
-      ]
+      ],
+      "description": "Measured per-Environment CPU usage from fresh Running inventory and runtime observations. Requires at least two counter scrapes for a rate. No active Environment, no samples or stale observations produce no series."
     },
     {
       "id": 3,
@@ -196,7 +198,8 @@
           "format": "time_series",
           "legendFormat": "{{environment_id}} / {{runtime_id}}"
         }
-      ]
+      ],
+      "description": "Measured memory for fresh Running Environments. Paused or deleted Environments do not display an old runtime sample as current memory. No active/fresh sample produces no series."
     }
   ],
   "links": [

@@ -123,16 +123,16 @@ def main() -> None:
                 assert name + " " + str(count) in rows, (name, phase)
         expr = next(t["expr"] for p in lifecycle["panels"] for t in p.get("targets", [])
                     if metric + "{" in t.get("expr", ""))
-        expr = scope(expr).replace("$__rate_interval", "2m")
+        expr = scope(expr).replace("$__rate_interval", "2m").replace("$__range", "2m")
         for cluster, count in (("a", 1), ("b", 3)):
             labels = f'cluster="{cluster}",adx_env="shared",' + suffix
             series.append({"series": metric + "{" + labels + "}",
                            "values": f"0 0 {count}+0x6"})
         for when, multiplier in (("15s", 0), ("2m", 1)):
-            checks.append({"expr": expr, "eval_time": when, "exp_samples": [
+            checks.append({"expr": expr, "eval_time": when, "exp_samples": ([] if metric == "adx_environment_create_errors_total" and multiplier == 0 else [
                 {"labels": '{cluster="a",adx_env="shared",' + suffix + "}", "value": multiplier},
                 {"labels": '{cluster="b",adx_env="shared",' + suffix + "}", "value": 3 * multiplier},
-            ]})
+            ])})
 
     fixture = {"rule_files": ["adx-rules.yaml"], "evaluation_interval": "15s",
                "tests": [{"interval": "15s", "input_series": series, "promql_expr_test": checks}]}

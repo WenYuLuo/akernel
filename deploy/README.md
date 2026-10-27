@@ -539,3 +539,7 @@ Resizing an existing cache is unsupported. Same-Pod service restarts retain it; 
 Internal network mode requires an ADX package containing the optional internal
 transport implementation. Validate control and sandbox traffic with the selected
 package before deploying these templates.
+
+## Observability dashboards
+
+For dashboard definitions, latency boundaries and empty-data interpretation, see [ADX observability dashboards](observability.md).
