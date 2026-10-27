@@ -135,6 +135,7 @@ locals {
   node_image_repo   = length(var.node_image_repository) > 0 ? var.node_image_repository : "${local.acr_registry}/all-in-one"
 
   core_values = templatefile("${path.module}/values-akernel.yaml.tmpl", {
+    cluster_name                = var.cluster_name
     adx_public_service_enabled  = var.adx_public_service_enabled
     adx_service_type            = var.adx_service_type
     adx_control_port            = var.adx_control_port
@@ -189,6 +190,7 @@ locals {
   monitor_image_registry = var.monitor_image_registry
 
   monitor_values = templatefile("${path.module}/values-monitor.yaml.tmpl", {
+    cluster_name           = var.cluster_name
     image_registry         = local.monitor_image_registry
     acr_secret_enabled     = local.acr_secret_enabled
     acr_host               = local.acr_host

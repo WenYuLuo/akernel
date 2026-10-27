@@ -192,7 +192,7 @@ prometheusServer:
     accessMode: ReadWriteOnce
 
   config:
-    clusterName: 'yuanrong-frontend'
+    clusterName: 'akernel'
     environment: 'kubernetes'
     retentionTime: '30d'
     controlPlanePods:
@@ -235,3 +235,11 @@ prometheusServer:
       - "akernel"
       - "akernel-monitor"
     pushgateways: []
+
+# Optional native Environment inventory and resource scrapes into Prometheus.
+environmentDetails:
+  enabled: false
+  namespaces: [akernel]
+  environment: default
+  # Match the runtime sampler so short-lived workloads can produce multiple scrapes.
+  scrapeInterval: 15s

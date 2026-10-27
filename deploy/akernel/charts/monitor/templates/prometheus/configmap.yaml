@@ -419,6 +419,38 @@ data:
           action: replace
           target_label: app
 
+{{- if .Values.environmentDetails.enabled }}
+      {{- range $role := list "coordinator" "node" }}
+      - job_name: adx-{{ $role }}-environments
+        metrics_path: /metrics/environments
+        scrape_interval: {{ $.Values.environmentDetails.scrapeInterval }}
+        sample_limit: 200000
+        kubernetes_sd_configs:
+        - role: pod
+          namespaces:
+            names: {{ $.Values.environmentDetails.namespaces | toJson }}
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_pod_phase]
+          action: keep
+          regex: Running
+        - source_labels: [__meta_kubernetes_pod_container_name, __meta_kubernetes_pod_container_port_name]
+          action: keep
+          regex: {{ if eq $role "coordinator" }}'coordinator;metrics'{{ else }}'akernel-node;'{{ end }}
+        - source_labels: [__meta_kubernetes_pod_ip]
+          target_label: __address__
+          regex: (.+)
+          replacement: {{ if eq $role "coordinator" }}'${1}:19090'{{ else }}'${1}:19091'{{ end }}
+        - target_label: cluster
+          replacement: {{ $.Values.prometheusServer.config.clusterName | quote }}
+        - target_label: adx_env
+          replacement: {{ $.Values.environmentDetails.environment | quote }}
+        - target_label: component_name
+          replacement: {{ if eq $role "node" }}adxlet{{ else }}adx-coordinator{{ end }}
+        - source_labels: [__meta_kubernetes_pod_name]
+          target_label: pod
+      {{- end }}
+{{- end }}
+
   pushgateways.json: |
     {{ .Values.prometheusServer.config.pushgateways | toJson | indent 4 }}
 
@@ -431,6 +463,13 @@ data:
           # Count Running environments, with an explicit zero for registered nodes.
           - record: sandbox_running
             expr: >-
-              sum by (adx_env, node_id) (adx_coordinator_environments{state="Running"})
-              or on (adx_env, node_id)
-              (max by (adx_env, node_id) (adx_coordinator_node_reachable) * 0)
+              sum by (cluster, adx_env, node_id) (adx_coordinator_environments{state="Running"})
+              or on (cluster, adx_env, node_id)
+              (max by (cluster, adx_env, node_id) (adx_coordinator_node_reachable) * 0)
+      - name: adx-creation
+        interval: 15s
+        rules:
+        - record: adx:environment_create_request_qps:rate1m
+          expr: sum by (cluster, adx_env) (rate(adx_environment_create_requests_total[1m]))
+        - record: adx:environment_created_qps:rate1m
+          expr: sum by (cluster, adx_env) (rate(adx_environment_created_total[1m]))

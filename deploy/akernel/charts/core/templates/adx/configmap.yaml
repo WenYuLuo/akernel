@@ -1,3 +1,7 @@
+{{- $sampling := .Values.adx.node.metricsIntervalSeconds }}
+{{- if or (not (regexMatch "^[0-9]+$" (toString $sampling))) (lt (int $sampling) 1) (gt (int $sampling) 3600) }}
+{{- fail "adx.node.metricsIntervalSeconds must be an integer between 1 and 3600" }}
+{{- end }}
 {{- if not (has (.Values.coordinator.schedulePlacementPolicy | default "spread") (list "binpack" "spread")) }}
 {{- fail "coordinator.schedulePlacementPolicy must be binpack or spread" }}
 {{- end }}
@@ -9,6 +13,9 @@
 {{- end }}
 {{- $runtimeControl := .Values.adx.runtimeControl }}
 {{- $runtimePush := eq (toString $runtimeControl.enabled) "true" }}
+{{- if not $runtimePush }}
+{{- fail "adx.runtimeControl.enabled must be true: lifecycle events require runtime control" }}
+{{- end }}
 {{- if $runtimePush }}
 {{- if or (not (regexMatch "^[0-9]+$" (toString $runtimeControl.port))) (lt (int $runtimeControl.port) 1) (gt (int $runtimeControl.port) 65535) }}
 {{- fail "adx.runtimeControl.port must be between 1 and 65535" }}
@@ -110,6 +117,7 @@ data:
         role: apiserver
         config:
           listen: 127.0.0.1:18888
+          metrics_listen: 127.0.0.1:19093
           internal_security: network
           create_mode: local_first
           rpc_timeout_seconds: 90
@@ -196,6 +204,7 @@ data:
           proxy_address: ${INSTANCE_IP}:19002
           sandboxd_socket: /run/sandboxd/sandboxd.sock
           proxy_socket: /home/akernel/adx/run/node/route.sock
+          metrics_interval_seconds: {{ .Values.adx.node.metricsIntervalSeconds }}
           report_interval_seconds: {{ .Values.adx.node.reportIntervalSeconds }}
           rpc_timeout_seconds: 30
           execd_port: 50090

@@ -397,7 +397,7 @@ class Sandbox:
         except Exception:
             self._closed = True
             try:
-                self._session.terminate()
+                self._session.rollback_creation()
             except Exception:
                 logger.warning(
                     "failed to roll back a partially initialized sandbox",

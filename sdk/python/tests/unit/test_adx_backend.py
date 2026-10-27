@@ -71,6 +71,59 @@ class AdxBackendTest(unittest.TestCase):
             token="secret",
         )
 
+    def _failed_create_calls(self, stage, ownership):
+        calls = []
+
+        def send(_client, request, **_kwargs):
+            body = json.loads(request.content) if request.content else {}
+            action = body.get("action")
+            calls.append(action or request.method)
+            if request.method == "DELETE":
+                return httpx.Response(200, json={}, request=request)
+            if action:
+                if (stage == "cwd" and action == "file.make_dir") or stage == "route":
+                    return httpx.Response(
+                        403, json={"message": "initialization denied", "error": {
+                            "code": "PERMISSION_DENIED", "retry": "never",
+                            "outcome": "not_started", "requestId": "test",
+                        }}, request=request,
+                    )
+                return httpx.Response(200, json={"processes": []}, request=request)
+            payload = {"environmentId": "default-shared", "status": "running"}
+            if ownership is not None:
+                payload["newlyCreated"] = ownership
+            return httpx.Response(
+                200, headers={"content-type": "text/event-stream"},
+                content="event: final\ndata: " + json.dumps(payload) + "\n\n",
+                request=request,
+            )
+
+        tunnel = (
+            HttpReverseTunnel(target="http://127.0.0.1:9000")
+            if stage == "tunnel" else None
+        )
+        with (
+            patch.object(httpx.Client, "send", autospec=True, side_effect=send),
+            patch("adx_environment.tunnel_client.TunnelClient") as client,
+        ):
+            client.return_value.start.return_value = False
+            with self.assertRaises(BackendOperationError):
+                adx.AdxBackend(self.config).create(_spec(
+                    name="shared", detached=True, cpu=2000, memory=4096,
+                    command_cwd="/proc/akernel-review" if stage == "cwd" else None,
+                    reverse_tunnel=tunnel,
+                ))
+        return calls
+
+    def test_failed_native_and_backend_initialization_respect_create_ownership(self):
+        for stage in ("tunnel", "route", "cwd"):
+            for ownership in (True, False, None, "true"):
+                with self.subTest(stage=stage, ownership=ownership):
+                    calls = self._failed_create_calls(stage, ownership)
+                    self.assertEqual(
+                        calls.count("DELETE"), int(ownership is True), calls
+                    )
+
     def test_host_path_reaches_real_native_constructor_and_preserves_denial(self):
         mount = Mount(target="/apps/logs", host_path="/apps/logs", read_only=False)
         requests = []
@@ -115,6 +168,7 @@ class AdxBackendTest(unittest.TestCase):
 
     def test_create_converts_mixed_mount_sources_without_changing_permissions(self):
         native = MagicMock()
+        native.newly_created = True
         native.id = "default-mounts"
         mounts = (
             Mount(target="/logs", host_path="/apps/logs", read_only=False),
@@ -187,6 +241,7 @@ class AdxBackendTest(unittest.TestCase):
             override.mkdir()
             missing = Path(directory).resolve() / "missing"
             native = MagicMock()
+            native.newly_created = True
             native.id = "default-cwd"
             native.files.make_dir.side_effect = lambda path: Path(path).mkdir(
                 parents=True, exist_ok=True
@@ -235,6 +290,7 @@ class AdxBackendTest(unittest.TestCase):
 
     def test_existing_constructor_cwd_is_accepted(self):
         native = MagicMock()
+        native.newly_created = True
         native.files.make_dir.return_value = False
         with patch.object(adx, "_OwnedSandbox", return_value=native):
             adx.AdxBackend(self.config).create(_spec(command_cwd="/workspace"))
@@ -243,12 +299,14 @@ class AdxBackendTest(unittest.TestCase):
 
     def test_omitted_constructor_cwd_does_not_create_a_directory(self):
         native = MagicMock()
+        native.newly_created = True
         with patch.object(adx, "_OwnedSandbox", return_value=native):
             adx.AdxBackend(self.config).create(_spec())
         native.files.make_dir.assert_not_called()
 
     def test_constructor_cwd_failure_rolls_back_detached_sandbox(self):
         native = MagicMock()
+        native.newly_created = True
         native.id = "default-cwd"
         error = PermissionError("cannot create working directory")
         native.files.make_dir.side_effect = error
@@ -266,6 +324,7 @@ class AdxBackendTest(unittest.TestCase):
 
     def test_constructor_cwd_failure_survives_rollback_failure(self):
         native = MagicMock()
+        native.newly_created = True
         native.id = "default-cwd"
         error = FileExistsError("working directory is a file")
         native.files.make_dir.side_effect = error
@@ -296,6 +355,7 @@ class AdxBackendTest(unittest.TestCase):
 
     def test_foreground_command_timeout_is_an_operation_error(self):
         native = MagicMock()
+        native.newly_created = True
         native.run.return_value = SimpleNamespace(
             stdout="", stderr="Command timed out after 1 seconds", exit_code=-1
         )
@@ -326,6 +386,7 @@ class AdxBackendTest(unittest.TestCase):
 
     def test_wait_preserves_running_result_and_error_metadata(self):
         native = MagicMock()
+        native.newly_created = True
         handle = native.run.return_value
         handle.pid = 12
         driver = adx._CommandsDriver(native)
@@ -492,6 +553,7 @@ class AdxBackendTest(unittest.TestCase):
     def test_create_maps_the_complete_akernel_spec(self):
         backend = adx.AdxBackend(self.config)
         native = MagicMock()
+        native.newly_created = True
         native.id = "default-worker"
         native.commands = MagicMock()
         native.files = MagicMock()
@@ -561,6 +623,7 @@ class AdxBackendTest(unittest.TestCase):
     def test_session_pty_uses_the_authenticated_tls_entrypoint(self):
         backend = adx.AdxBackend(self.config)
         native = MagicMock()
+        native.newly_created = True
         native.id = "default-worker"
         native.commands = MagicMock()
         native.files = MagicMock()
@@ -581,6 +644,7 @@ class AdxBackendTest(unittest.TestCase):
     def test_session_uses_stable_id_delete_with_the_same_connection(self):
         backend = adx.AdxBackend(self.config)
         native = MagicMock()
+        native.newly_created = True
         native.id = "default-worker"
         native.commands = MagicMock()
         native.files = MagicMock()
@@ -600,6 +664,7 @@ class AdxBackendTest(unittest.TestCase):
     def test_get_info_keeps_akernel_resource_extensions(self):
         backend = adx.AdxBackend(self.config)
         native = MagicMock()
+        native.newly_created = True
         native.id = "default-worker"
         native.commands = MagicMock()
         native.files = MagicMock()
@@ -620,6 +685,7 @@ class AdxBackendTest(unittest.TestCase):
     def test_get_info_normalizes_an_empty_backend_image(self):
         backend = adx.AdxBackend(self.config)
         native = MagicMock()
+        native.newly_created = True
         native.id = "default-worker"
         native.commands = MagicMock()
         native.files = MagicMock()

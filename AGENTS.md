@@ -73,6 +73,10 @@ The internal adapter uses `adx-environment==0.1.0rc3` and
 Keep source installation, CI and publication dependency resolution through
 the configured package index.
 
+Named creation reuses an already successful Environment and its retained
+resource allocation. Keep the standalone replay regression aligned with that
+contract; use `get_info()` to verify retained resources.
+
 ## Common Commands
 
 All commands should be run from the repository root.
@@ -779,7 +783,32 @@ SDK control-plane access.
 
 ## ADX observability
 
-The node Collector runs inside the existing node container; control-role
-collectors read shared local logs. Keep `builder/config/` and Helm Collector
-configuration synchronized. Preserve the ADX dashboards' UIDs and query
-contracts. Verify real SDK traffic reaches the backends after collection changes.
+Collector configs live in `deploy/akernel/charts/core/files/otel-collector/`;
+standalone adds scrape targets through a small overlay. Preserve dashboard UIDs,
+optional native detail sampling and runtime-control events. Verify real SDK
+telemetry after collection changes. The [standalone guide](deploy/standalone/README.md)
+owns tracing and AFS options; test actual mount validation and checkpoint reload.
+
+Environment details are opt-in scrape jobs on the existing Prometheus instance,
+with the same datasource and retention policy as summary metrics. Keep default
+and detail-enabled provisioning compatible with private images and node placement.
+
+Scope ADX dashboards, logs and TraceQL by `cluster` and `adx_env`; preserve both
+labels in identity joins and per-deployment recording rules. Grafana date fields
+consume milliseconds; source `_seconds` metrics retain seconds. Keep custom-All
+values valid for TraceQL and Explore URLs, and run the browser signal contract
+when changing their interpolation. Keep `core.monitoring.clusterName`, `AKERNEL_CLUSTER_NAME` and
+the monitor cluster identity aligned across control, node and standalone
+Collectors. API metrics stay on 19093; autoscaling stays on 19092. Unknown
+outcomes, missing coverage and stale snapshots must remain visible.
+
+Initialization rollback must use the server's `newlyCreated` ownership bit.
+Failed reuse closes local clients and preserves the original workload; missing
+ownership is conservative. Use `BackendSession.rollback_creation()` at every
+initialization stage, including public facades and Dockerfile application.
+Keep explicit delete/terminate semantics unchanged.
+Tracing/PVM/checkpoint configuration must support explicit services and each
+ADX profile, applying patches only to present roles. Resolve profile/role
+selectors with ADX's single-pass environment/default/escape rules while
+preserving source expressions for the authoritative loader. Severity queries consume
+Collector-normalized log metadata and plain bodies.

@@ -324,3 +324,113 @@ By default, direct startup stores data in `deploy/standalone/data`. Override it 
 ```bash
 export AKERNEL_STANDALONE_DATA_DIR="/path/to/your/data"
 ```
+
+### AFS shared checkpoints
+
+Use a separately managed AFS **DFS** mount for shared checkpoint artifacts.
+The default standalone profile keeps checkpoints and runtime files on local
+storage. To select AFS, mount DFS on the Linux Docker host first, then launch:
+
+```bash
+AKERNEL_AFS_MOUNT=/srv/afs-dfs \
+AKERNEL_AFS_CHECKPOINT_PREFIX=akernel/checkpoints \
+make standalone
+```
+
+The launcher requires a writable, existing FUSE mount with source `afs-dfs`;
+an ordinary directory, OwnerFs mount, or read-only mount is rejected before
+startup. Docker binds it at `/mnt/akernel-shared`. The ADX service checks the
+mount again and configures the same `distributed_fs` alias and prefix for the
+Adxlet checkpoint writer and Coordinator artifact reclaimer. Runtime rootfs,
+writable layers, journals and local caches remain under the node's local state.
+Keep the mount available throughout the node lifecycle. Bring up AFS Meta and
+Node services independently; stopping AKernel does not stop those services.
+Use durable local-file Meta storage and current AFS mTLS configuration. Existing
+legacy AFS metadata formats require the upstream documented migration policy.
+
+The ADX Sandbox Lifecycle dashboard (`adx-sandbox-lifecycle`) adds creation-call
+success ratios, successful actual-new-create P95 latency, unknown outcomes,
+queued/starting counts and wait ages, interruption/recovery results, worker
+incidents, and statistics coverage/freshness. Its data source is the summary
+Prometheus datasource; optional Environment detail collection uses the same
+store. P95 excludes replay and unknown outcomes. Missing data, zero denominators and stale
+snapshots are not evidence of health. The current-impact panel documents the
+private Coordinator query boundary; it does not expose that administrative API
+through the public SDK or Grafana.
+
+All ADX dashboards scope queries by `cluster` and `adx_env`. Environment and
+node identity joins, node table keys, and creation QPS recording rules retain
+both labels. Loki indexes `cluster`; log and TraceQL queries and dashboard
+navigation carry the same scope. TraceQL and Explore Requests match the selected cluster literally, including
+cluster names containing dots, and retain an explicit All option. The Statistics Started At panel converts the Unix seconds metric to
+milliseconds for Grafana date formatting. For Helm, set
+`core.monitoring.clusterName` and `monitor.prometheusServer.config.clusterName`
+to the same stable cluster identity (default `akernel`); Terraform supplies its
+`cluster_name` to both. For standalone, set `AKERNEL_CLUSTER_NAME` and
+`AKERNEL_ENV` before startup (defaults `standalone` and `default`). Use distinct
+cluster identities when multiple clusters send to the same Prometheus.
+
+The other ADX dashboards provide creation request/completion QPS and peak QPS,
+matching Running/Paused counts, aggregated node/runtime resources, and separate
+Environment detail and log pages. Helm monitoring can enable
+`environmentDetails.enabled=true` to add native inventory and resource scrape
+jobs to the existing Prometheus instance. Detail collection defaults to off,
+uses a 30-second interval and caps each target at 200,000 samples per scrape.
+Collected detail and summary series share `prometheusServer.config.retentionTime`
+(default 30 days); allow for Environment churn when sizing its storage. Summary
+scrapes retain their 15-second interval. Match `environmentDetails.namespaces` and
+`environmentDetails.environment` to the deployment's namespace and
+`core.monitoring.akernelEnv`. The log detail page defaults to a 15-minute,
+manual-refresh query with bounded results. Per-instance OTLP samples from sandboxd
+are excluded from the summary store; native ADX detail endpoints supply instance
+CPU and memory. The existing `sandbox-metrics` dashboard URL now uses those
+Environment detail panels on the same `prometheus` datasource. With detail
+collection disabled, the pages remain available. A fresh deployment has no
+detail samples; disabling collection later stops sampling while retained history
+follows the shared retention policy.
+
+Validate colliding Environment/node IDs across clusters and the coverage
+clock using the provisioned dashboard queries and recording rules:
+
+```bash
+python deploy/akernel/charts/core/tests/test_adx_multicluster.py -v
+python deploy/tests/observability/dashboard_query_contract.py --docker --output /tmp/adx-dashboard-queries
+python deploy/tests/observability/dashboard_signal_contract.py --browser --output /tmp/adx-dashboard-signals
+```
+
+The signal contract requires Docker, Helm, headless Chrome, PyYAML and websockets. It opens the
+provisioned dashboard in Grafana 11.5.2 and records the actual interpolated Tempo
+queries for default All and a dotted cluster name.
+
+For a standalone Collector, set `PROMETHEUS_ENDPOINT`, `LOKI_ENDPOINT`, and
+`TEMPO_ENDPOINT` to reachable `host:port` addresses before startup; the launcher
+passes supplied endpoint variables, `AKERNEL_ENV` and `AKERNEL_CLUSTER_NAME`
+into the node container. Endpoints use `host:port` without a URL scheme; Tempo
+uses its OTLP gRPC listener (4317).
+Standalone collection includes Coordinator, API Server, Adxlet and relay summary
+metrics on private listeners. API creation metrics use port 19093; Coordinator
+autoscaling keeps port 19092. Collector self-metrics use port 18889.
+
+Set `ENABLE_TRACE=true` to trace standalone control processes and Execd at a
+10% sampling ratio through the local Collector. The default keeps tracing off.
+Custom `AKERNEL_ADX_CONFIG` inputs may use explicit services or any supported
+ADX profile, including node-only profiles. Configuration options apply only to
+roles present in that deployment. Profile and service-role selectors support
+ADX's `${NAME}` and `${NAME:-default}` syntax using the ADX service process
+environment. Empty values use the default, and `$$` escapes a dollar sign.
+Variable values are inserted once. The generated file retains source
+expressions, including unrelated environment values, for the ADX loader.
+
+The signal regression feeds ordinary Rust JSON logs through the shipped
+Collector file receiver and normalization processors into Loki, then checks
+WARN/ERROR counts for both clusters and All. Diagnostic counter regressions
+include startup zeros, the first event and an initial burst through Prometheus.
+
+The AMD64 default pins the AFS-enabled ADX release and Execd artifacts from
+[Build 197](https://buildkite.com/agent-dx/agent-dx/builds/197), revision
+`6b342cda054602dae315da8ff7a14c9e83f0a90b` from
+[ADX #132](https://github.com/openJiuwen-ai/agent-dx/pull/132), based on master
+`2ec519fea1b0cce22f3eefd3b207f84f2076e833`. Both archives
+are SHA256-pinned in the builder Dockerfiles. ARM builds require their own
+architecture-matched artifact overrides; this AMD64 candidate does not establish
+ARM compatibility.

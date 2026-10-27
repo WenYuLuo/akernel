@@ -16,6 +16,12 @@ receivers:
           - ${env:ADX_METRICS_TARGET}
           labels:
             component_name: ${env:ADX_METRICS_COMPONENT}
+      - job_name: otel-collector
+        scrape_interval: 15s
+        static_configs:
+        - targets: [127.0.0.1:18889]
+          labels:
+            component_name: otel-collector
   filelog/adx:
     include:
     - /logs/*.log
@@ -51,6 +57,15 @@ extensions:
     directory: /collector-state
     create_directory: true
 processors:
+  # Native Environment details use the optional Prometheus scrape jobs.
+  filter/summary_metrics:
+    error_mode: ignore
+    metrics:
+      datapoint:
+      - 'attributes["environment_id"] != nil'
+      - 'attributes["sandbox_id"] != nil'
+      - 'resource.attributes["environment_id"] != nil'
+      - 'resource.attributes["sandbox_id"] != nil'
   transform/adx_log_body:
     error_mode: ignore
     log_statements:
@@ -101,6 +116,9 @@ processors:
         attributes["process.executable.name"] != nil
   resource:
     attributes:
+    - key: cluster
+      value: ${env:AKERNEL_CLUSTER_NAME:-standalone}
+      action: upsert
     - key: akernel_env
       value: ${env:AKERNEL_ENV:-default}
       action: upsert
@@ -175,6 +193,7 @@ service:
       - memory_limiter
       - resource
       - transform/adx
+      - filter/summary_metrics
       - batch
       exporters:
       - prometheusremotewrite

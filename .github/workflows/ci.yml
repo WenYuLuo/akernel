@@ -127,6 +127,9 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Initialize pinned ADX configuration fixtures
+        run: git submodule update --init --depth 1 src/agent-dx
+
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
@@ -136,12 +139,15 @@ jobs:
 
       - name: Install contract-test dependencies
         run: |
-          python -m pip install PyYAML
+          python -m pip install PyYAML "websockets>=13"
           helm version --short
 
       - name: Verify ADX package, standalone, Helm, and Terraform contracts
         run: |
           python builder/scripts/test_adx_service.py -v
+          python builder/scripts/test_afs_config.py -v
+          python deploy/akernel/charts/core/tests/test_adx_observability.py -v
+          python deploy/akernel/charts/core/tests/test_adx_multicluster.py -v
           python builder/scripts/test_runtime_contract.py -v
           python deploy/standalone/test_start.py -v
           python deploy/scripts/test_ensure_adx_secret.py -v
@@ -151,6 +157,12 @@ jobs:
           python deploy/akernel/charts/core/tests/test_shared_checkpoint_storage.py -v
           python deploy/akernel/charts/core/tests/test_prepare_checkpoint_storage.py -v
           python deploy/terraform/test_adx_contract.py -v
+
+      - name: Evaluate ADX multi-cluster dashboard queries
+        run: |
+          python deploy/tests/observability/dashboard_presentation_contract.py --output "$RUNNER_TEMP/adx-dashboard-presentation"
+          python deploy/tests/observability/dashboard_query_contract.py --docker --output "$RUNNER_TEMP/adx-dashboard-queries"
+          python deploy/tests/observability/dashboard_signal_contract.py --browser --output "$RUNNER_TEMP/adx-dashboard-signals"
 
       - name: Verify node-directory ownership with restricted Linux capabilities
         run: |
@@ -178,7 +190,7 @@ jobs:
 
       - name: Initialize build submodules
         run: |
-          git submodule update --init src/sandboxd
+          git submodule update --init src/sandboxd src/agent-dx
 
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
@@ -209,6 +221,14 @@ jobs:
           make build \
             IMAGE_REPOSITORY=akernel-ci/all-in-one \
             IMAGE_TAG="${GITHUB_SHA}"
+
+      - name: Validate prepared configurations with packaged ADX
+        run: |
+          docker run --rm --entrypoint /usr/bin/python3 \
+            -e AKERNEL_TEST_ADXCTL=/opt/adx/current/bin/adxctl \
+            -v "${GITHUB_WORKSPACE}:/repo:ro" -w /repo \
+            "akernel-ci/all-in-one:${GITHUB_SHA}" \
+            builder/scripts/test_afs_config.py -v
 
       - name: Verify systemd container identity in the image
         run: |

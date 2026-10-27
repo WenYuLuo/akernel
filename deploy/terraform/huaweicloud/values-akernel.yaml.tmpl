@@ -2,11 +2,12 @@ kruise:
   enabled: ${enable_kruise}
 
 monitoring:
+  clusterName: "${cluster_name}"
   akernelEnv: "${akernel_env}"
 %{ if install_monitor ~}
-  prometheusEndpoint: "http://prometheus.${monitor_namespace}.svc:9090"
-  lokiEndpoint: "http://loki.${monitor_namespace}.svc:3100"
-  tempoEndpoint: "http://tempo.${monitor_namespace}.svc:3200"
+  prometheusEndpoint: "prometheus.${monitor_namespace}.svc:9090"
+  lokiEndpoint: "loki.${monitor_namespace}.svc:3100"
+  tempoEndpoint: "tempo.${monitor_namespace}.svc:4317"
 %{ endif ~}
 
 adx:
