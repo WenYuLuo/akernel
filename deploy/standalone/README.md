@@ -415,7 +415,11 @@ Set `ENABLE_TRACE=true` to trace standalone control processes and Execd at a
 10% sampling ratio through the local Collector. The default keeps tracing off.
 Custom `AKERNEL_ADX_CONFIG` inputs may use explicit services or any supported
 ADX profile, including node-only profiles. Configuration options apply only to
-roles present in that deployment.
+roles present in that deployment. Profile and service-role selectors support
+ADX's `${NAME}` and `${NAME:-default}` syntax using the ADX service process
+environment. Empty values use the default, and `$$` escapes a dollar sign.
+Variable values are inserted once. The generated file retains source
+expressions, including unrelated environment values, for the ADX loader.
 
 The signal regression feeds ordinary Rust JSON logs through the shipped
 Collector file receiver and normalization processors into Loki, then checks

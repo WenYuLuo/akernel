@@ -96,6 +96,89 @@ class AfsConfigTest(unittest.TestCase):
                 self.assertEqual(service["config"]["execd_env"]["ADX_TRACE_ENABLED"], "true")
             self.assertEqual(result["services"][2], original["services"][2])
 
+    def test_profile_selectors_expand_values_and_defaults_without_rewriting(self):
+        for value, expected in ((None, "node"), ("", "node"), ("coordinator", "coordinator"),
+                                ("ingress-api", "ingress-api")):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as directory:
+                source = Path(directory) / "source.yaml"
+                target = Path(directory) / "result.yaml"
+                cfg = {"schema_version": 1, "profile": "${REVIEW_PROFILE:-node}"}
+                if expected == "node":
+                    cfg["service_overrides"] = {"adxlet": {"config": {"node_id": "worker"}}}
+                source.write_text(yaml.safe_dump(cfg))
+                env = {"ENABLE_TRACE": "true"}
+                if value is not None:
+                    env["REVIEW_PROFILE"] = value
+                with patch.dict(os.environ, env):
+                    if value is None:
+                        os.environ.pop("REVIEW_PROFILE", None)
+                    CONFIG.configure(source, target, None, "unused", pvm=True)
+                    self.assert_adx_valid(target)
+                result = yaml.safe_load(target.read_text())
+                self.assertEqual(result["profile"], cfg["profile"])
+                expected_roles = {"node": {"adxlet"}, "coordinator": {"coordinator"},
+                                  "ingress-api": {"apiserver", "ingress"}}[expected]
+                self.assertEqual(set(result["service_overrides"]), expected_roles)
+
+    def test_explicit_role_selectors_expand_once_and_preserve_other_templates(self):
+        for value in (None, "", "adxlet"):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as directory:
+                cfg = yaml.safe_load((ROOT / "src/agent-dx/build/config/examples/deployment-node.yaml").read_text())
+                service = cfg["services"][0]
+                service["role"] = "${REVIEW_ROLE:-adxlet}"
+                service["config"]["node_id"] = "${REVIEW_NODE_ID:-worker}"
+                service["env"]["KEEP_LITERAL"] = "$${REVIEW_LITERAL}"
+                source = Path(directory) / "source.yaml"
+                target = Path(directory) / "result.yaml"
+                source.write_text(yaml.safe_dump(cfg))
+                env = {"ENABLE_TRACE": "true", "REVIEW_LITERAL": "not-expanded"}
+                if value is not None:
+                    env["REVIEW_ROLE"] = value
+                with patch.dict(os.environ, env):
+                    if value is None:
+                        os.environ.pop("REVIEW_ROLE", None)
+                    CONFIG.configure(source, target, None, "unused", pvm=True)
+                    self.assert_adx_valid(target)
+                result = yaml.safe_load(target.read_text())["services"][0]
+                self.assertEqual(result["role"], service["role"])
+                self.assertEqual(result["config"]["node_id"], service["config"]["node_id"])
+                self.assertEqual(result["env"]["KEEP_LITERAL"], "$${REVIEW_LITERAL}")
+                self.assertEqual(result["env"]["ADX_TRACE_ENABLED"], "true")
+                self.assertEqual(result["config"]["rpc_timeout_seconds"], 90)
+                self.assertEqual(result["config"]["execd_env"]["ADX_TRACE_ENABLED"], "true")
+
+    def test_bound_and_concatenated_profile_selectors_match_adx(self):
+        for selector in ("${REVIEW_PROFILE}", "${REVIEW_PREFIX:-n}${REVIEW_SUFFIX:-ode}"):
+            with self.subTest(selector=selector), tempfile.TemporaryDirectory() as directory:
+                source = Path(directory) / "source.yaml"
+                target = Path(directory) / "result.yaml"
+                cfg = {"schema_version": 1, "profile": selector,
+                       "service_overrides": {"adxlet": {"config": {"node_id": "worker"}}}}
+                source.write_text(yaml.safe_dump(cfg))
+                with patch.dict(os.environ, {"ENABLE_TRACE": "true", "REVIEW_PROFILE": "node",
+                                              "REVIEW_PREFIX": "n", "REVIEW_SUFFIX": "ode"}):
+                    CONFIG.configure(source, target, None, "unused")
+                    self.assert_adx_valid(target)
+                result = yaml.safe_load(target.read_text())
+                self.assertEqual(result["profile"], selector)
+                self.assertEqual(result["service_overrides"]["adxlet"]["env"]["ADX_TRACE_ENABLED"], "true")
+
+    def test_unbound_invalid_and_nonrecursive_selectors_fail_before_writing(self):
+        for selector in ("${REVIEW_UNBOUND}", "${9_INVALID:-node}", "${REVIEW_UNBOUND",
+                         "${REVIEW_NESTED}", "$${REVIEW_OTHER}", "$REVIEW_OTHER"):
+            with self.subTest(selector=selector), tempfile.TemporaryDirectory() as directory:
+                source = Path(directory) / "source.yaml"
+                target = Path(directory) / "result.yaml"
+                source.write_text(yaml.safe_dump({"schema_version": 1, "profile": selector}))
+                original = source.read_text()
+                with patch.dict(os.environ, {"ENABLE_TRACE": "true", "REVIEW_NESTED": "${REVIEW_OTHER}",
+                                              "REVIEW_OTHER": "node"}):
+                    os.environ.pop("REVIEW_UNBOUND", None)
+                    with self.assertRaises(ValueError):
+                        CONFIG.configure(source, target, None, "unused")
+                self.assertFalse(target.exists())
+                self.assertEqual(source.read_text(), original)
+
     def test_host_requires_an_actual_writable_dfs_mount(self):
         with tempfile.TemporaryDirectory() as directory:
             for output, valid in (("afs-dfs fuse rw,nosuid\n", True),

@@ -15,12 +15,19 @@
 """Named ownership, retry convergence, and idle lifecycle contracts."""
 
 import os
+import tempfile
 import unittest
 import uuid
 from unittest.mock import patch
 
-from akernel_sdk import BackendOperationError, Sandbox
+from akernel_sdk import (
+    BackendOperationError,
+    DockerfileLaunch,
+    LocalDockerContext,
+    Sandbox,
+)
 from akernel_sdk._backends import adx
+from akernel_sdk._dockerfile import DockerfileBuildError
 
 _ENABLED = (
     os.environ.get("AKERNEL_RUN_INTEGRATION") == "1"
@@ -137,6 +144,63 @@ class LifecycleFeaturesIntegrationTest(unittest.TestCase):
             self.assertEqual(replacement.get_info().cpu, 2000)
             self.assertEqual(replacement.get_info().memory, 4096)
             self.assertEqual(replacement.commands.run("printf new").stdout, "new")
+        finally:
+            if replacement is not None:
+                replacement.kill()
+            Sandbox.delete(name)
+
+    def test_failed_dockerfile_reuse_preserves_the_original_workload(self):
+        name = f"e2e-dockerfile-rollback-{uuid.uuid4().hex[:12]}"
+        first = None
+        try:
+            first = Sandbox(
+                name=name, detached=True, runtime=_RUNTIME, cpu=1000, memory=2048
+            )
+            canary = "/tmp/public-rollback-canary"
+            first.files.write(canary, "original workload")
+            with tempfile.TemporaryDirectory() as directory:
+                for instruction in (
+                    "COPY missing-input /tmp/missing-input", "RUN false",
+                ):
+                    with self.subTest(instruction=instruction):
+                        with self.assertRaises(DockerfileBuildError):
+                            Sandbox(
+                                name=name, detached=True, runtime=_RUNTIME,
+                                cpu=2000, memory=4096,
+                                dockerfile=DockerfileLaunch(LocalDockerContext(
+                                    "FROM ubuntu:24.04\n" + instruction + "\n",
+                                    context_dir=directory,
+                                ), auto_start_cmd=False, run_timeout=5),
+                            )
+                        self.assertEqual(
+                            first.files.read(canary), "original workload"
+                        )
+                        self.assertEqual(first.get_info().cpu, 1000)
+                        self.assertEqual(
+                            first.commands.run("printf survived").stdout, "survived"
+                        )
+        finally:
+            if first is not None:
+                first.kill()
+                Sandbox.delete(name)
+
+    def test_failed_public_facade_new_create_releases_the_name(self):
+        name = f"e2e-facade-rollback-{uuid.uuid4().hex[:12]}"
+        replacement = None
+        try:
+            with patch(
+                "akernel_sdk.sandbox.Pty", side_effect=RuntimeError("facade fault"),
+            ), self.assertRaisesRegex(RuntimeError, "facade fault"):
+                Sandbox(
+                    name=name, detached=True, runtime=_RUNTIME,
+                    cpu=1000, memory=2048,
+                )
+            replacement = Sandbox(
+                name=name, detached=True, runtime=_RUNTIME, cpu=2000, memory=4096,
+            )
+            self.assertEqual(replacement.get_info().cpu, 2000)
+            self.assertEqual(replacement.get_info().memory, 4096)
+            self.assertEqual(replacement.commands.run("printf ready").stdout, "ready")
         finally:
             if replacement is not None:
                 replacement.kill()

@@ -518,6 +518,13 @@ class _Session:
         except Exception as error:
             raise _convert_error("update network policy", error) from error
 
+    def rollback_creation(self) -> None:
+        """Delete only a confirmed new instance after initialization fails."""
+        if self._sandbox.newly_created is True:
+            self.terminate()
+        else:
+            self.close()
+
     def terminate(self) -> None:
         if self._terminated:
             return
@@ -720,10 +727,7 @@ class AdxBackend:
                     retry_delay = min(retry_delay * 2, 1.0)
         except Exception:
             try:
-                if sandbox.newly_created is True:
-                    session.terminate()
-                else:
-                    session.close()
+                session.rollback_creation()
             except Exception:
                 logger.warning(
                     "failed to clean up sandbox after direct route readiness failure",
@@ -737,10 +741,7 @@ class AdxBackend:
                 sandbox.files.make_dir(spec.command_cwd)
             except Exception as error:
                 try:
-                    if sandbox.newly_created is True:
-                        session.terminate()
-                    else:
-                        session.close()
+                    session.rollback_creation()
                 except Exception:
                     logger.warning(
                         "Failed to roll back sandbox %s after cwd initialization",

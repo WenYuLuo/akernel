@@ -189,7 +189,7 @@ jobs:
 
       - name: Initialize build submodules
         run: |
-          git submodule update --init src/sandboxd
+          git submodule update --init src/sandboxd src/agent-dx
 
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
@@ -220,6 +220,14 @@ jobs:
           make build \
             IMAGE_REPOSITORY=akernel-ci/all-in-one \
             IMAGE_TAG="${GITHUB_SHA}"
+
+      - name: Validate prepared configurations with packaged ADX
+        run: |
+          docker run --rm --entrypoint /usr/bin/python3 \
+            -e AKERNEL_TEST_ADXCTL=/opt/adx/current/bin/adxctl \
+            -v "${GITHUB_WORKSPACE}:/repo:ro" -w /repo \
+            "akernel-ci/all-in-one:${GITHUB_SHA}" \
+            builder/scripts/test_afs_config.py -v
 
       - name: Verify systemd container identity in the image
         run: |

@@ -857,6 +857,8 @@ its original resource allocation. Different creation arguments do not resize
 it. If local initialization fails while reusing that result, the SDK closes
 its local handle and preserves the original workload. Automatic rollback
 removes a remote instance only when the server confirms this create owns it.
+This applies to backend readiness and cwd setup, public facade construction,
+and Dockerfile COPY, RUN or startup-dispatch failures.
 Use `get_info()` to inspect the retained allocation, or delete the named
 sandbox before creating a replacement with a different specification.
 

@@ -804,7 +804,11 @@ outcomes, missing coverage and stale snapshots must remain visible.
 
 Initialization rollback must use the server's `newlyCreated` ownership bit.
 Failed reuse closes local clients and preserves the original workload; missing
-ownership is conservative. Keep explicit delete/terminate semantics unchanged.
+ownership is conservative. Use `BackendSession.rollback_creation()` at every
+initialization stage, including public facades and Dockerfile application.
+Keep explicit delete/terminate semantics unchanged.
 Tracing/PVM/checkpoint configuration must support explicit services and each
-ADX profile, applying patches only to present roles. Severity queries consume
+ADX profile, applying patches only to present roles. Resolve profile/role
+selectors with ADX's single-pass environment/default/escape rules while
+preserving source expressions for the authoritative loader. Severity queries consume
 Collector-normalized log metadata and plain bodies.

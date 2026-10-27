@@ -10,6 +10,46 @@ import subprocess
 import yaml
 
 
+def expand_selector(value: str) -> str:
+    """Match ADX's single-pass ${NAME:-default}/$$ discriminator expansion.
+
+    Only profile and role selection use this result. Keep source expressions
+    in the generated deployment so ADX expands all configuration exactly once.
+    Environment values and defaults are inserted verbatim, never recursively.
+    """
+    if not isinstance(value, str):
+        raise ValueError("deployment selector must be a string")
+    result = []
+    cursor = 0
+    while cursor < len(value):
+        start = value.find("$", cursor)
+        if start < 0:
+            result.append(value[cursor:])
+            break
+        result.append(value[cursor:start])
+        if value.startswith("$$", start):
+            result.append("$")
+            cursor = start + 2
+        elif value.startswith("${", start):
+            end = value.find("}", start + 2)
+            if end < 0:
+                raise ValueError("unterminated environment variable reference")
+            name, has_default, default = value[start + 2:end].partition(":-")
+            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+                raise ValueError(f"invalid environment variable reference: {name}")
+            replacement = os.environ.get(name)
+            if not replacement:
+                if not has_default:
+                    raise ValueError(f"environment variable is not set: {name}")
+                replacement = default
+            result.append(replacement)
+            cursor = end + 1
+        else:
+            result.append("$")
+            cursor = start + 1
+    return "".join(result)
+
+
 def configure(
     source: Path, destination: Path, mount: Path | None, prefix: str, *, pvm: bool = False,
 ) -> None:
@@ -24,9 +64,9 @@ def configure(
         "ingress-api": ("apiserver", "ingress"),
     }
     if "profile" in cfg:
-        profile = cfg["profile"]
+        profile = expand_selector(cfg["profile"])
         if profile not in profile_roles:
-            raise ValueError(f"unsupported deployment profile: {profile}")
+            raise ValueError(f"unsupported deployment profile: {cfg['profile']}")
         roles = profile_roles[profile]
 
         def services(role):
@@ -37,7 +77,8 @@ def configure(
         # Explicit deployments use their actual Service objects. Profile-only
         # keys and absent roles would be rejected by ADX's strict loader.
         def services(role):
-            return [service for service in cfg["services"] if service["role"] == role]
+            return [service for service in cfg["services"]
+                    if expand_selector(service["role"]) == role]
 
     def config(service):
         if service.get("config") is None:
