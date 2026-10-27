@@ -415,8 +415,8 @@ Set `ENABLE_TRACE=true` to trace standalone control processes and Execd at a
 10% sampling ratio through the local Collector. The default keeps tracing off.
 
 The AMD64 default pins the AFS-enabled ADX release and Execd artifacts from
-[Build 195](https://buildkite.com/agent-dx/agent-dx/builds/195), revision
-`0830ecb165c7700f9170467773922d6069dfadae` from
+[Build 196](https://buildkite.com/agent-dx/agent-dx/builds/196), revision
+`ff247d83edb6959752a11344082c79a84cccedee` from
 [ADX #132](https://github.com/openJiuwen-ai/agent-dx/pull/132), based on master
 `2ec519fea1b0cce22f3eefd3b207f84f2076e833`. Both archives
 are SHA256-pinned in the builder Dockerfiles. ARM builds require their own
