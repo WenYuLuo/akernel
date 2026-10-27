@@ -45,7 +45,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(data_plane_ingress_http_requests_total{adx_env=~\"$adx_env\"}[5m]))",
+          "expr": "sum(rate(data_plane_ingress_http_requests_total{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}[5m]))",
           "legendFormat": "requests",
           "refId": "A"
         }
@@ -89,7 +89,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (class) (rate(data_plane_ingress_http_responses_total{adx_env=~\"$adx_env\"}[5m]))",
+          "expr": "sum by (class) (rate(data_plane_ingress_http_responses_total{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}[5m]))",
           "legendFormat": "{{class}}",
           "refId": "A"
         }
@@ -133,7 +133,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(data_plane_ingress_http_responses_total{adx_env=~\"$adx_env\",class=\"4xx\"}[5m])) / clamp_min(sum(rate(data_plane_ingress_http_requests_total{adx_env=~\"$adx_env\"}[5m])), 0.000001)",
+          "expr": "sum(rate(data_plane_ingress_http_responses_total{cluster=~\"$cluster\",adx_env=~\"$adx_env\",class=\"4xx\"}[5m])) / clamp_min(sum(rate(data_plane_ingress_http_requests_total{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}[5m])), 0.000001)",
           "legendFormat": "4xx",
           "refId": "A"
         },
@@ -142,7 +142,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(data_plane_ingress_http_responses_total{adx_env=~\"$adx_env\",class=\"5xx\"}[5m])) / clamp_min(sum(rate(data_plane_ingress_http_requests_total{adx_env=~\"$adx_env\"}[5m])), 0.000001)",
+          "expr": "sum(rate(data_plane_ingress_http_responses_total{cluster=~\"$cluster\",adx_env=~\"$adx_env\",class=\"5xx\"}[5m])) / clamp_min(sum(rate(data_plane_ingress_http_requests_total{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}[5m])), 0.000001)",
           "legendFormat": "5xx",
           "refId": "B"
         }
@@ -186,7 +186,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(data_plane_ingress_http_request_duration_seconds_bucket{adx_env=~\"$adx_env\"}[5m])))",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(data_plane_ingress_http_request_duration_seconds_bucket{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}[5m])))",
           "legendFormat": "P50",
           "refId": "A"
         },
@@ -195,7 +195,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(data_plane_ingress_http_request_duration_seconds_bucket{adx_env=~\"$adx_env\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(data_plane_ingress_http_request_duration_seconds_bucket{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}[5m])))",
           "legendFormat": "P95",
           "refId": "B"
         },
@@ -204,7 +204,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(data_plane_ingress_http_request_duration_seconds_bucket{adx_env=~\"$adx_env\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(data_plane_ingress_http_request_duration_seconds_bucket{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}[5m])))",
           "legendFormat": "P99",
           "refId": "C"
         }
@@ -248,7 +248,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(data_plane_ingress_http_requests_in_flight{adx_env=~\"$adx_env\"})",
+          "expr": "sum(data_plane_ingress_http_requests_in_flight{cluster=~\"$cluster\",adx_env=~\"$adx_env\"})",
           "legendFormat": "requests",
           "refId": "A"
         }
@@ -292,7 +292,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(data_plane_ingress_backend_http_idle_connections{adx_env=~\"$adx_env\"})",
+          "expr": "sum(data_plane_ingress_backend_http_idle_connections{cluster=~\"$cluster\",adx_env=~\"$adx_env\"})",
           "legendFormat": "idle",
           "refId": "A"
         }
@@ -336,7 +336,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(data_plane_ingress_backend_http_opened_total{adx_env=~\"$adx_env\"}[5m]))",
+          "expr": "sum(rate(data_plane_ingress_backend_http_opened_total{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}[5m]))",
           "legendFormat": "opened",
           "refId": "A"
         },
@@ -345,7 +345,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(data_plane_ingress_backend_http_reused_total{adx_env=~\"$adx_env\"}[5m]))",
+          "expr": "sum(rate(data_plane_ingress_backend_http_reused_total{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}[5m]))",
           "legendFormat": "reused",
           "refId": "B"
         },
@@ -354,7 +354,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(data_plane_ingress_backend_http_discarded_total{adx_env=~\"$adx_env\"}[5m]))",
+          "expr": "sum(rate(data_plane_ingress_backend_http_discarded_total{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}[5m]))",
           "legendFormat": "discarded",
           "refId": "C"
         },
@@ -363,7 +363,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(data_plane_ingress_backend_http_acquire_timeouts_total{adx_env=~\"$adx_env\"}[5m]))",
+          "expr": "sum(rate(data_plane_ingress_backend_http_acquire_timeouts_total{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}[5m]))",
           "legendFormat": "acquire_timeouts",
           "refId": "D"
         }
@@ -407,8 +407,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (k8s_node_name) (data_plane_relay_active_streams{adx_env=~\"$adx_env\"})",
-          "legendFormat": "{{k8s_node_name}}",
+          "expr": "sum by (cluster, adx_env, k8s_node_name) (data_plane_relay_active_streams{cluster=~\"$cluster\",adx_env=~\"$adx_env\"})",
+          "legendFormat": "{{cluster}} / {{adx_env}} / {{k8s_node_name}}",
           "refId": "A"
         }
       ]
@@ -451,7 +451,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(data_plane_relay_connect_total{adx_env=~\"$adx_env\"}[5m]))",
+          "expr": "sum(rate(data_plane_relay_connect_total{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}[5m]))",
           "legendFormat": "connections",
           "refId": "A"
         },
@@ -460,7 +460,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(data_plane_relay_connect_errors{adx_env=~\"$adx_env\"}[5m]))",
+          "expr": "sum(rate(data_plane_relay_connect_errors{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}[5m]))",
           "legendFormat": "errors",
           "refId": "B"
         }
@@ -504,7 +504,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(data_plane_relay_overload_rejections_total{adx_env=~\"$adx_env\"}[5m]))",
+          "expr": "sum(rate(data_plane_relay_overload_rejections_total{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}[5m]))",
           "legendFormat": "overload_rejections_total",
           "refId": "A"
         },
@@ -513,7 +513,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(data_plane_relay_forbidden_target_total{adx_env=~\"$adx_env\"}[5m]))",
+          "expr": "sum(rate(data_plane_relay_forbidden_target_total{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}[5m]))",
           "legendFormat": "forbidden_target_total",
           "refId": "B"
         },
@@ -522,7 +522,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(data_plane_relay_route_mismatch_total{adx_env=~\"$adx_env\"}[5m]))",
+          "expr": "sum(rate(data_plane_relay_route_mismatch_total{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}[5m]))",
           "legendFormat": "route_mismatch_total",
           "refId": "C"
         }
@@ -566,7 +566,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(data_plane_ingress_active_sessions{adx_env=~\"$adx_env\"})",
+          "expr": "sum(data_plane_ingress_active_sessions{cluster=~\"$cluster\",adx_env=~\"$adx_env\"})",
           "legendFormat": "sessions",
           "refId": "A"
         },
@@ -575,7 +575,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(data_plane_ingress_h2_physical_connections{adx_env=~\"$adx_env\"})",
+          "expr": "sum(data_plane_ingress_h2_physical_connections{cluster=~\"$cluster\",adx_env=~\"$adx_env\"})",
           "legendFormat": "physical connections",
           "refId": "B"
         }
@@ -619,7 +619,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(sum(rate(data_plane_ingress_http_request_duration_seconds_bucket{adx_env=~\"$adx_env\",le=\"+Inf\"}[5m])) - sum(rate(data_plane_ingress_http_request_duration_seconds_bucket{adx_env=~\"$adx_env\",le=\"0.100\"}[5m]))) / clamp_min(sum(rate(data_plane_ingress_http_request_duration_seconds_count{adx_env=~\"$adx_env\"}[5m])), 0.000001)",
+          "expr": "(sum(rate(data_plane_ingress_http_request_duration_seconds_bucket{cluster=~\"$cluster\",adx_env=~\"$adx_env\",le=\"+Inf\"}[5m])) - sum(rate(data_plane_ingress_http_request_duration_seconds_bucket{cluster=~\"$cluster\",adx_env=~\"$adx_env\",le=\"0.100\"}[5m]))) / clamp_min(sum(rate(data_plane_ingress_http_request_duration_seconds_count{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}[5m])), 0.000001)",
           "legendFormat": "over 100 ms",
           "refId": "A"
         }
@@ -636,6 +636,24 @@
   "templating": {
     "list": [
       {
+        "name": "cluster",
+        "label": "Cluster",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": "label_values(adx_coordinator_node_capacity_cpu_millis, cluster)",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".+",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
         "allValue": ".*",
         "current": {
           "text": "All",
@@ -645,13 +663,13 @@
           "type": "prometheus",
           "uid": "prometheus"
         },
-        "definition": "label_values(data_plane_ingress_http_requests_total, adx_env)",
+        "definition": "label_values(data_plane_ingress_http_requests_total{cluster=~\"$cluster\"}, adx_env)",
         "includeAll": true,
         "label": "adx_env",
         "name": "adx_env",
         "options": [],
         "query": {
-          "query": "label_values(data_plane_ingress_http_requests_total, adx_env)",
+          "query": "label_values(data_plane_ingress_http_requests_total{cluster=~\"$cluster\"}, adx_env)",
           "refId": "Prometheus-adx-env-Variable"
         },
         "refresh": 2,

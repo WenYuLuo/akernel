@@ -144,6 +144,7 @@ jobs:
           python builder/scripts/test_adx_service.py -v
           python builder/scripts/test_afs_config.py -v
           python deploy/akernel/charts/core/tests/test_adx_observability.py -v
+          python deploy/akernel/charts/core/tests/test_adx_multicluster.py -v
           python builder/scripts/test_runtime_contract.py -v
           python deploy/standalone/test_start.py -v
           python deploy/scripts/test_ensure_adx_secret.py -v
@@ -153,6 +154,10 @@ jobs:
           python deploy/akernel/charts/core/tests/test_shared_checkpoint_storage.py -v
           python deploy/akernel/charts/core/tests/test_prepare_checkpoint_storage.py -v
           python deploy/terraform/test_adx_contract.py -v
+
+      - name: Evaluate ADX multi-cluster dashboard queries
+        run: |
+          python deploy/tests/observability/dashboard_query_contract.py --docker --output "$RUNNER_TEMP/adx-dashboard-queries"
 
       - name: Verify node-directory ownership with restricted Linux capabilities
         run: |

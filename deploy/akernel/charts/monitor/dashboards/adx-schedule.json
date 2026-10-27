@@ -47,7 +47,7 @@
     {
       "title": "Explore Requests",
       "type": "link",
-      "url": "/explore?schemaVersion=1&panes=%7B%22a%22%3A%7B%22datasource%22%3A%22tempo%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22tempo%22%7D%2C%22queryType%22%3A%22traceql%22%2C%22query%22%3A%22%7B%20resource.adx_env%20%3D~%20%5C%22${adx_env:percentencode}%5C%22%20%26%26%20%28name%20%3D%20%5C%22environment.create%5C%22%20%7C%7C%20%28name%20%3D~%20%5C%22%5E%28GET%7CPOST%7CPUT%7CDELETE%7CPATCH%7CHEAD%7COPTIONS%7CCONNECT%7COTHER%29%20%2F.%2A%5C%22%20%26%26%20span.http.route%20%21%3D%20%5C%22%2Funmatched%5C%22%20%26%26%20%28%28name%20%21%3D%20%5C%22POST%20%2Fapi%2Fenvironment%2Fv1%2Fenvironments%5C%22%20%26%26%20name%20%21%3D%20%5C%22POST%20%2Fapi%2Fenvironment%2Fcreate%5C%22%29%20%7C%7C%20span.http.response.status_code%20%3D~%20%5C%22%5E%5B45%5D%5B0-9%5D%7B2%7D%24%5C%22%29%20%26%26%20name%20%21%3D%20%5C%22GET%20%2Fhealthz%5C%22%20%26%26%20name%20%21%3D%20%5C%22GET%20%2Fmetrics%5C%22%29%29%20%7D%20%7C%20select%28name%2C%20resource.service.name%2C%20span.http.response.status_code%2C%20span.rpc.method%2C%20span.environment.create.outcome%29%22%2C%22tableType%22%3A%22spans%22%2C%22limit%22%3A50%2C%22spss%22%3A3%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22now-6h%22%2C%22to%22%3A%22now%22%7D%7D%7D",
+      "url": "/explore?schemaVersion=1&panes=%7B%22a%22%3A%7B%22datasource%22%3A%22tempo%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22tempo%22%7D%2C%22queryType%22%3A%22traceql%22%2C%22query%22%3A%22%7B%20resource.cluster%20%3D~%20%5C%22${cluster:percentencode}%5C%22%20%26%26%20resource.adx_env%20%3D~%20%5C%22${adx_env:percentencode}%5C%22%20%26%26%20%28name%20%3D%20%5C%22environment.create%5C%22%20%7C%7C%20%28name%20%3D~%20%5C%22%5E%28GET%7CPOST%7CPUT%7CDELETE%7CPATCH%7CHEAD%7COPTIONS%7CCONNECT%7COTHER%29%20%2F.%2A%5C%22%20%26%26%20span.http.route%20%21%3D%20%5C%22%2Funmatched%5C%22%20%26%26%20%28%28name%20%21%3D%20%5C%22POST%20%2Fapi%2Fenvironment%2Fv1%2Fenvironments%5C%22%20%26%26%20name%20%21%3D%20%5C%22POST%20%2Fapi%2Fenvironment%2Fcreate%5C%22%29%20%7C%7C%20span.http.response.status_code%20%3D~%20%5C%22%5E%5B45%5D%5B0-9%5D%7B2%7D%24%5C%22%29%20%26%26%20name%20%21%3D%20%5C%22GET%20%2Fhealthz%5C%22%20%26%26%20name%20%21%3D%20%5C%22GET%20%2Fmetrics%5C%22%29%29%20%7D%20%7C%20select%28name%2C%20resource.service.name%2C%20span.http.response.status_code%2C%20span.rpc.method%2C%20span.environment.create.outcome%29%22%2C%22tableType%22%3A%22spans%22%2C%22limit%22%3A50%2C%22spss%22%3A3%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22now-6h%22%2C%22to%22%3A%22now%22%7D%7D%7D",
       "includeVars": false,
       "keepTime": false,
       "targetBlank": false,
@@ -139,7 +139,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(adx_coordinator_environments{adx_env=~\"$adx_env\",state=\"Running\"})",
+          "expr": "sum(adx_coordinator_environments{cluster=~\"$cluster\",adx_env=~\"$adx_env\",state=\"Running\"})",
           "legendFormat": "Running",
           "refId": "A",
           "instant": false
@@ -205,7 +205,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "count((adx_coordinator_node_capacity_cpu_millis{adx_env=~\"$adx_env\"} > 0) * on (adx_env, node_id) adx_coordinator_node_schedulable{adx_env=~\"$adx_env\"})",
+          "expr": "count((adx_coordinator_node_capacity_cpu_millis{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} > 0) * on (cluster, adx_env, node_id) adx_coordinator_node_schedulable{cluster=~\"$cluster\",adx_env=~\"$adx_env\"})",
           "refId": "A"
         }
       ],
@@ -237,7 +237,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(adx_coordinator_node_schedulable{adx_env=~\"$adx_env\"})",
+          "expr": "sum(adx_coordinator_node_schedulable{cluster=~\"$cluster\",adx_env=~\"$adx_env\"})",
           "legendFormat": "Nodes",
           "range": true,
           "refId": "A"
@@ -271,7 +271,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(adx_coordinator_queued_requests{adx_env=~\"$adx_env\"})",
+          "expr": "sum(adx_coordinator_queued_requests{cluster=~\"$cluster\",adx_env=~\"$adx_env\"})",
           "legendFormat": "Requests",
           "range": true,
           "refId": "A"
@@ -343,7 +343,7 @@
             "uid": "prometheus"
           },
           "refId": "A",
-          "expr": "sum(adx_coordinator_node_reserved_cpu_millis{adx_env=~\"$adx_env\"} * on (adx_env, node_id) adx_coordinator_node_schedulable{adx_env=~\"$adx_env\"}) / clamp_min(sum(adx_coordinator_node_capacity_cpu_millis{adx_env=~\"$adx_env\"} * on (adx_env, node_id) adx_coordinator_node_schedulable{adx_env=~\"$adx_env\"}), 1)",
+          "expr": "sum(adx_coordinator_node_reserved_cpu_millis{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} * on (cluster, adx_env, node_id) adx_coordinator_node_schedulable{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}) / clamp_min(sum(adx_coordinator_node_capacity_cpu_millis{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} * on (cluster, adx_env, node_id) adx_coordinator_node_schedulable{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}), 1)",
           "legendFormat": "Allocation Ratio"
         }
       ],
@@ -451,7 +451,7 @@
             "uid": "prometheus"
           },
           "refId": "A",
-          "expr": "sum(adx_coordinator_node_capacity_cpu_millis{adx_env=~\"$adx_env\"} * on (adx_env, node_id) adx_coordinator_node_schedulable{adx_env=~\"$adx_env\"}) / 1000",
+          "expr": "sum(adx_coordinator_node_capacity_cpu_millis{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} * on (cluster, adx_env, node_id) adx_coordinator_node_schedulable{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}) / 1000",
           "legendFormat": "Scheduling Capacity"
         },
         {
@@ -460,7 +460,7 @@
             "uid": "prometheus"
           },
           "refId": "B",
-          "expr": "sum(adx_coordinator_node_reserved_cpu_millis{adx_env=~\"$adx_env\"} and on (adx_env, node_id) (adx_coordinator_node_reachable{adx_env=~\"$adx_env\"} == 1)) / 1000",
+          "expr": "sum(adx_coordinator_node_reserved_cpu_millis{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} and on (cluster, adx_env, node_id) (adx_coordinator_node_reachable{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} == 1)) / 1000",
           "legendFormat": "Allocated"
         }
       ],
@@ -531,7 +531,7 @@
             "uid": "prometheus"
           },
           "refId": "A",
-          "expr": "sum(adx_coordinator_node_reserved_memory_bytes{adx_env=~\"$adx_env\"} * on (adx_env, node_id) adx_coordinator_node_schedulable{adx_env=~\"$adx_env\"}) / clamp_min(sum(adx_coordinator_node_capacity_memory_bytes{adx_env=~\"$adx_env\"} * on (adx_env, node_id) adx_coordinator_node_schedulable{adx_env=~\"$adx_env\"}), 1)",
+          "expr": "sum(adx_coordinator_node_reserved_memory_bytes{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} * on (cluster, adx_env, node_id) adx_coordinator_node_schedulable{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}) / clamp_min(sum(adx_coordinator_node_capacity_memory_bytes{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} * on (cluster, adx_env, node_id) adx_coordinator_node_schedulable{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}), 1)",
           "legendFormat": "Allocation Ratio"
         }
       ],
@@ -639,7 +639,7 @@
             "uid": "prometheus"
           },
           "refId": "A",
-          "expr": "sum(adx_coordinator_node_capacity_memory_bytes{adx_env=~\"$adx_env\"} * on (adx_env, node_id) adx_coordinator_node_schedulable{adx_env=~\"$adx_env\"}) / 1",
+          "expr": "sum(adx_coordinator_node_capacity_memory_bytes{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} * on (cluster, adx_env, node_id) adx_coordinator_node_schedulable{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}) / 1",
           "legendFormat": "Scheduling Capacity"
         },
         {
@@ -648,7 +648,7 @@
             "uid": "prometheus"
           },
           "refId": "B",
-          "expr": "sum(adx_coordinator_node_reserved_memory_bytes{adx_env=~\"$adx_env\"} and on (adx_env, node_id) (adx_coordinator_node_reachable{adx_env=~\"$adx_env\"} == 1)) / 1",
+          "expr": "sum(adx_coordinator_node_reserved_memory_bytes{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} and on (cluster, adx_env, node_id) (adx_coordinator_node_reachable{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} == 1)) / 1",
           "legendFormat": "Allocated"
         }
       ],
@@ -719,7 +719,7 @@
             "uid": "prometheus"
           },
           "refId": "A",
-          "expr": "sum(adx_coordinator_node_reserved_disk_bytes{adx_env=~\"$adx_env\"} * on (adx_env, node_id) adx_coordinator_node_schedulable{adx_env=~\"$adx_env\"}) / clamp_min(sum(adx_coordinator_node_capacity_disk_bytes{adx_env=~\"$adx_env\"} * on (adx_env, node_id) adx_coordinator_node_schedulable{adx_env=~\"$adx_env\"}), 1)",
+          "expr": "sum(adx_coordinator_node_reserved_disk_bytes{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} * on (cluster, adx_env, node_id) adx_coordinator_node_schedulable{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}) / clamp_min(sum(adx_coordinator_node_capacity_disk_bytes{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} * on (cluster, adx_env, node_id) adx_coordinator_node_schedulable{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}), 1)",
           "legendFormat": "Allocation Ratio"
         }
       ],
@@ -827,7 +827,7 @@
             "uid": "prometheus"
           },
           "refId": "A",
-          "expr": "sum(adx_coordinator_node_capacity_disk_bytes{adx_env=~\"$adx_env\"} * on (adx_env, node_id) adx_coordinator_node_schedulable{adx_env=~\"$adx_env\"}) / 1",
+          "expr": "sum(adx_coordinator_node_capacity_disk_bytes{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} * on (cluster, adx_env, node_id) adx_coordinator_node_schedulable{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}) / 1",
           "legendFormat": "Scheduling Capacity"
         },
         {
@@ -836,7 +836,7 @@
             "uid": "prometheus"
           },
           "refId": "B",
-          "expr": "sum(adx_coordinator_node_reserved_disk_bytes{adx_env=~\"$adx_env\"} and on (adx_env, node_id) (adx_coordinator_node_reachable{adx_env=~\"$adx_env\"} == 1)) / 1",
+          "expr": "sum(adx_coordinator_node_reserved_disk_bytes{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} and on (cluster, adx_env, node_id) (adx_coordinator_node_reachable{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} == 1)) / 1",
           "legendFormat": "Allocated"
         }
       ],
@@ -930,7 +930,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (state) (adx_coordinator_environments{adx_env=~\"$adx_env\",state=~\"Running|Paused\"})",
+          "expr": "sum by (state) (adx_coordinator_environments{cluster=~\"$cluster\",adx_env=~\"$adx_env\",state=~\"Running|Paused\"})",
           "legendFormat": "{{state}}"
         }
       ],
@@ -1023,8 +1023,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (adx_env,node_id,state) (adx_coordinator_environments{adx_env=~\"$adx_env\",state=~\"Running|Paused\"})",
-          "legendFormat": "{{adx_env}} / {{node_id}} / {{state}}"
+          "expr": "sum by (cluster, adx_env, node_id, state) (adx_coordinator_environments{cluster=~\"$cluster\",adx_env=~\"$adx_env\",state=~\"Running|Paused\"})",
+          "legendFormat": "{{cluster}} / {{adx_env}} / {{node_id}} / {{state}}"
         }
       ],
       "title": "Running and Paused Environments by Node",
@@ -1094,7 +1094,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(adx_coordinator_environments{adx_env=~\"$adx_env\",state=\"Running\"} * on (adx_env, node_id) adx_coordinator_node_schedulable{adx_env=~\"$adx_env\"}) / clamp_min(count((adx_coordinator_node_capacity_cpu_millis{adx_env=~\"$adx_env\"} > 0) * on (adx_env, node_id) adx_coordinator_node_schedulable{adx_env=~\"$adx_env\"}), 1)",
+          "expr": "sum(adx_coordinator_environments{cluster=~\"$cluster\",adx_env=~\"$adx_env\",state=\"Running\"} * on (cluster, adx_env, node_id) adx_coordinator_node_schedulable{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}) / clamp_min(count((adx_coordinator_node_capacity_cpu_millis{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} > 0) * on (cluster, adx_env, node_id) adx_coordinator_node_schedulable{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}), 1)",
           "refId": "A"
         }
       ],
@@ -1165,7 +1165,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(sum by (node_id) (adx_coordinator_environments{adx_env=~\"$adx_env\",state=\"Running\"} and on (adx_env, node_id) (adx_coordinator_node_reachable{adx_env=~\"$adx_env\"} == 1)))",
+          "expr": "max(sum by (cluster, adx_env, node_id) (adx_coordinator_environments{cluster=~\"$cluster\",adx_env=~\"$adx_env\",state=\"Running\"} and on (cluster, adx_env, node_id) (adx_coordinator_node_reachable{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} == 1)))",
           "refId": "A"
         }
       ],
@@ -1422,7 +1422,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Node (Env / ID)"
+              "options": "Node (Cluster / Env / ID)"
             },
             "properties": [
               {
@@ -1634,7 +1634,7 @@
         },
         "sortBy": [
           {
-            "displayName": "Node (Env / ID)",
+            "displayName": "Node (Cluster / Env / ID)",
             "desc": false
           }
         ]
@@ -1645,7 +1645,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_join(min by (adx_env, node_id) (adx_coordinator_node_reachable{adx_env=~\"$adx_env\"}), \"node_key\", \"/\", \"adx_env\", \"node_id\")",
+          "expr": "label_join(min by (cluster, adx_env, node_id) (adx_coordinator_node_reachable{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}), \"node_key\", \"/\", \"cluster\", \"adx_env\", \"node_id\")",
           "range": false,
           "refId": "A",
           "format": "table",
@@ -1656,7 +1656,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_join(min by (adx_env, node_id) (adx_coordinator_node_schedulable{adx_env=~\"$adx_env\"}), \"node_key\", \"/\", \"adx_env\", \"node_id\")",
+          "expr": "label_join(min by (cluster, adx_env, node_id) (adx_coordinator_node_schedulable{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}), \"node_key\", \"/\", \"cluster\", \"adx_env\", \"node_id\")",
           "range": false,
           "refId": "B",
           "format": "table",
@@ -1667,7 +1667,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_join(min by (adx_env, node_id) ((adx_node_resource_observation_fresh{adx_env=~\"$adx_env\",node_id!=\"\"} and (time() - timestamp(adx_node_resource_observation_fresh{adx_env=~\"$adx_env\",node_id!=\"\"}) < 45)) or label_replace((adx_node_resource_observation_fresh{adx_env=~\"$adx_env\",node_id=\"\",k8s_node_name!=\"\"} and (time() - timestamp(adx_node_resource_observation_fresh{adx_env=~\"$adx_env\",node_id=\"\",k8s_node_name!=\"\"}) < 45)), \"node_id\", \"$1\", \"k8s_node_name\", \"(.+)\")), \"node_key\", \"/\", \"adx_env\", \"node_id\")",
+          "expr": "label_join(min by (cluster, adx_env, node_id) ((adx_node_resource_observation_fresh{cluster=~\"$cluster\",adx_env=~\"$adx_env\",node_id!=\"\"} and (time() - timestamp(adx_node_resource_observation_fresh{cluster=~\"$cluster\",adx_env=~\"$adx_env\",node_id!=\"\"}) < 45)) or label_replace((adx_node_resource_observation_fresh{cluster=~\"$cluster\",adx_env=~\"$adx_env\",node_id=\"\",k8s_node_name!=\"\"} and (time() - timestamp(adx_node_resource_observation_fresh{cluster=~\"$cluster\",adx_env=~\"$adx_env\",node_id=\"\",k8s_node_name!=\"\"}) < 45)), \"node_id\", \"$1\", \"k8s_node_name\", \"(.+)\")), \"node_key\", \"/\", \"cluster\", \"adx_env\", \"node_id\")",
           "range": false,
           "refId": "C",
           "format": "table",
@@ -1678,7 +1678,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_join(min by (adx_env, node_id) (adx_coordinator_node_capacity_cpu_millis{adx_env=~\"$adx_env\"} * on (adx_env, node_id) adx_coordinator_node_schedulable{adx_env=~\"$adx_env\"}) / 1000, \"node_key\", \"/\", \"adx_env\", \"node_id\")",
+          "expr": "label_join(min by (cluster, adx_env, node_id) (adx_coordinator_node_capacity_cpu_millis{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} * on (cluster, adx_env, node_id) adx_coordinator_node_schedulable{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}) / 1000, \"node_key\", \"/\", \"cluster\", \"adx_env\", \"node_id\")",
           "range": false,
           "instant": true,
           "format": "table",
@@ -1689,7 +1689,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_join(min by (adx_env, node_id) (adx_coordinator_node_capacity_memory_bytes{adx_env=~\"$adx_env\"} * on (adx_env, node_id) adx_coordinator_node_schedulable{adx_env=~\"$adx_env\"}) / 1, \"node_key\", \"/\", \"adx_env\", \"node_id\")",
+          "expr": "label_join(min by (cluster, adx_env, node_id) (adx_coordinator_node_capacity_memory_bytes{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} * on (cluster, adx_env, node_id) adx_coordinator_node_schedulable{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}) / 1, \"node_key\", \"/\", \"cluster\", \"adx_env\", \"node_id\")",
           "range": false,
           "instant": true,
           "format": "table",
@@ -1700,7 +1700,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_join(min by (adx_env, node_id) (adx_coordinator_node_capacity_disk_bytes{adx_env=~\"$adx_env\"} * on (adx_env, node_id) adx_coordinator_node_schedulable{adx_env=~\"$adx_env\"}) / 1, \"node_key\", \"/\", \"adx_env\", \"node_id\")",
+          "expr": "label_join(min by (cluster, adx_env, node_id) (adx_coordinator_node_capacity_disk_bytes{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} * on (cluster, adx_env, node_id) adx_coordinator_node_schedulable{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}) / 1, \"node_key\", \"/\", \"cluster\", \"adx_env\", \"node_id\")",
           "range": false,
           "instant": true,
           "format": "table",
@@ -1711,7 +1711,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_join(min by (adx_env, node_id) ((adx_coordinator_node_reserved_cpu_millis{adx_env=~\"$adx_env\"} / on (adx_env, node_id) (adx_coordinator_node_capacity_cpu_millis{adx_env=~\"$adx_env\"} > 0)) and on (adx_env, node_id) (adx_coordinator_node_reachable{adx_env=~\"$adx_env\"} == 1)), \"node_key\", \"/\", \"adx_env\", \"node_id\")",
+          "expr": "label_join(min by (cluster, adx_env, node_id) ((adx_coordinator_node_reserved_cpu_millis{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} / on (cluster, adx_env, node_id) (adx_coordinator_node_capacity_cpu_millis{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} > 0)) and on (cluster, adx_env, node_id) (adx_coordinator_node_reachable{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} == 1)), \"node_key\", \"/\", \"cluster\", \"adx_env\", \"node_id\")",
           "range": false,
           "instant": true,
           "format": "table",
@@ -1722,7 +1722,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_join(min by (adx_env, node_id) ((adx_coordinator_node_reserved_memory_bytes{adx_env=~\"$adx_env\"} / on (adx_env, node_id) (adx_coordinator_node_capacity_memory_bytes{adx_env=~\"$adx_env\"} > 0)) and on (adx_env, node_id) (adx_coordinator_node_reachable{adx_env=~\"$adx_env\"} == 1)), \"node_key\", \"/\", \"adx_env\", \"node_id\")",
+          "expr": "label_join(min by (cluster, adx_env, node_id) ((adx_coordinator_node_reserved_memory_bytes{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} / on (cluster, adx_env, node_id) (adx_coordinator_node_capacity_memory_bytes{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} > 0)) and on (cluster, adx_env, node_id) (adx_coordinator_node_reachable{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} == 1)), \"node_key\", \"/\", \"cluster\", \"adx_env\", \"node_id\")",
           "range": false,
           "instant": true,
           "format": "table",
@@ -1733,7 +1733,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_join(min by (adx_env, node_id) ((adx_coordinator_node_reserved_disk_bytes{adx_env=~\"$adx_env\"} / on (adx_env, node_id) (adx_coordinator_node_capacity_disk_bytes{adx_env=~\"$adx_env\"} > 0)) and on (adx_env, node_id) (adx_coordinator_node_reachable{adx_env=~\"$adx_env\"} == 1)), \"node_key\", \"/\", \"adx_env\", \"node_id\")",
+          "expr": "label_join(min by (cluster, adx_env, node_id) ((adx_coordinator_node_reserved_disk_bytes{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} / on (cluster, adx_env, node_id) (adx_coordinator_node_capacity_disk_bytes{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} > 0)) and on (cluster, adx_env, node_id) (adx_coordinator_node_reachable{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} == 1)), \"node_key\", \"/\", \"cluster\", \"adx_env\", \"node_id\")",
           "range": false,
           "instant": true,
           "format": "table",
@@ -1786,7 +1786,7 @@
               "Value #I": 9
             },
             "renameByName": {
-              "node_key": "Node (Env / ID)",
+              "node_key": "Node (Cluster / Env / ID)",
               "Value #A": "Reachability",
               "Value #B": "Admission",
               "Value #C": "Resource Sample",
@@ -1831,7 +1831,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(adx_trace_exported_spans_total{adx_env=~\"$adx_env\"})",
+          "expr": "sum(adx_trace_exported_spans_total{cluster=~\"$cluster\",adx_env=~\"$adx_env\"})",
           "legendFormat": "Exported",
           "refId": "A"
         },
@@ -1840,7 +1840,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(adx_trace_export_failed_spans_total{adx_env=~\"$adx_env\"})",
+          "expr": "sum(adx_trace_export_failed_spans_total{cluster=~\"$cluster\",adx_env=~\"$adx_env\"})",
           "legendFormat": "Export Failed",
           "refId": "B"
         }
@@ -1906,7 +1906,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(adx_coordinator_environments{adx_env=~\"$adx_env\",state=\"Paused\"})",
+          "expr": "sum(adx_coordinator_environments{cluster=~\"$cluster\",adx_env=~\"$adx_env\",state=\"Paused\"})",
           "instant": false,
           "legendFormat": "Paused"
         }
@@ -1947,9 +1947,9 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(adx:environment_create_request_qps:rate1m{adx_env=~\"$adx_env\"})",
+          "expr": "sum(adx:environment_create_request_qps:rate1m{cluster=~\"$cluster\",adx_env=~\"$adx_env\"})",
           "instant": true,
-          "legendFormat": "{{adx_env}}"
+          "legendFormat": "{{cluster}} / {{adx_env}}"
         }
       ]
     },
@@ -1987,9 +1987,9 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max_over_time((sum(adx:environment_create_request_qps:rate1m{adx_env=~\"$adx_env\"}))[$__range:15s])",
+          "expr": "max_over_time((sum(adx:environment_create_request_qps:rate1m{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}))[$__range:15s])",
           "instant": true,
-          "legendFormat": "{{adx_env}}"
+          "legendFormat": "{{cluster}} / {{adx_env}}"
         }
       ]
     },
@@ -2027,9 +2027,9 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(adx:environment_created_qps:rate1m{adx_env=~\"$adx_env\"})",
+          "expr": "sum(adx:environment_created_qps:rate1m{cluster=~\"$cluster\",adx_env=~\"$adx_env\"})",
           "instant": true,
-          "legendFormat": "{{adx_env}}"
+          "legendFormat": "{{cluster}} / {{adx_env}}"
         }
       ]
     },
@@ -2067,9 +2067,9 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max_over_time((sum(adx:environment_created_qps:rate1m{adx_env=~\"$adx_env\"}))[$__range:15s])",
+          "expr": "max_over_time((sum(adx:environment_created_qps:rate1m{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}))[$__range:15s])",
           "instant": true,
-          "legendFormat": "{{adx_env}}"
+          "legendFormat": "{{cluster}} / {{adx_env}}"
         }
       ]
     },
@@ -2107,14 +2107,14 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (adx_env) (adx:environment_create_request_qps:rate1m{adx_env=~\"$adx_env\"})",
+          "expr": "sum by (cluster, adx_env) (adx:environment_create_request_qps:rate1m{cluster=~\"$cluster\",adx_env=~\"$adx_env\"})",
           "instant": false,
-          "legendFormat": "{{adx_env}} requests"
+          "legendFormat": "{{cluster}} / {{adx_env}} requests"
         },
         {
           "refId": "B",
-          "expr": "sum by (adx_env) (adx:environment_created_qps:rate1m{adx_env=~\"$adx_env\"})",
-          "legendFormat": "{{adx_env}} created"
+          "expr": "sum by (cluster, adx_env) (adx:environment_created_qps:rate1m{cluster=~\"$cluster\",adx_env=~\"$adx_env\"})",
+          "legendFormat": "{{cluster}} / {{adx_env}} created"
         }
       ]
     },
@@ -2152,7 +2152,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (outcome) (rate(adx_environment_create_responses_total{adx_env=~\"$adx_env\"}[1m]))",
+          "expr": "sum by (outcome) (rate(adx_environment_create_responses_total{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}[1m]))",
           "instant": false,
           "legendFormat": "{{outcome}}"
         }
@@ -2192,9 +2192,9 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(adx_environment_create_in_flight{adx_env=~\"$adx_env\"})",
+          "expr": "sum(adx_environment_create_in_flight{cluster=~\"$cluster\",adx_env=~\"$adx_env\"})",
           "instant": false,
-          "legendFormat": "{{adx_env}}"
+          "legendFormat": "{{cluster}} / {{adx_env}}"
         }
       ]
     },
@@ -2232,13 +2232,13 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95,sum by (le) (rate(adx_environment_create_duration_seconds_bucket{adx_env=~\"$adx_env\"}[5m])))",
+          "expr": "histogram_quantile(0.95,sum by (le) (rate(adx_environment_create_duration_seconds_bucket{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}[5m])))",
           "instant": false,
           "legendFormat": "P95"
         },
         {
           "refId": "B",
-          "expr": "histogram_quantile(0.99,sum by (le) (rate(adx_environment_create_duration_seconds_bucket{adx_env=~\"$adx_env\"}[5m])))",
+          "expr": "histogram_quantile(0.99,sum by (le) (rate(adx_environment_create_duration_seconds_bucket{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}[5m])))",
           "legendFormat": "P99"
         }
       ]
@@ -2277,9 +2277,9 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (adx_env,runtime_class) (rate(adx_node_environment_cpu_usage_seconds_total{adx_env=~\"$adx_env\"}[5m]))",
+          "expr": "sum by (cluster, adx_env, runtime_class) (rate(adx_node_environment_cpu_usage_seconds_total{cluster=~\"$cluster\",adx_env=~\"$adx_env\"}[5m]))",
           "instant": false,
-          "legendFormat": "{{adx_env}} / {{runtime_class}}"
+          "legendFormat": "{{cluster}} / {{adx_env}} / {{runtime_class}}"
         }
       ]
     },
@@ -2317,9 +2317,9 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (adx_env,runtime_class) (adx_node_environment_memory_usage_bytes{adx_env=~\"$adx_env\"})",
+          "expr": "sum by (cluster, adx_env, runtime_class) (adx_node_environment_memory_usage_bytes{cluster=~\"$cluster\",adx_env=~\"$adx_env\"})",
           "instant": false,
-          "legendFormat": "{{adx_env}} / {{runtime_class}}"
+          "legendFormat": "{{cluster}} / {{adx_env}} / {{runtime_class}}"
         }
       ]
     },
@@ -2357,14 +2357,14 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (adx_env) (adx_node_environment_samples{adx_env=~\"$adx_env\"})",
+          "expr": "sum by (cluster, adx_env) (adx_node_environment_samples{cluster=~\"$cluster\",adx_env=~\"$adx_env\"})",
           "instant": false,
-          "legendFormat": "{{adx_env}} fresh"
+          "legendFormat": "{{cluster}} / {{adx_env}} fresh"
         },
         {
           "refId": "B",
-          "expr": "sum by (adx_env) (adx_node_environment_stale_samples{adx_env=~\"$adx_env\"})",
-          "legendFormat": "{{adx_env}} stale"
+          "expr": "sum by (cluster, adx_env) (adx_node_environment_stale_samples{cluster=~\"$cluster\",adx_env=~\"$adx_env\"})",
+          "legendFormat": "{{cluster}} / {{adx_env}} stale"
         }
       ]
     },
@@ -2406,9 +2406,9 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (adx_env) (rate({adx_env=~\"$adx_env\",component_name=\"adx-runtime\"}[1m]))",
+          "expr": "sum by (cluster, adx_env) (rate({cluster=~\"$cluster\",adx_env=~\"$adx_env\",component_name=\"adx-runtime\"}[1m]))",
           "instant": true,
-          "legendFormat": "{{adx_env}}",
+          "legendFormat": "{{cluster}} / {{adx_env}}",
           "queryType": "instant"
         }
       ]
@@ -2451,9 +2451,9 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (adx_env) (count_over_time({adx_env=~\"$adx_env\",component_name!=\"adx-runtime\"} | json | level=~\"(?i)error|warn\" [5m]))",
+          "expr": "sum by (cluster, adx_env) (count_over_time({cluster=~\"$cluster\",adx_env=~\"$adx_env\",component_name!=\"adx-runtime\"} | json | level=~\"(?i)error|warn\" [5m]))",
           "instant": true,
-          "legendFormat": "{{adx_env}}",
+          "legendFormat": "{{cluster}} / {{adx_env}}",
           "queryType": "instant"
         }
       ]
@@ -2492,9 +2492,9 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max by (adx_env,exporter) (otelcol_exporter_queue_size{adx_env=~\"$adx_env\"} / otelcol_exporter_queue_capacity{adx_env=~\"$adx_env\"})",
+          "expr": "max by (cluster, adx_env, exporter) (otelcol_exporter_queue_size{cluster=~\"$cluster\",adx_env=~\"$adx_env\"} / otelcol_exporter_queue_capacity{cluster=~\"$cluster\",adx_env=~\"$adx_env\"})",
           "instant": false,
-          "legendFormat": "{{adx_env}}"
+          "legendFormat": "{{cluster}} / {{adx_env}}"
         }
       ]
     },
@@ -2532,9 +2532,9 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (adx_env) (rate({__name__=~\"otelcol_.*(refused|enqueue_failed).*\",adx_env=~\"$adx_env\"}[5m]))",
+          "expr": "sum by (cluster, adx_env) (rate({cluster=~\"$cluster\",__name__=~\"otelcol_.*(refused|enqueue_failed).*\",adx_env=~\"$adx_env\"}[5m]))",
           "instant": false,
-          "legendFormat": "{{adx_env}}"
+          "legendFormat": "{{cluster}} / {{adx_env}}"
         }
       ]
     },
@@ -2566,9 +2566,9 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (adx_env,node_id,state) (adx_coordinator_environments{adx_env=~\"$adx_env\",state=~\"Running|Paused\"})",
+          "expr": "sum by (cluster, adx_env, node_id, state) (adx_coordinator_environments{cluster=~\"$cluster\",adx_env=~\"$adx_env\",state=~\"Running|Paused\"})",
           "instant": true,
-          "legendFormat": "{{adx_env}}",
+          "legendFormat": "{{cluster}} / {{adx_env}}",
           "format": "table"
         }
       ]
@@ -2587,6 +2587,24 @@
   "templating": {
     "list": [
       {
+        "name": "cluster",
+        "label": "Cluster",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": "label_values(adx_coordinator_node_capacity_cpu_millis, cluster)",
+        "refresh": 2,
+        "multi": false,
+        "includeAll": true,
+        "allValue": ".+",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
         "allValue": ".+",
         "current": {
           "text": "All",
@@ -2596,13 +2614,13 @@
           "type": "prometheus",
           "uid": "prometheus"
         },
-        "definition": "label_values(adx_coordinator_node_capacity_cpu_millis, adx_env)",
+        "definition": "label_values(adx_coordinator_node_capacity_cpu_millis{cluster=~\"$cluster\"}, adx_env)",
         "includeAll": true,
         "label": "adx_env",
         "name": "adx_env",
         "options": [],
         "query": {
-          "query": "label_values(adx_coordinator_node_capacity_cpu_millis, adx_env)",
+          "query": "label_values(adx_coordinator_node_capacity_cpu_millis{cluster=~\"$cluster\"}, adx_env)",
           "refId": "Prometheus-adx-env-Variable"
         },
         "refresh": 2,
