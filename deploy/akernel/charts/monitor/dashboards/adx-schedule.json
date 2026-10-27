@@ -982,7 +982,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "label_join(sum by(cluster,adx_env,node_id)(adx_coordinator_environments{cluster=~\"$cluster\",adx_env=~\"$adx_env\",state=\"Running\"}),\"node_key\",\"/\",\"cluster\",\"adx_env\",\"node_id\")",
+          "expr": "label_join(sum by(cluster,adx_env,node_id)(adx_coordinator_environments{cluster=~\"$cluster\",adx_env=~\"$adx_env\",state=\"Running\"}), \"node_key\", \"/\", \"cluster\", \"adx_env\", \"node_id\")",
           "instant": true,
           "range": false,
           "format": "table",
@@ -993,7 +993,7 @@
         },
         {
           "refId": "B",
-          "expr": "label_join(sum by(cluster,adx_env,node_id)(adx_coordinator_environments{cluster=~\"$cluster\",adx_env=~\"$adx_env\",state=\"Paused\"}),\"node_key\",\"/\",\"cluster\",\"adx_env\",\"node_id\")",
+          "expr": "label_join(sum by(cluster,adx_env,node_id)(adx_coordinator_environments{cluster=~\"$cluster\",adx_env=~\"$adx_env\",state=\"Paused\"}), \"node_key\", \"/\", \"cluster\", \"adx_env\", \"node_id\")",
           "instant": true,
           "range": false,
           "format": "table",
