@@ -395,8 +395,12 @@ clock using the provisioned dashboard queries and recording rules:
 ```bash
 python deploy/akernel/charts/core/tests/test_adx_multicluster.py -v
 python deploy/tests/observability/dashboard_query_contract.py --docker --output /tmp/adx-dashboard-queries
-python deploy/tests/observability/dashboard_signal_contract.py --output /tmp/adx-dashboard-signals
+python deploy/tests/observability/dashboard_signal_contract.py --browser --output /tmp/adx-dashboard-signals
 ```
+
+The signal contract requires Docker, Helm and headless Chrome. It opens the
+provisioned dashboard in Grafana 11.5.2 and records the actual interpolated Tempo
+queries for default All and a dotted cluster name.
 
 For a standalone Collector, set `PROMETHEUS_ENDPOINT`, `LOKI_ENDPOINT`, and
 `TEMPO_ENDPOINT` to reachable `host:port` addresses before startup; the launcher

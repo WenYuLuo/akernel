@@ -795,7 +795,9 @@ and detail-enabled provisioning compatible with private images and node placemen
 
 Scope ADX dashboards, logs and TraceQL by `cluster` and `adx_env`; preserve both
 labels in identity joins and per-deployment recording rules. Grafana date fields
-consume milliseconds; source `_seconds` metrics retain seconds. Keep `core.monitoring.clusterName`, `AKERNEL_CLUSTER_NAME` and
+consume milliseconds; source `_seconds` metrics retain seconds. Keep custom-All
+values valid for TraceQL and Explore URLs, and run the browser signal contract
+when changing their interpolation. Keep `core.monitoring.clusterName`, `AKERNEL_CLUSTER_NAME` and
 the monitor cluster identity aligned across control, node and standalone
 Collectors. API metrics stay on 19093; autoscaling stays on 19092. Unknown
 outcomes, missing coverage and stale snapshots must remain visible.

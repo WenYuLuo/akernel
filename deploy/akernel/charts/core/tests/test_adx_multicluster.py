@@ -31,8 +31,8 @@ class MultiClusterTest(unittest.TestCase):
                         continue
                     with self.subTest(dashboard=path.name, panel=panel["title"], query=query):
                         if target.get("queryType") == "traceql":
-                            self.assertIn('resource.cluster = ${cluster:doublequote}', query)
-                            self.assertIn('${cluster:doublequote} = ".+"', query)
+                            self.assertIn('resource.cluster = "${cluster:raw}"', query)
+                            self.assertIn('"${cluster:raw}" = "..*"', query)
                         else:
                             self.assertIn('cluster=~"$cluster"', query)
                         for labels in re.findall(r'\bon\s*\(([^)]*)\)', query):
@@ -44,15 +44,15 @@ class MultiClusterTest(unittest.TestCase):
                             self.assertIn('"node_key", "/", "cluster", "adx_env", "node_id"', query)
             for link in dashboard.get("links", []):
                 if "/explore?" in link.get("url", ""):
-                    for value in ("cluster-a", "cluster.a", ".+"):
-                        url = link["url"].replace("${cluster:percentencode}", quote(value, safe=""))
+                    for value in ("cluster-a", "cluster.a", "..*"):
+                        url = link["url"].replace("${cluster:percentencode}", value if value == "..*" else quote(value, safe=""))
                         url = url.replace("${adx_env:percentencode}", "shared")
                         panes = json.loads(parse_qs(urlparse(url).query)["panes"][0])
                         for pane in panes.values():
                             query = pane["queries"][0]["query"]
                             self.assertEqual(query.count("resource.cluster"), 1)
                             self.assertIn(f'resource.cluster = "{value}"', query)
-                            self.assertIn(f'"{value}" = ".+"', query)
+                            self.assertIn(f'"{value}" = "..*"', query)
                 elif link.get("url", "").startswith("/d/"):
                     self.assertTrue(link.get("includeVars"), link)
 
