@@ -352,8 +352,8 @@ The ADX Sandbox Lifecycle dashboard (`adx-sandbox-lifecycle`) adds creation-call
 success ratios, successful actual-new-create P95 latency, unknown outcomes,
 queued/starting counts and wait ages, interruption/recovery results, worker
 incidents, and statistics coverage/freshness. Its data source is the summary
-Prometheus store; the optional Environment detail store is independent. P95
-excludes replay and unknown outcomes. Missing data, zero denominators and stale
+Prometheus datasource; optional Environment detail collection uses the same
+store. P95 excludes replay and unknown outcomes. Missing data, zero denominators and stale
 snapshots are not evidence of health. The current-impact panel documents the
 private Coordinator query boundary; it does not expose that administrative API
 through the public SDK or Grafana.
@@ -368,15 +368,21 @@ cluster identities when multiple clusters send to the same Prometheus.
 The other ADX dashboards provide creation request/completion QPS and peak QPS,
 matching Running/Paused counts, aggregated node/runtime resources, and separate
 Environment detail and log pages. Helm monitoring can enable
-`environmentDetails.enabled=true` for a separate Prometheus TSDB (30-second
-scrapes, 24-hour retention). The ordinary summary store retains its 15-second
-scrapes and 30-day retention. Match `environmentDetails.namespaces` and
+`environmentDetails.enabled=true` to add native inventory and resource scrape
+jobs to the existing Prometheus instance. Detail collection defaults to off,
+uses a 30-second interval and caps each target at 200,000 samples per scrape.
+Collected detail and summary series share `prometheusServer.config.retentionTime`
+(default 30 days); allow for Environment churn when sizing its storage. Summary
+scrapes retain their 15-second interval. Match `environmentDetails.namespaces` and
 `environmentDetails.environment` to the deployment's namespace and
 `core.monitoring.akernelEnv`. The log detail page defaults to a 15-minute,
 manual-refresh query with bounded results. Per-instance OTLP samples from sandboxd
 are excluded from the summary store; native ADX detail endpoints supply instance
 CPU and memory. The existing `sandbox-metrics` dashboard URL now uses those
-short-retention Environment detail panels.
+Environment detail panels on the same `prometheus` datasource. With detail
+collection disabled, the pages remain available. A fresh deployment has no
+detail samples; disabling collection later stops sampling while retained history
+follows the shared retention policy.
 
 For a standalone Collector, set `PROMETHEUS_ENDPOINT`, `LOKI_ENDPOINT`, and
 `TEMPO_ENDPOINT` to reachable `host:port` addresses before startup; the launcher

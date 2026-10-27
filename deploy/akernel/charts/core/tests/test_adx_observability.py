@@ -171,7 +171,7 @@ class ObservabilityTest(unittest.TestCase):
                     self.assertNotIn("filter/summary_metrics",
                                      config["service"]["pipelines"][signal]["processors"])
 
-    def test_existing_detail_dashboard_url_uses_short_retention_metrics(self) -> None:
+    def test_existing_detail_dashboard_url_uses_shared_prometheus(self) -> None:
         dashboards = ROOT / "deploy/akernel/charts/monitor/dashboards"
         alias = json.loads((dashboards / "sandbox-lifecycle-dashboard.json").read_text())
         native = json.loads((dashboards / "adx-environments.json").read_text())
@@ -201,21 +201,69 @@ class ObservabilityTest(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("metricsIntervalSeconds must be an integer", result.stderr)
 
-    def test_optional_environment_details_have_separate_storage(self) -> None:
+    def test_default_detail_dashboards_resolve_existing_datasources(self) -> None:
         result = subprocess.run(
-            ["helm", "template", "monitor", str(ROOT / "deploy/akernel/charts/monitor"),
-             "--set", "environmentDetails.enabled=true"],
+            ["helm", "template", "monitor", str(ROOT / "deploy/akernel/charts/monitor")],
             check=True, capture_output=True, text=True,
         )
         resources = {(r["kind"], r["metadata"]["name"]): r
                      for r in yaml.safe_load_all(result.stdout) if r}
-        details = resources[("StatefulSet", "prometheus-details")]
-        container = details["spec"]["template"]["spec"]["containers"][0]
-        self.assertIn("--storage.tsdb.retention.time=24h", container["args"])
-        config = yaml.safe_load(resources[("ConfigMap", "prometheus-details")]["data"]["prometheus.yml"])
-        self.assertTrue(all(j["metrics_path"] == "/metrics/environments" for j in config["scrape_configs"]))
-        self.assertIn("prometheus-details", resources[("ConfigMap", "grafana-datasources")]["data"]["prometheus.yaml"])
-        rules = yaml.safe_load(resources[("ConfigMap", "prometheus-config")]["data"]["adx-rules.yaml"])
+        data = resources[("ConfigMap", "grafana-datasources")]["data"]
+        sources = {d["uid"] for content in data.values()
+                   for d in yaml.safe_load(content)["datasources"]}
+        dashboards = resources[("ConfigMap", "grafana-dashboards")]["data"]
+        for name in ("adx-environments.json", "sandbox-lifecycle-dashboard.json"):
+            dashboard = json.loads(dashboards[name])
+            for panel in dashboard["panels"]:
+                self.assertEqual(panel["datasource"]["uid"], "prometheus", name)
+                self.assertIn(panel["datasource"]["uid"], sources, name)
+            for variable in dashboard["templating"]["list"]:
+                if "datasource" in variable:
+                    self.assertIn(variable["datasource"]["uid"], sources, name)
+        config = yaml.safe_load(resources[("ConfigMap", "prometheus-config")]["data"]["prometheus.yml"])
+        self.assertFalse(any(j.get("metrics_path") == "/metrics/environments"
+                             for j in config["scrape_configs"]))
+
+    def test_optional_details_share_existing_prometheus_and_pod_settings(self) -> None:
+        selector = ("affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution."
+                    "nodeSelectorTerms[0].matchExpressions[0]")
+        args = ["helm", "template", "monitor", str(ROOT / "deploy/akernel/charts/monitor"),
+                "--set", "imagePullSecrets[0].name=registry-auth",
+                "--set", "prometheusServer.image.repository=registry.example/prometheus",
+                "--set", "tolerations[0].key=monitoring",
+                "--set", "tolerations[0].operator=Exists",
+                "--set", f"{selector}.key=workload",
+                "--set", f"{selector}.operator=In",
+                "--set", f"{selector}.values[0]=monitoring"]
+
+        def render(extra: list[str]) -> dict:
+            result = subprocess.run(args + extra, check=True, capture_output=True, text=True)
+            return {(r["kind"], r["metadata"]["name"]): r
+                    for r in yaml.safe_load_all(result.stdout) if r}
+        baseline = render([])
+        enabled = render(["--set", "environmentDetails.enabled=true",
+                          "--set", "environmentDetails.environment=prod",
+                          "--set", "environmentDetails.namespaces[0]=workers",
+                          "--set", "environmentDetails.scrapeInterval=45s",
+                          "--set", "prometheusServer.config.clusterName=cluster-west"])
+        self.assertEqual(set(enabled), set(baseline))
+        pod = enabled[("StatefulSet", "prometheus")]["spec"]["template"]["spec"]
+        self.assertEqual(pod, baseline[("StatefulSet", "prometheus")]["spec"]["template"]["spec"])
+        self.assertEqual(pod["imagePullSecrets"], [{"name": "registry-auth"}])
+        self.assertEqual(pod["tolerations"], [{"key": "monitoring", "operator": "Exists"}])
+        self.assertIn("nodeAffinity", pod["affinity"])
+        config = yaml.safe_load(enabled[("ConfigMap", "prometheus-config")]["data"]["prometheus.yml"])
+        jobs = [j for j in config["scrape_configs"] if j.get("metrics_path") == "/metrics/environments"]
+        self.assertEqual({j["job_name"] for j in jobs}, {"adx-coordinator-environments", "adx-node-environments"})
+        for job in jobs:
+            self.assertEqual(job["scrape_interval"], "45s")
+            self.assertEqual(job["sample_limit"], 200000)
+            self.assertEqual(job["kubernetes_sd_configs"][0]["namespaces"]["names"], ["workers"])
+            labels = {r["target_label"]: r["replacement"]
+                      for r in job["relabel_configs"] if "replacement" in r}
+            self.assertEqual(labels["adx_env"], "prod")
+            self.assertEqual(labels["cluster"], "cluster-west")
+        rules = yaml.safe_load(enabled[("ConfigMap", "prometheus-config")]["data"]["adx-rules.yaml"])
         records = {r["record"] for g in rules["groups"] for r in g["rules"]}
         self.assertIn("adx:environment_create_request_qps:rate1m", records)
 

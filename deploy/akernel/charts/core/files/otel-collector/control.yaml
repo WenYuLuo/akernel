@@ -57,7 +57,7 @@ extensions:
     directory: /collector-state
     create_directory: true
 processors:
-  # Per-Environment resources are scraped into the separate short-retention TSDB.
+  # Native Environment details use the optional Prometheus scrape jobs.
   filter/summary_metrics:
     error_mode: ignore
     metrics:

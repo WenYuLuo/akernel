@@ -785,9 +785,13 @@ SDK control-plane access.
 
 Collector configs live in `deploy/akernel/charts/core/files/otel-collector/`;
 standalone adds scrape targets through a small overlay. Preserve dashboard UIDs,
-summary/detail metric separation and runtime-control events. Verify real SDK
+optional native detail sampling and runtime-control events. Verify real SDK
 telemetry after collection changes. The [standalone guide](deploy/standalone/README.md)
 owns tracing and AFS options; test actual mount validation and checkpoint reload.
+
+Environment details are opt-in scrape jobs on the existing Prometheus instance,
+with the same datasource and retention policy as summary metrics. Keep default
+and detail-enabled provisioning compatible with private images and node placement.
 
 The Sandbox Lifecycle dashboard uses summary Prometheus data scoped by `cluster`
 and `adx_env`. Keep `core.monitoring.clusterName`, `AKERNEL_CLUSTER_NAME` and

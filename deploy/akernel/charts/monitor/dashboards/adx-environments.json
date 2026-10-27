@@ -10,7 +10,7 @@
     "from": "now-15m",
     "to": "now"
   },
-  "description": "Current Running and Paused inventory and fresh runtime usage from the optional short-retention Prometheus datasource. Paused resources are absent rather than a pre-pause sample.",
+  "description": "Current Running and Paused inventory and fresh runtime usage from Prometheus. Enable environmentDetails scrapes to collect these series. Paused resources are absent rather than a pre-pause sample.",
   "templating": {
     "list": [
       {
@@ -19,7 +19,7 @@
         "type": "query",
         "datasource": {
           "type": "prometheus",
-          "uid": "prometheus-details"
+          "uid": "prometheus"
         },
         "query": "label_values(adx_environment_info, adx_env)",
         "refresh": 1,
@@ -63,7 +63,7 @@
       "type": "table",
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus-details"
+        "uid": "prometheus"
       },
       "gridPos": {
         "x": 0,
@@ -118,7 +118,7 @@
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus-details"
+        "uid": "prometheus"
       },
       "gridPos": {
         "x": 0,
@@ -151,7 +151,7 @@
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus-details"
+        "uid": "prometheus"
       },
       "gridPos": {
         "x": 12,
