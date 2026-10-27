@@ -59,6 +59,11 @@ main() {
     ln -sfn "${state_dir}/run" /opt/adx/run
   fi
 
+  # Derive optional standalone settings from the shared base profile.
+  # AFS validates the mount and aligns node writers with Coordinator reclaimers.
+  # Tracing configures local processes and Execd inside sandboxes, where the
+  # Collector is reached through the sandbox gateway rather than loopback.
+  # Reuse the generated profile for stop so adxctl sees the same configuration.
   if [[ "${AKERNEL_ADX_MANAGED_CREDENTIALS:-local}" != external &&
         ( "${AKERNEL_AFS_CHECKPOINTS:-false}" == true || "${ENABLE_TRACE:-false}" == true ) ]]; then
     generated="${AKERNEL_ADX_STATE_DIR:-/home/akernel/adx}/standalone-overrides.yaml"
