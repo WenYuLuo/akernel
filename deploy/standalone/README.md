@@ -398,7 +398,7 @@ python deploy/tests/observability/dashboard_query_contract.py --docker --output 
 python deploy/tests/observability/dashboard_signal_contract.py --browser --output /tmp/adx-dashboard-signals
 ```
 
-The signal contract requires Docker, Helm and headless Chrome. It opens the
+The signal contract requires Docker, Helm, headless Chrome, PyYAML and websockets. It opens the
 provisioned dashboard in Grafana 11.5.2 and records the actual interpolated Tempo
 queries for default All and a dotted cluster name.
 
@@ -413,10 +413,18 @@ autoscaling keeps port 19092. Collector self-metrics use port 18889.
 
 Set `ENABLE_TRACE=true` to trace standalone control processes and Execd at a
 10% sampling ratio through the local Collector. The default keeps tracing off.
+Custom `AKERNEL_ADX_CONFIG` inputs may use explicit services or any supported
+ADX profile, including node-only profiles. Configuration options apply only to
+roles present in that deployment.
+
+The signal regression feeds ordinary Rust JSON logs through the shipped
+Collector file receiver and normalization processors into Loki, then checks
+WARN/ERROR counts for both clusters and All. Diagnostic counter regressions
+include startup zeros, the first event and an initial burst through Prometheus.
 
 The AMD64 default pins the AFS-enabled ADX release and Execd artifacts from
-[Build 196](https://buildkite.com/agent-dx/agent-dx/builds/196), revision
-`ff247d83edb6959752a11344082c79a84cccedee` from
+[Build 197](https://buildkite.com/agent-dx/agent-dx/builds/197), revision
+`6b342cda054602dae315da8ff7a14c9e83f0a90b` from
 [ADX #132](https://github.com/openJiuwen-ai/agent-dx/pull/132), based on master
 `2ec519fea1b0cce22f3eefd3b207f84f2076e833`. Both archives
 are SHA256-pinned in the builder Dockerfiles. ARM builds require their own

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 import json
 import re
 import shutil
@@ -38,6 +39,104 @@ def wait(predicate, seconds: int = 90):
             pass
         time.sleep(2)
     raise TimeoutError("signal query did not reach the expected result")
+
+
+def check_control_severity(output, start, loki_url, name, checks):
+    """Run the shipped filelog/normalization pipeline before the exact panel."""
+    control = ROOT / "deploy/akernel/charts/core/files/otel-collector/control.yaml"
+    version = re.search(r"^ARG OTELCOL_CONTRIB_VERSION=(.+)$", (ROOT / "builder/node.Dockerfile").read_text(), re.MULTILINE)[1]
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    begin = time.time_ns() - 60000000000
+    for index, cluster in enumerate(("cluster.a", "clusterxa")):
+        logs = output / ("collector-input-" + str(index))
+        logs.mkdir()
+        def record(level, message):
+            return json.dumps({"timestamp": stamp, "level": level, "fields": {"message": message}}) + "\n"
+        (logs / "coordinator.log").write_text(
+            record("WARN", "ordinary warning from " + cluster)
+            + record("ERROR", "ordinary error from " + cluster)
+            + record("INFO", "ordinary information from " + cluster))
+        (logs / "adx-runtime.log").write_text(record("WARN", "runtime warning must be excluded " + cluster))
+        cfg = yaml.safe_load(control.read_text())
+        # Keep the actual filelog operators and all shipped log processors.
+        # Only isolate the input directory, state and exporter endpoint.
+        cfg["receivers"] = {"filelog/adx": cfg["receivers"]["filelog/adx"]}
+        cfg["extensions"]["file_storage"]["directory"] = "/tmp/collector-state"
+        cfg["exporters"] = {"otlphttp/loki": cfg["exporters"]["otlphttp/loki"]}
+        cfg["exporters"]["otlphttp/loki"]["endpoint"] = "http://" + name + "-loki:3100/otlp"
+        pipeline = cfg["service"]["pipelines"]["logs"]
+        pipeline["receivers"] = ["filelog/adx"]
+        cfg["processors"] = {key: cfg["processors"][key] for key in pipeline["processors"]}
+        cfg["service"]["pipelines"] = {"logs": pipeline}
+        start("collector-" + str(index), "otel/opentelemetry-collector-contrib:" + version, [], cfg,
+              ["--tmpfs", "/tmp:rw,mode=1777", "-v", str(logs) + ":/logs:ro",
+               "-e", "AKERNEL_CLUSTER_NAME=" + cluster,
+               "-e", "AKERNEL_ENV=shared"], ["--config=/config.yaml"])
+    dashboard = json.loads((MONITOR / "dashboards/adx-schedule.json").read_text())
+    expr = next(p["targets"][0]["expr"] for p in dashboard["panels"]
+                if p["title"] == "Control Warnings / Errors (last 5m)")
+    all_value = next(v["allValue"] for v in dashboard["templating"]["list"] if v["name"] == "cluster")
+    def evaluate(selected, metric=True):
+        regex = selected if selected == all_value else re.escape(selected)
+        query = expr.replace("$cluster", regex.replace("\\", "\\\\")).replace("$adx_env", "shared")
+        path = "/loki/api/v1/query?" if metric else "/loki/api/v1/query_range?"
+        if not metric:
+            query = '{cluster=~"' + regex.replace("\\", "\\\\") + '",adx_env="shared",component_name="adx-coordinator"}'
+        params = {"query": query}
+        if not metric:
+            params.update(start=str(begin), end=str(time.time_ns()), limit=100)
+        return request(loki_url + path + urlencode(params))["data"]["result"]
+    for cluster in ("cluster.a", "clusterxa", all_value):
+        expected = {cluster: 2} if cluster != all_value else {"cluster.a": 2, "clusterxa": 2}
+        wait(lambda: {row["metric"]["cluster"]: float(row["value"][1]) for row in evaluate(cluster)} == expected)
+        checks.append("Collector normalized control severity " + cluster)
+    rows = evaluate(all_value, metric=False)
+    messages = [line for row in rows for _, line in row["values"]]
+    assert len(messages) == 6 and all(not line.startswith("{") for line in messages), rows
+    checks.append("shipped Collector normalized plain log bodies")
+
+
+def browse_query(chrome, output, case, url, records):
+    """Wait for an actual datasource response rather than virtual-time expiry."""
+    from websockets.sync.client import connect
+
+    profile = output / ("chrome-profile-" + case)
+    before = len(records.read_text().splitlines()) if records.exists() else 0
+    def received():
+        lines = records.read_text().splitlines(keepends=True)[before:] if records.exists() else []
+        rows = [json.loads(line) for line in lines if line.endswith("\n")]
+        return [row for row in rows if "resource.cluster" in row["query"]]
+
+    with (output / ("chrome-" + case + ".log")).open("w") as log:
+        process = subprocess.Popen(
+            [chrome, "--headless=new", "--no-sandbox", "--disable-gpu",
+             "--disable-dev-shm-usage", "--disable-background-networking", "--no-first-run",
+             "--remote-debugging-port=0", "--user-data-dir=" + str(profile),
+             "--window-size=1800,3000", url],
+            stdout=subprocess.DEVNULL, stderr=log,
+        )
+        try:
+            queries = wait(received)
+            return queries
+        finally:
+            # Keep the rendered DOM even when waiting or assertions fail.
+            try:
+                port = (profile / "DevToolsActivePort").read_text().splitlines()[0]
+                pages = request("http://127.0.0.1:" + port + "/json/list")
+                page = next(page for page in pages if page.get("type") == "page")
+                with connect(page["webSocketDebuggerUrl"], open_timeout=10, max_size=8 * 1024 * 1024) as ws:
+                    ws.send(json.dumps({"id": 1, "method": "Runtime.evaluate", "params": {
+                        "expression": "document.documentElement.outerHTML", "returnByValue": True}}))
+                    reply = json.loads(ws.recv(timeout=10))
+                (output / ("chrome-" + case + ".html")).write_text(reply["result"]["result"]["value"])
+            except Exception as error:
+                (output / ("chrome-" + case + "-capture-error.txt")).write_text(str(error))
+            process.terminate()
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=10)
 
 
 def main() -> None:
@@ -136,6 +235,7 @@ def main() -> None:
                 url = tp[3200] + "/api/search?" + urlencode({"q": query, "limit": 20})
                 wait(lambda: {r["traceID"].zfill(32) for r in request(url).get("traces", [])} == expected_ids)
                 checks.append(filename + " Explore scope " + selected)
+        check_control_severity(output, start, lp, name, checks)
         if args.browser:
             chrome = shutil.which("google-chrome") or shutil.which("chromium")
             if not chrome:
@@ -186,19 +286,10 @@ def main() -> None:
             records = state / "requests.jsonl"
             for selected, expected in ((None, set(trace_ids.values())), ("cluster.a", {trace_ids["cluster.a"]})):
                 case = "all" if selected is None else "specific"
-                before = len(records.read_text().splitlines()) if records.exists() else 0
                 url = gf + "/d/adx-environment-logs?" + urlencode(
                     {"from": "now-15m", "to": "now", **(
                         {"var-cluster": selected} if selected is not None else {})})
-                with (output / ("chrome-" + case + ".html")).open("w") as dom, (
-                    output / ("chrome-" + case + ".log")).open("w") as log:
-                    subprocess.run([chrome, "--headless=new", "--no-sandbox", "--disable-gpu",
-                                    "--disable-dev-shm-usage", "--disable-background-networking", "--no-first-run",
-                                    "--user-data-dir=" + str(output / ("chrome-profile-" + case)),
-                                    "--window-size=1800,3000", "--virtual-time-budget=20000", "--dump-dom", url],
-                                   stdout=dom, stderr=log, check=True, timeout=60)
-                received = [json.loads(line) for line in records.read_text().splitlines()[before:]] if records.exists() else []
-                queries = [row for row in received if "resource.cluster" in row["query"]]
+                queries = browse_query(chrome, output, case, url, records)
                 assert queries, "Grafana did not issue its interpolated TraceQL query"
                 assert all(row["status"] == 200 and set(row["ids"]) == expected for row in queries), queries
                 checks.append("real Grafana custom-All interpolation" if selected is None

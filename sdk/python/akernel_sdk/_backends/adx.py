@@ -555,8 +555,45 @@ class _Session:
             self._closed = True
 
 
+class _ConstructionClient:
+    """Guard the released native SDK's constructor rollback on a reused ID."""
+
+    def __init__(self, client: Any, newly_created: bool) -> None:
+        self.client = client
+        self.newly_created = newly_created
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.client, name)
+
+    def delete(self, environment_id: str) -> None:
+        if self.newly_created:
+            self.client.delete(environment_id)
+
+
 class _OwnedSandbox(adx_environment.Environment):
     """Native handle whose lifecycle is owned by the AKernel session."""
+
+    _client: Any
+
+    def __init__(self, **kwargs: Any) -> None:
+        self._newly_created = False
+        try:
+            super().__init__(**kwargs)
+        finally:
+            # The index dependency may predate native ownership-aware rollback.
+            # Scope the guard to construction; explicit deletion stays unchanged.
+            if isinstance(getattr(self, "_client", None), _ConstructionClient):
+                self._client = self._client.client
+
+    def _create(self, body: dict[str, Any]) -> dict[str, Any]:
+        result = super()._create(body)
+        self._newly_created = result.get("newlyCreated") is True
+        self._client = _ConstructionClient(self._client, self._newly_created)
+        return result
+
+    @property
+    def newly_created(self) -> bool:
+        return self._newly_created
 
     def __del__(self) -> None:
         # GC can run while HTTPX holds a non-reentrant pool lock. Network
@@ -683,7 +720,10 @@ class AdxBackend:
                     retry_delay = min(retry_delay * 2, 1.0)
         except Exception:
             try:
-                session.terminate()
+                if sandbox.newly_created is True:
+                    session.terminate()
+                else:
+                    session.close()
             except Exception:
                 logger.warning(
                     "failed to clean up sandbox after direct route readiness failure",
@@ -697,7 +737,10 @@ class AdxBackend:
                 sandbox.files.make_dir(spec.command_cwd)
             except Exception as error:
                 try:
-                    session.terminate()
+                    if sandbox.newly_created is True:
+                        session.terminate()
+                    else:
+                        session.close()
                 except Exception:
                     logger.warning(
                         "Failed to roll back sandbox %s after cwd initialization",

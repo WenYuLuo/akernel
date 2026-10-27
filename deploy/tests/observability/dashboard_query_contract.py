@@ -21,6 +21,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--docker", action="store_true")
+    parser.add_argument("--producer-samples", type=Path,
+                        help="startup/first-event expositions emitted by ADX producer tests")
     args = parser.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -103,6 +105,35 @@ def main() -> None:
     check(scope(panel("adx-sandbox-lifecycle", "Statistics Started At"), "a"), [
         {"labels": '{cluster="a",adx_env="shared"}', "value": 1793059200000},
     ])
+    # Prior zero scrapes must make both the first event and first burst visible
+    # through the exact provisioned diagnostic queries. Optionally validate the
+    # input against real producer expositions from ADX's Rust tests.
+    lifecycle = json.loads(data["adx-sandbox-lifecycle.json"])
+    for producer, metric, suffix in (
+        ("apiserver", "adx_environment_create_errors_total",
+         'outcome="unknown",stage="unknown",reason="transport"'),
+        ("apiserver", "adx_environment_create_rejections_total", 'reason="unauthenticated"'),
+        ("adxlet", "adx_environment_lifecycle_operations_total",
+         'operation="pause",intent="idle",outcome="success"'),
+    ):
+        name = metric + "{" + suffix + "}"
+        if args.producer_samples:
+            for phase, count in (("before", 0), ("after", 1)):
+                rows = (args.producer_samples / (producer + "-" + phase + ".prom")).read_text().splitlines()
+                assert name + " " + str(count) in rows, (name, phase)
+        expr = next(t["expr"] for p in lifecycle["panels"] for t in p.get("targets", [])
+                    if metric + "{" in t.get("expr", ""))
+        expr = scope(expr).replace("$__rate_interval", "2m")
+        for cluster, count in (("a", 1), ("b", 3)):
+            labels = f'cluster="{cluster}",adx_env="shared",' + suffix
+            series.append({"series": metric + "{" + labels + "}",
+                           "values": f"0 0 {count}+0x6"})
+        for when, multiplier in (("15s", 0), ("2m", 1)):
+            checks.append({"expr": expr, "eval_time": when, "exp_samples": [
+                {"labels": '{cluster="a",adx_env="shared",' + suffix + "}", "value": multiplier},
+                {"labels": '{cluster="b",adx_env="shared",' + suffix + "}", "value": 3 * multiplier},
+            ]})
+
     fixture = {"rule_files": ["adx-rules.yaml"], "evaluation_interval": "15s",
                "tests": [{"interval": "15s", "input_series": series, "promql_expr_test": checks}]}
     (output / "queries.yaml").write_text(yaml.safe_dump(fixture, sort_keys=False))

@@ -25,6 +25,77 @@ CONFIG = load("afs_config", ROOT / "builder/scripts/prepare-adx-config.py")
 
 
 class AfsConfigTest(unittest.TestCase):
+    def assert_adx_valid(self, target):
+        binary = os.environ.get("AKERNEL_TEST_ADXCTL")
+        if binary:
+            subprocess.run([binary, "--config", str(target), "validate"], check=True)
+
+    def test_trace_preserves_explicit_services_and_only_changes_present_roles(self):
+        for profile in ("standalone-managed-redis", "node", "coordinator", "ingress-api"):
+            source = ROOT / f"src/agent-dx/build/config/examples/deployment-{profile}.yaml"
+            original = yaml.safe_load(source.read_text())
+            with self.subTest(profile=profile), tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {"ENABLE_TRACE": "true"}):
+                target = Path(directory) / "result.yaml"
+                CONFIG.configure(source, target, None, "unused", pvm=True)
+                result = yaml.safe_load(target.read_text())
+                self.assert_adx_valid(target)
+                self.assertNotIn("service_overrides", result)
+                self.assertEqual([(v["id"], v["role"]) for v in result["services"]], [(v["id"], v["role"]) for v in original["services"]])
+                for service in result["services"]:
+                    role = service["role"]
+                    if role in ("coordinator", "adxlet", "apiserver", "ingress"):
+                        self.assertEqual(service["env"]["ADX_TRACE_ENABLED"], "true")
+                    if role in ("coordinator", "adxlet"):
+                        self.assertEqual(service["config"]["rpc_timeout_seconds"], 90)
+                    if role == "adxlet":
+                        self.assertEqual(service["config"]["execd_env"]["ADX_TRACE_ENABLED"], "true")
+
+    def test_trace_preserves_profile_role_boundaries(self):
+        expected = {"standalone": {"coordinator", "apiserver", "adxlet", "ingress"},
+                    "standalone-external-redis": {"coordinator", "apiserver", "adxlet", "ingress"},
+                    "node": {"adxlet"}, "coordinator": {"coordinator"},
+                    "ingress-api": {"apiserver", "ingress"}}
+        for profile, roles in expected.items():
+            with self.subTest(profile=profile), tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {"ENABLE_TRACE": "true"}):
+                source = Path(directory) / "source.yaml"
+                original = {"schema_version": 1, "profile": profile}
+                if profile == "node":
+                    original["service_overrides"] = {"adxlet": {"config": {"node_id": "worker-1", "execd_env": {"PRESERVED": "yes"}}}}
+                source.write_text(yaml.safe_dump(original))
+                target = Path(directory) / "result.yaml"
+                CONFIG.configure(source, target, None, "unused", pvm=True)
+                result = yaml.safe_load(target.read_text())
+                self.assert_adx_valid(target)
+                self.assertEqual(set(result["service_overrides"]), roles)
+                if profile == "node":
+                    self.assertEqual(result["service_overrides"]["adxlet"]["config"]["execd_env"]["PRESERVED"], "yes")
+
+    def test_no_options_preserves_custom_input_exactly(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {"ENABLE_TRACE": "false"}):
+            for original in ({"schema_version": 1, "profile": "coordinator"},
+                             {"schema_version": 1, "services": [{"id": "worker", "role": "adxlet", "config": {"node_id": "worker"}}]}):
+                source = Path(directory) / "source.yaml"
+                source.write_text(yaml.safe_dump(original))
+                CONFIG.configure(source, source, None, "unused")
+                self.assertEqual(yaml.safe_load(source.read_text()), original)
+
+    def test_explicit_null_config_and_multiple_workers_are_patched_in_place(self):
+        original = {"services": [
+            {"id": "first", "role": "adxlet", "config": None},
+            {"id": "second", "role": "adxlet"},
+            {"id": "redis", "role": "redis", "config": None},
+        ]}
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {"ENABLE_TRACE": "true"}):
+            source = Path(directory) / "source.yaml"
+            source.write_text(yaml.safe_dump(original))
+            CONFIG.configure(source, source, None, "unused", pvm=True)
+            result = yaml.safe_load(source.read_text())
+            self.assertNotIn("service_overrides", result)
+            for service in result["services"][:2]:
+                self.assertEqual(service["config"]["rpc_timeout_seconds"], 90)
+                self.assertEqual(service["config"]["execd_env"]["ADX_TRACE_ENABLED"], "true")
+            self.assertEqual(result["services"][2], original["services"][2])
+
     def test_host_requires_an_actual_writable_dfs_mount(self):
         with tempfile.TemporaryDirectory() as directory:
             for output, valid in (("afs-dfs fuse rw,nosuid\n", True),

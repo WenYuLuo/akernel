@@ -854,7 +854,10 @@ Sandbox.delete("worker")   # terminates the named remote sandbox
 
 Creating a sandbox with an existing successful name returns that sandbox and
 its original resource allocation. Different creation arguments do not resize
-it. Use `get_info()` to inspect the retained allocation, or delete the named
+it. If local initialization fails while reusing that result, the SDK closes
+its local handle and preserves the original workload. Automatic rollback
+removes a remote instance only when the server confirms this create owns it.
+Use `get_info()` to inspect the retained allocation, or delete the named
 sandbox before creating a replacement with a different specification.
 
 `sandbox.id` is the physical ID shown by `ak list`. `get_info()` returns a

@@ -4,8 +4,8 @@
 
 ARG AKERNEL_RUNTIME_BASE_IMAGE=ubuntu:24.04
 ARG ADX_VERSION=v0.1.0rc2
-ARG ADX_EXECD_URL=https://agent-dx.obs.cn-southwest-2.myhuaweicloud.com/adx/daily/20261027052043-ff247d83edb6/linux/amd64/adx-execd.tar.gz
-ARG ADX_EXECD_SHA256=d1581a5b44d23db172e0169e1b9c49cc21a6b70d2e8e9b5ff5ee4d0afcc3b6ac
+ARG ADX_EXECD_URL=https://agent-dx.obs.cn-southwest-2.myhuaweicloud.com/adx/daily/20261027064449-6b342cda0546/linux/amd64/adx-execd.tar.gz
+ARG ADX_EXECD_SHA256=e320a9cadd719d392966f3a1a85e92ca73340b419980599028fb06ef68a5e288
 
 FROM ${AKERNEL_RUNTIME_BASE_IMAGE} AS adx-execd
 ARG ADX_EXECD_URL

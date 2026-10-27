@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Apply PVM, telemetry and mounted checkpoint options to the standalone profile."""
+"""Apply PVM, telemetry and mounted checkpoint options to ADX deployments."""
 from __future__ import annotations
 import argparse
 import os
@@ -14,12 +14,41 @@ def configure(
     source: Path, destination: Path, mount: Path | None, prefix: str, *, pvm: bool = False,
 ) -> None:
     cfg = yaml.safe_load(source.read_text())
-    overrides = cfg.setdefault("service_overrides", {})
-    node = overrides.setdefault("adxlet", {}).setdefault("config", {})
+    if not isinstance(cfg, dict):
+        raise ValueError("deployment must be a mapping")
+    profile_roles = {
+        "standalone": ("coordinator", "apiserver", "adxlet", "ingress"),
+        "standalone-external-redis": ("coordinator", "apiserver", "adxlet", "ingress"),
+        "coordinator": ("coordinator",),
+        "node": ("adxlet",),
+        "ingress-api": ("apiserver", "ingress"),
+    }
+    if "profile" in cfg:
+        profile = cfg["profile"]
+        if profile not in profile_roles:
+            raise ValueError(f"unsupported deployment profile: {profile}")
+        roles = profile_roles[profile]
+
+        def services(role):
+            if role not in roles:
+                return []
+            return [cfg.setdefault("service_overrides", {}).setdefault(role, {})]
+    else:
+        # Explicit deployments use their actual Service objects. Profile-only
+        # keys and absent roles would be rejected by ADX's strict loader.
+        def services(role):
+            return [service for service in cfg["services"] if service["role"] == role]
+
+    def config(service):
+        if service.get("config") is None:
+            service["config"] = {}
+        return service["config"]
+
     if pvm:
         # Nested PVM cleanup needs a longer RPC budget; guest boot stays unchanged.
         for role in ("coordinator", "adxlet"):
-            overrides.setdefault(role, {}).setdefault("config", {})["rpc_timeout_seconds"] = 90
+            for service in services(role):
+                config(service)["rpc_timeout_seconds"] = 90
     if mount is not None:
         if not re.fullmatch(r"[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*", prefix):
             raise ValueError("checkpoint prefix must contain safe relative components")
@@ -34,19 +63,24 @@ def configure(
             raise ValueError("shared checkpoint path must be a writable AFS DFS mount")
         storage = {"kind": "distributed_fs", "alias": "afs-checkpoints",
                    "mount_root": str(mount), "prefix": prefix}
-        overrides.setdefault("coordinator", {}).setdefault("config", {})["checkpoint_reclaimers"] = [storage]
-        node["checkpoint_storage"] = storage
-        node["checkpoint_dir"] = None
+        for service in services("coordinator"):
+            config(service)["checkpoint_reclaimers"] = [storage]
+        for service in services("adxlet"):
+            node = config(service)
+            node["checkpoint_storage"] = storage
+            node["checkpoint_dir"] = None
     if os.environ.get("ENABLE_TRACE", "false") == "true":
         for role in ("coordinator", "apiserver", "adxlet", "ingress"):
-            overrides.setdefault(role, {}).setdefault("env", {}).update({
+            for service in services(role):
+                service.setdefault("env", {}).update({
+                    "ADX_TRACE_ENABLED": "true", "ADX_TRACE_SAMPLE_RATIO": "0.1",
+                    "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318",
+                })
+        for service in services("adxlet"):
+            config(service).setdefault("execd_env", {}).update({
                 "ADX_TRACE_ENABLED": "true", "ADX_TRACE_SAMPLE_RATIO": "0.1",
-                "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318",
+                "OTEL_EXPORTER_OTLP_ENDPOINT": "http://10.88.0.1:4318",
             })
-        node.setdefault("execd_env", {}).update({
-            "ADX_TRACE_ENABLED": "true", "ADX_TRACE_SAMPLE_RATIO": "0.1",
-            "OTEL_EXPORTER_OTLP_ENDPOINT": "http://10.88.0.1:4318",
-        })
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(yaml.safe_dump(cfg, sort_keys=False))
     destination.chmod(0o600)

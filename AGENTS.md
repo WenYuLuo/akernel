@@ -801,3 +801,10 @@ when changing their interpolation. Keep `core.monitoring.clusterName`, `AKERNEL_
 the monitor cluster identity aligned across control, node and standalone
 Collectors. API metrics stay on 19093; autoscaling stays on 19092. Unknown
 outcomes, missing coverage and stale snapshots must remain visible.
+
+Initialization rollback must use the server's `newlyCreated` ownership bit.
+Failed reuse closes local clients and preserves the original workload; missing
+ownership is conservative. Keep explicit delete/terminate semantics unchanged.
+Tracing/PVM/checkpoint configuration must support explicit services and each
+ADX profile, applying patches only to present roles. Severity queries consume
+Collector-normalized log metadata and plain bodies.

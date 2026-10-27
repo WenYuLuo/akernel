@@ -2451,7 +2451,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (cluster, adx_env) (count_over_time({cluster=~\"$cluster\",adx_env=~\"$adx_env\",component_name!=\"adx-runtime\"} | json | level=~\"(?i)error|warn\" [5m]))",
+          "expr": "sum by (cluster, adx_env) (count_over_time({cluster=~\"$cluster\",adx_env=~\"$adx_env\",component_name!=\"adx-runtime\"} | level=~\"(?i)error|warn\" [5m]))",
           "instant": true,
           "legendFormat": "{{cluster}} / {{adx_env}}",
           "queryType": "instant"
