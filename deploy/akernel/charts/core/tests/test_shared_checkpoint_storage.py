@@ -27,6 +27,54 @@ def render(*settings: str) -> dict[tuple[str, str], dict]:
 
 
 class SharedCheckpointStorageTests(unittest.TestCase):
+    def test_control_service_budgets_protect_voluntary_disruption(self):
+        for replicas in (1, 3):
+            resources = render(f"adx.ingressApi.replicas={replicas}")
+            self.assertEqual(resources[("PodDisruptionBudget", "akernel-adx-coordinator")]["spec"]["minAvailable"], 1)
+            if replicas == 1:
+                self.assertNotIn(("PodDisruptionBudget", "akernel-adx-ingress-api"), resources)
+            else:
+                self.assertEqual(resources[("PodDisruptionBudget", "akernel-adx-ingress-api")]["spec"]["minAvailable"], 2)
+
+    def test_core_images_accept_a_shared_immutable_digest(self):
+        digest = "sha256:" + "a" * 64
+        resources = render("image.repository=example/akernel", f"image.digest={digest}")
+        for key in [("Deployment", "akernel-adx-coordinator"),
+                    ("Deployment", "akernel-adx-ingress-api"), ("DaemonSet", "akernel-node")]:
+            pod = resources[key]["spec"]["template"]["spec"]
+            self.assertEqual(pod["containers"][0]["image"], f"example/akernel@{digest}")
+        with self.assertRaises(subprocess.CalledProcessError):
+            render("image.digest=latest")
+
+    def test_control_services_use_control_pool_without_losing_mount_placement(self):
+        resources = self.shared_resources(
+            "adx.checkpointStorage.nodeSelector.storage=juicefs",
+            "adx.coordinator.nodeSelector.node-role=akernel-control-plane",
+            "adx.coordinator.tolerations[0].key=dedicated",
+            "adx.coordinator.tolerations[0].value=akernel-control-plane",
+            "adx.coordinator.tolerations[0].effect=NoSchedule",
+            "adx.ingressApi.nodeSelector.node-role=akernel-control-plane",
+        )
+        coord = resources[("Deployment", "akernel-adx-coordinator")]["spec"]["template"]["spec"]
+        self.assertEqual(coord["nodeSelector"], {"storage": "juicefs", "node-role": "akernel-control-plane"})
+        self.assertEqual(coord["tolerations"][0]["value"], "akernel-control-plane")
+        ingress = resources[("Deployment", "akernel-adx-ingress-api")]["spec"]["template"]["spec"]
+        self.assertEqual(ingress["nodeSelector"], {"node-role": "akernel-control-plane"})
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.shared_resources("adx.checkpointStorage.nodeSelector.pool=workers", "adx.coordinator.nodeSelector.pool=control")
+
+    def test_worker_selector_can_target_a_canary_without_selecting_coordinator(self):
+        resources = self.shared_resources(
+            "adx.checkpointStorage.nodeSelector.storage=juicefs",
+            "node.nodeSelector.generation=canary",
+        )
+        node = resources[("DaemonSet", "akernel-node")]["spec"]["template"]["spec"]
+        coordinator = resources[("Deployment", "akernel-adx-coordinator")]["spec"]["template"]["spec"]
+        self.assertEqual(node["nodeSelector"], {"storage": "juicefs", "generation": "canary"})
+        self.assertEqual(coordinator["nodeSelector"], {"storage": "juicefs"})
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.shared_resources("adx.checkpointStorage.nodeSelector.pool=clients", "node.nodeSelector.pool=other")
+
     def test_shared_consumers_use_mount_client_placement_and_keep_affinity(
         self,
     ) -> None:

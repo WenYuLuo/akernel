@@ -19,6 +19,22 @@ ROOT = Path(__file__).resolve().parent
     shutil.which("terraform"), "Terraform is required for evaluated storage validation"
 )
 class CheckpointStorageValidationTest(unittest.TestCase):
+    def test_s3_forwards_identity_and_local_cache_without_mount_requirements(self):
+        for provider in ("aliyun", "huaweicloud"):
+            value = {"kind": "s3", "alias": "checkpoints-s3", "s3": {
+                "bucket": "checkpoints", "region": "us-east-1",
+                "endpoint": "https://rgw.example.com", "credentials_secret": "s3-credentials"}}
+            result, output = self.run_plan(provider, value)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(output["s3"]["credentialsSecret"], "s3-credentials")
+            self.assertEqual(output["s3"]["cacheBudgetBytes"], 53687091200)
+            value["s3"]["endpoint"] = "http://rgw.example.com"
+            result, _ = self.run_plan(provider, value)
+            self.assertNotEqual(result.returncode, 0)
+            value["s3"]["allow_http"] = True
+            result, _ = self.run_plan(provider, value)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
     def run_plan(self, provider, storage, juicefs=None):
         with tempfile.TemporaryDirectory() as directory:
             fixture = Path(directory)

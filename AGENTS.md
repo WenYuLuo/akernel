@@ -761,6 +761,17 @@ templates, and Python deployment helpers with:
 make deploy-script-check
 ```
 
+S3 checkpoint capture/restore uses the pinned ADX backend through
+`adx.checkpointStorage.kind=s3`, with identity and cache settings under `s3`.
+Only nodes and Coordinator receive the existing credential Secret. Native runsc
+reflink uses `node.config.sandboxd.nativeFilestore` and `runscCheckpointMode`;
+the preflight probes FICLONE between local checkpoint inputs and filestore.
+It does not require JuiceFS. Direct distributed_fs remains supported separately.
+See `deploy/shared-storage/production.md` for transfer costs and migration gates.
+Validate HA layouts with `python deploy/shared-storage/tests/test_ha_layout.py -v`;
+rendering does not replace native cross-node or failover tests. Existing ACK
+clusters can add dedicated storage pools through `deploy/terraform/aliyun-node-pools`.
+
 For Kubernetes SDK ingress changes, validate the rendered ADX public Service
 and cloud-provider templates:
 
@@ -786,6 +797,8 @@ make deploy-standalone-test
 Keep opt-in native Restore fault tests under `deploy/tests/native_restore/`
 aligned with the pinned ADX source and Sandboxd/runtime bundle; run only against
 a dedicated empty backend with checkpoint paths shared by the test process.
+The directory's README documents remote native probes and the SDK lifecycle
+driver, including TLS, actual worker registration, outage ownership and cleanup.
 
 The opt-in [TCP/conntrack checkpoint diagnostic](deploy/tests/checkpoint_conntrack/README.md)
 uses a dedicated empty local standalone and an explicitly installed SDK. Keep
@@ -853,6 +866,13 @@ SDK control-plane access.
   registry configuration.
 
 ## ADX observability
+
+The monitor chart's opt-in `prometheusServer.config.sharedStorage` discovers
+Ceph, optional CloudNativePG and Redis/Sentinel metrics and loads storage alert
+rules. Disable postgresEnabled when no PostgreSQL consumers run. Validate the
+rendered configuration with promtool, then verify live targets and samples.
+Backup and isolated recovery remain independent acceptance requirements;
+never enable irreversible cluster identity features implicitly.
 
 Collector configs live in `deploy/akernel/charts/core/files/otel-collector/`;
 standalone adds scrape targets through a small overlay. Preserve dashboard UIDs,
