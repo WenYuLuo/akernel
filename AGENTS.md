@@ -789,6 +789,9 @@ python deploy/terraform/test_adx_contract.py -v
 ADX directly terminates HTTPS control/API/PTY on its 8443 listener and exposes
 HTTP sandbox traffic on 8080. Public Services map these to configurable external
 ports (443/80 by default). Preserve both ports and the existing SDK variables.
+Standalone `sdk.env` selects the HTTPS control listener for SDK gateway URLs,
+including custom ports: private published-port requests carry credentials,
+which the plaintext data listener rejects.
 Validate real TLS authentication, PTY and HTTP port access with the
 `direct-ingress` standalone E2E group; PR CI discovers this group alongside the
 other standalone tests. Keep ADX public certificates and remove redundant
