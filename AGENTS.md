@@ -150,7 +150,13 @@ The build creates only the selected image reference; it does not add a second
 `akernel-all-in-one` alias. `make push` pushes that selected reference directly.
 
 The build helper performs two Docker builds. `builder/runtime.Dockerfile`
-creates the EXECD-only `akernel-runtime-rootfs.img` from the pinned ADX release.
+creates the EXECD-only `akernel-runtime-rootfs.img` from the pinned ADX release
+by default. `AKERNEL_ENABLE_E2B=true` instead reuses an envd-enabled ADX Execd
+component's runtime image, manifest and license. It requires explicit matching
+ADX platform/Execd archive URL/checksum pairs; default pins remain unchanged.
+Keep commit, architecture and Execd digest checks, and leave E2B activation to
+explicit deployment configuration. See `builder/README.md` for the build and
+configuration boundary.
 `builder/node.Dockerfile` then compiles the node components and produces the
 AKernel all-in-one image using that runtime image. The actor-based Python
 runtime is not a build input.
