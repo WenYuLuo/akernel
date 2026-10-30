@@ -61,7 +61,11 @@ deployments put the same API configuration and Ingress environment in their
 existing service objects; the Helm chart does not yet expose dedicated E2B
 values. Configure matching trusted profiles on API Server and workers. Select
 runsc, Firecracker or firecracker-pvm according to the ADX release's supported
-backends and the actual node capability. E2B lifecycle requests also need their
+backends and the actual node capability. Firecracker `fromImage` uses OCI
+directory roots: enable `virtiofs_enabled = true` under
+`[plugin.runtime.firecracker]` in the dedicated worker's sandboxd TOML. The
+stock profile disables virtio-fs for its local EROFS runtime.
+E2B lifecycle requests also need their
 control-plane routes forwarded to API Server by Ingress; preserve the existing
 native routes and include `/sandboxes`, `/v2/sandboxes`, `/snapshots`, `/templates`,
 `/v2/templates` and `/v3/templates` as required by that release.
